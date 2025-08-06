@@ -1,0 +1,552 @@
+import { Request, Response } from "express";
+import { asyncHandler } from "../utils/asyncHandler";
+import { ApiResponse } from "../utils/apiHandlerHelpers";
+import { ApiError } from "../utils/apiHandlerHelpers";
+import { ProjectProfit } from "../models/projectProfitModel";
+import {
+  handleMultipleFileUploads,
+  deleteFileFromS3,
+  getS3KeyFromUrl,
+} from "../utils/uploadConf";
+import ExcelJS from "exceljs";
+import { IUser } from "@/models/userModel";
+export const createProjectProfit = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { projectName, poNumber, startDate, budget, expenses, description } = req.body;
+
+    if (!projectName || !poNumber || !startDate || budget === undefined) {
+      throw new ApiError(400, "Required fields are missing");
+    }
+
+    let attachments: Array<{ fileName: string; fileType: string; filePath: string }> = [];
+    const files = Array.isArray(req.files) ? req.files : req.files ? Object.values(req.files).flat() : [];
+
+    if (files.length > 0) {
+      const uploadResults = await handleMultipleFileUploads(files);
+      if (!uploadResults.success) {
+        throw new ApiError(500, "Failed to upload attachments");
+      }
+      attachments = uploadResults.uploadData?.map((file) => ({
+        fileName: file.key.split("/").pop() || "attachment",
+        fileType: file.mimetype,
+        filePath: file.url,
+      })) || [];
+    }
+
+    const projectProfit = await ProjectProfit.create({
+      projectName,
+      poNumber,
+      startDate: new Date(startDate),
+      budget,
+      expenses: expenses || 0,
+      description,
+      attachments,
+      createdBy: req.user?.userId,
+    });
+
+    res.status(201).json(
+      new ApiResponse(201, projectProfit, "Project profit record created successfully")
+    );
+  }
+);
+
+
+export const getProjectProfits = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { 
+      search, 
+      month, 
+      year, 
+      startDate, 
+      endDate, 
+      minProfit, 
+      maxProfit, 
+      page = 1, 
+      limit = 10 
+    } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const filter: any = {};
+
+    // Search filter
+    if (search) {
+      const searchRegex = new RegExp(search as string, "i");
+      filter.$or = [
+        { projectName: searchRegex },
+        { poNumber: searchRegex },
+        { description: searchRegex },
+      ];
+    }
+
+    // Date range filter (takes precedence over year/month)
+    if (startDate && endDate) {
+      filter.startDate = {
+        $gte: new Date(startDate as string),
+        $lte: new Date(endDate as string),
+      };
+    } else {
+      // Year filter
+      if (year) {
+        const yearNum = parseInt(year as string);
+        if (isNaN(yearNum)) {
+          throw new ApiError(400, "Invalid year value");
+        }
+        filter.startDate = {
+          $gte: new Date(yearNum, 0, 1),
+          $lte: new Date(yearNum + 1, 0, 1),
+        };
+      }
+
+      // Month filter (works with year filter)
+      if (month) {
+        const monthNum = parseInt(month as string);
+        if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+          throw new ApiError(400, "Invalid month value (1-12)");
+        }
+
+        if (!filter.startDate) {
+          // If no year specified, use current year
+          const currentYear = new Date().getFullYear();
+          filter.startDate = {
+            $gte: new Date(currentYear, monthNum - 1, 1),
+            $lt: new Date(currentYear, monthNum, 1),
+          };
+        } else {
+          // Adjust existing year filter to specific month
+          const startDate = new Date(filter.startDate.$gte);
+          startDate.setMonth(monthNum - 1);
+          startDate.setDate(1);
+
+          const endDate = new Date(startDate);
+          endDate.setMonth(monthNum);
+
+          filter.startDate.$gte = startDate;
+          filter.startDate.$lte = endDate;
+        }
+      }
+    }
+
+    // Profit range filter
+    if (minProfit || maxProfit) {
+      filter.profit = {};
+      if (minProfit) {
+        filter.profit.$gte = parseFloat(minProfit as string);
+      }
+      if (maxProfit) {
+        filter.profit.$lte = parseFloat(maxProfit as string);
+      }
+    }
+
+    const total = await ProjectProfit.countDocuments(filter);
+    const totals = await ProjectProfit.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: null,
+          totalBudget: { $sum: "$budget" },
+          totalExpenses: { $sum: "$expenses" },
+          totalProfit: { $sum: "$profit" },
+        },
+      },
+    ]);
+
+    const projects = await ProjectProfit.find(filter)
+      .skip(skip)
+      .limit(Number(limit))
+      .sort({ startDate: -1 })
+      .populate("createdBy", "firstName lastName");
+
+    res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          projects,
+          totals: totals[0] || { totalBudget: 0, totalExpenses: 0, totalProfit: 0 },
+          pagination: {
+            total,
+            page: Number(page),
+            limit: Number(limit),
+            totalPages: Math.ceil(total / Number(limit)),
+            hasNextPage: Number(page) * Number(limit) < total,
+            hasPreviousPage: Number(page) > 1,
+          },
+        },
+        "Project profits retrieved successfully"
+      )
+    );
+  }
+);
+
+export const getProjectProfit = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    const project = await ProjectProfit.findById(id).populate(
+      "createdBy",
+      "firstName lastName"
+    );
+
+    if (!project) {
+      throw new ApiError(404, "Project profit record not found");
+    }
+
+    res.status(200).json(
+      new ApiResponse(
+        200,
+        project,
+        "Project profit retrieved successfully"
+      )
+    );
+  }
+);
+
+export const updateProjectProfit = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const updateData = req.body;
+
+    const project = await ProjectProfit.findById(id);
+    if (!project) {
+      throw new ApiError(404, "Project profit record not found");
+    }
+
+    // Handle file uploads for new attachments
+    let newAttachments: Array<{
+      fileName: string;
+      fileType: string;
+      filePath: string;
+    }> = [];
+
+    const files = Array.isArray(req.files)
+      ? req.files
+      : req.files
+      ? Object.values(req.files).flat()
+      : [];
+
+    if (files.length > 0) {
+      const uploadResults = await handleMultipleFileUploads(files);
+      if (!uploadResults.success) {
+        throw new ApiError(500, "Failed to upload new attachments");
+      }
+      newAttachments =
+        uploadResults.uploadData?.map((file) => ({
+          fileName: file.key.split("/").pop() || "attachment",
+          fileType: file.mimetype,
+          filePath: file.url,
+        })) || [];
+    }
+
+    // Handle attachment deletions if specified
+    if (
+      updateData.deletedAttachments &&
+      updateData.deletedAttachments.length > 0
+    ) {
+      await Promise.all(
+        updateData.deletedAttachments.map(async (attachmentId: string) => {
+          const attachment = project.attachments.id(attachmentId);
+          if (attachment) {
+            try {
+              const key = getS3KeyFromUrl(attachment.filePath);
+              await deleteFileFromS3(key);
+              project.attachments.pull(attachmentId);
+            } catch (error) {
+              console.error(
+                `Failed to delete file from S3: ${attachment.filePath}`,
+                error
+              );
+            }
+          }
+        })
+      );
+    }
+
+    // Prepare update payload
+    const updatePayload: any = {
+      ...updateData,
+      $push: { attachments: { $each: newAttachments } },
+    };
+
+    // Convert dates if they exist in updateData
+    if (updateData.startDate) {
+      updatePayload.startDate = new Date(updateData.startDate);
+    }
+
+    // Update the project
+    const updatedProject = await ProjectProfit.findByIdAndUpdate(
+      id,
+      updatePayload,
+      {
+        new: true,
+      }
+    ).populate("createdBy", "firstName lastName");
+
+    if (!updatedProject) {
+      throw new ApiError(500, "Failed to update project profit record");
+    }
+
+    res.status(200).json(
+      new ApiResponse(
+        200,
+        updatedProject,
+        "Project profit updated successfully"
+      )
+    );
+  }
+);
+
+export const deleteProjectProfit = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    const project = await ProjectProfit.findById(id);
+    if (!project) {
+      throw new ApiError(404, "Project profit record not found");
+    }
+
+    // Delete all associated files from S3
+    if (project.attachments && project.attachments.length > 0) {
+      await Promise.all(
+        project.attachments.map(async (attachment) => {
+          try {
+            const key = getS3KeyFromUrl(attachment.filePath);
+            await deleteFileFromS3(key);
+          } catch (error) {
+            console.error(
+              `Failed to delete file from S3: ${attachment.filePath}`,
+              error
+            );
+          }
+        })
+      );
+    }
+
+    await ProjectProfit.findByIdAndDelete(id);
+
+    res.status(200).json(
+      new ApiResponse(
+        200,
+        null,
+        "Project profit record deleted successfully"
+      )
+    );
+  }
+);
+
+export const getProfitSummary = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { groupBy } = req.query;
+
+    let groupStage: any;
+    switch (groupBy) {
+      case "month":
+        groupStage = {
+          $group: {
+            _id: {
+              year: { $year: "$startDate" },
+              month: { $month: "$startDate" },
+            },
+            totalBudget: { $sum: "$budget" },
+            totalExpenses: { $sum: "$expenses" },
+            totalProfit: { $sum: "$profit" },
+            count: { $sum: 1 },
+          },
+        };
+        break;
+      case "year":
+        groupStage = {
+          $group: {
+            _id: {
+              year: { $year: "$startDate" },
+            },
+            totalBudget: { $sum: "$budget" },
+            totalExpenses: { $sum: "$expenses" },
+            totalProfit: { $sum: "$profit" },
+            count: { $sum: 1 },
+          },
+        };
+        break;
+      default:
+        groupStage = {
+          $group: {
+            _id: null,
+            totalBudget: { $sum: "$budget" },
+            totalExpenses: { $sum: "$expenses" },
+            totalProfit: { $sum: "$profit" },
+            count: { $sum: 1 },
+          },
+        };
+    }
+
+    const summary = await ProjectProfit.aggregate([
+      groupStage,
+      { $sort: { _id: 1 } },
+    ]);
+
+    res.status(200).json(
+      new ApiResponse(
+        200,
+        summary,
+        "Profit summary retrieved successfully"
+      )
+    );
+  }
+);
+
+
+export const exportProjectProfitsToExcel = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { search, month, year, minProfit, maxProfit } = req.query;
+    
+    const filter: any = {};
+
+    // Search filter
+    if (search) {
+      const searchRegex = new RegExp(search as string, "i");
+      filter.$or = [
+        { projectName: searchRegex },
+        { poNumber: searchRegex },
+        { description: searchRegex },
+      ];
+    }
+
+    // Date range filter (fixed $year/$month issue)
+    if (month || year) {
+      const startDate = new Date();
+      const endDate = new Date();
+
+      if (year) {
+        const yearNum = parseInt(year as string);
+        if (isNaN(yearNum)) throw new ApiError(400, "Invalid year value");
+        startDate.setFullYear(yearNum, 0, 1);
+        endDate.setFullYear(yearNum + 1, 0, 1);
+      }
+
+      if (month) {
+        const monthNum = parseInt(month as string);
+        if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+          throw new ApiError(400, "Invalid month value (1-12)");
+        }
+        startDate.setMonth(monthNum - 1);
+        endDate.setMonth(monthNum);
+      }
+
+      filter.startDate = {
+        $gte: startDate,
+        $lt: endDate
+      };
+    }
+
+    // Profit range filter
+    if (minProfit || maxProfit) {
+      filter.profit = {};
+      if (minProfit) {
+        const min = parseFloat(minProfit as string);
+        if (!isNaN(min)) filter.profit.$gte = min;
+      }
+      if (maxProfit) {
+        const max = parseFloat(maxProfit as string);
+        if (!isNaN(max)) filter.profit.$lte = max;
+      }
+    }
+
+    // Get projects with populated createdBy
+    const projects = await ProjectProfit.find(filter)
+      .sort({ startDate: -1 })
+      .populate<{ createdBy: IUser }>("createdBy", "firstName lastName");
+
+    // Create Excel workbook
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Project Profits");
+
+    // Define columns with SNO and all required fields
+    worksheet.columns = [
+      { header: "SNO", key: "sno", width: 5 },
+      { header: "DATE", key: "startDate", width: 12, style: { numFmt: "dd-mm-yyyy" }},
+      { header: "PROJECT NAME", key: "projectName", width: 25 },
+      { header: "PO NUMBER", key: "poNumber", width: 15 },
+      { header: "BUDGET", key: "budget", width: 12, style: { numFmt: "#,##0.00" }},
+      { header: "EXPENSES", key: "expenses", width: 12, style: { numFmt: "#,##0.00" }},
+      { header: "PROFIT", key: "profit", width: 12, style: { numFmt: "#,##0.00" }},
+      { header: "REMARKS", key: "description", width: 30 },
+    ];
+
+    // Add data rows with SNO
+    projects.forEach((project, index) => {
+      worksheet.addRow({
+        sno: index + 1,
+        startDate: project.startDate,
+        projectName: project.projectName,
+        poNumber: project.poNumber,
+        budget: project.budget,
+        expenses: project.expenses,
+        profit: project.profit,
+        description: project.description || "",
+      });
+    });
+
+    // Style header row
+    worksheet.getRow(1).eachCell((cell) => {
+      cell.font = { bold: true };
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFD3D3D3" },
+      };
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
+
+    // Add totals row
+    const totals = await ProjectProfit.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: null,
+          totalBudget: { $sum: "$budget" },
+          totalExpenses: { $sum: "$expenses" },
+          totalProfit: { $sum: "$profit" },
+        },
+      },
+    ]);
+
+    if (totals.length > 0) {
+      worksheet.addRow([]); // Empty row before totals
+      const totalRow = worksheet.addRow({
+        projectName: "TOTALS",
+        budget: totals[0].totalBudget,
+        expenses: totals[0].totalExpenses,
+        profit: totals[0].totalProfit,
+      });
+      
+      // Style totals row
+      totalRow.eachCell((cell) => {
+        cell.font = { bold: true };
+        if (Number(cell.col) === 1) { // First column
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFD3D3D3" },
+          };
+        }
+      });
+    }
+
+    // Set response headers
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=project_profits_${new Date().toISOString().split("T")[0]}.xlsx`
+    );
+
+    // Send Excel file
+    await workbook.xlsx.write(res);
+    res.end();
+  }
+);
