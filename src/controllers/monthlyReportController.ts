@@ -5,13 +5,19 @@ import { ApiError } from "../utils/apiHandlerHelpers";
 import { Bill, BillType, IBill } from "../models/billModel";
 import { Payroll } from "../models/payrollModel";
 import { Category } from "../models/categoryModel";
-import { IShop, Shop } from "../models/shopModel";
+import { Shop } from "../models/shopModel";
 import { User } from "../models/userModel";
 import ExcelJS from "exceljs";
-interface IBillPopulated extends IBill {
-  shop?: IShop;
+interface IBillAggregated extends IBill {
+  shopDetails?: {
+    shopName: string;
+  };
+  categoryDetails?: {
+    name: string;
+  };
 }
-function getBillDescription(bill: IBillPopulated): string {
+
+function getBillDescription(bill: IBillAggregated): string {
   switch (bill.billType) {
     case 'general':
       return bill.remarks || `General bill from ${bill?.shopDetails?.shopName || 'unknown shop'}`;
