@@ -1464,7 +1464,7 @@ export const generateInvoicePdf = asyncHandler(
       <p>TRN: 104037793700003</p>
       <p class="service-period">
         <strong>SERVICE PERIOD:</strong> 
-        ${formatDate(project.startDate)} - ${formatDate(project.endDate || new Date())}
+${formatDate(project.completionDate)} - ${formatDate(project.handoverDate || new Date())}
       </p>
     </div>
   </div>

@@ -5,13 +5,16 @@ import { ApiError } from "../utils/apiHandlerHelpers";
 import { Bill, BillType, IBill } from "../models/billModel";
 import { Payroll } from "../models/payrollModel";
 import { Category } from "../models/categoryModel";
-import { Shop } from "../models/shopModel";
+import { IShop, Shop } from "../models/shopModel";
 import { User } from "../models/userModel";
 import ExcelJS from "exceljs";
-function getBillDescription(bill: IBill): string {
+interface IBillPopulated extends IBill {
+  shop?: IShop;
+}
+function getBillDescription(bill: IBillPopulated): string {
   switch (bill.billType) {
     case 'general':
-      return bill.remarks || `General bill from ${bill.shopDetails?.shopName || 'unknown shop'}`;
+      return bill.remarks || `General bill from ${bill?.shopDetails?.shopName || 'unknown shop'}`;
     
     case 'fuel':
       return bill.description || 
