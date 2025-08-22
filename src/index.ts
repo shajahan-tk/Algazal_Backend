@@ -32,6 +32,7 @@ import payrollRouter from "./routes/payrollRoutes";
 import visaRouter from "./routes/visaExpenseRoutes";
 import reportTouter from "./routes/reportRoutes"
 import { connectDb } from "./config/db";
+import { seedSuperAdmin } from "./utils/seeder";
 dotenv.config();
 
 const app = express();
@@ -66,6 +67,10 @@ app.get("/", (req, res) => {
   res.send("Test log");
 });
 // app.use(helmet()); // Security
+app.get("/seed",(_req:Request,res:Response)=>{
+  seedSuperAdmin();
+  res.send("ok")
+})
 app.use("/api/user", userRouter);
 app.use("/api/estimation", estimationRouter);
 app.use("/api/client", clientRouter);

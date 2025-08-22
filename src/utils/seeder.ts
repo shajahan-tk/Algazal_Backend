@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 
 const SALT_ROUNDS = 10;
 
-const seedSuperAdmin = async () => {
+export const seedSuperAdmin = async () => {
   try {
     // Connect to database
     await connectDb();
@@ -53,4 +53,3 @@ const seedSuperAdmin = async () => {
   }
 };
 
-seedSuperAdmin();
