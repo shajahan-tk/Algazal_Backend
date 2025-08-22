@@ -17,7 +17,7 @@ const s3 = new S3Client({
   },
 });
 
-const BUCKET_NAME = "krishnadas-test-1";
+const BUCKET_NAME = "agats";
 const USER_IMAGES_FOLDER = "user-images";
 const ITEM_IMAGES_FOLDER = "item-images";
 const SIGNATURES_FOLDER = "signatures";
