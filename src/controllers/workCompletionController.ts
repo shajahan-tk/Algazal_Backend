@@ -614,7 +614,7 @@ export const generateCompletionCertificatePdf = asyncHandler(
                 <tr>
                     <td class="bold" style="width: 30%">Reference</td>
                     <td>: <span class="highlight">${
-                      project.projectNumber
+                      `QTN${project.projectNumber.slice(3,10)}`
                     }</span></td>
                 </tr>
                 <tr>

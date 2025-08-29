@@ -670,9 +670,8 @@ export const generateInvoiceData = asyncHandler(
     }
 
     // Generate invoice number with better format
-    const invoiceNumber = `INV-${dayjs().year()}${String(
-      dayjs().month() + 1
-    ).padStart(2, "0")}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const invoiceNumber = `INV${project.projectNumber.slice(3,10)}`;
+
 
     // Type-safe client data extraction
     const clientData =
@@ -1183,8 +1182,9 @@ export const generateInvoicePdf = asyncHandler(
     const createdBy = project.createdBy as IUser;
 
     // Generate invoice number
-    const invoiceNumber = `INV-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const invoiceNumber = `INV${project.projectNumber.slice(3,10)}`;
 
+    
     // Format dates
     const formatDate = (date: Date | string | undefined): string => {
       if (!date) return 'N/A';
