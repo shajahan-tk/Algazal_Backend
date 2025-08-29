@@ -504,25 +504,27 @@ export const generateCompletionCertificatePdf = asyncHandler(
                 padding: 10px;
                 padding-bottom: 80px; /* Reduced space for footer */
             }
-            .logo-container {
-                width: 100%;
+            .header {
                 display: flex;
-                text-align: center;
+                align-items: center;
                 margin-bottom: 10px;
             }
             .logo {
-                max-height: 80px;
-                width: 100%;
+                max-height: 60px; /* Smaller logo */
+                margin-right: 20px;
+            }
+            .title-container {
+                flex-grow: 1;
+                text-align: center;
             }
             h1 {
-                text-align: center;
                 color: purple;
                 font-size: 24px;
                 font-weight: bold;
-                margin: 15px 0;
+                margin: 0;
             }
             .highlight {
-                background-color: yellow;
+             
                 padding: 1px 3px;
             }
             table {
@@ -557,9 +559,11 @@ export const generateCompletionCertificatePdf = asyncHandler(
                 color: green;
                 font-weight: bold;
             }
-            .blue-text {
-                color: #0074cc;
+            .blue-bg {
+                background-color: #0074cc;
+                color: white;
                 font-weight: bold;
+                padding: 3px 6px;
             }
             .image-container {
                 display: flex;
@@ -606,8 +610,11 @@ export const generateCompletionCertificatePdf = asyncHandler(
     </head>
     <body>
         <div class="container">
-            <div class="logo-container">
-                <img src="https://agats.s3.ap-south-1.amazonaws.com/logo/logo.jpeg" alt="Company Logo" class="logo">
+            <div class="header">
+                <img src="https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg" alt="Company Logo" class="logo">
+                <div class="title-container">
+                    <h1>Completion Certificate</h1>
+                </div>
             </div>
 
             <table>
@@ -663,8 +670,8 @@ export const generateCompletionCertificatePdf = asyncHandler(
 
             <table class="bordered" style="margin-top: 15px;">
                 <tr>
-                    <td colspan="2" class="bold">Hand over by:</td>
-                    <td colspan="2">AL GHAZAL AL ABYAD TECHNICAL SERVICES</td>
+                    <td colspan="2" class="blue-bg">Hand over by:</td>
+                    <td colspan="2" class="blue-bg">AL GHAZAL AL ABYAD TECHNICAL SERVICES</td>
                 </tr>
                 <tr>
                     <td class="bold" style="width: 25%">Name:</td>
@@ -692,8 +699,8 @@ export const generateCompletionCertificatePdf = asyncHandler(
 
             <table class="bordered" style="margin-top: 15px;">
                 <tr>
-                    <td colspan="2" class="bold">Accepted by:</td>
-                    <td colspan="2" class="blue-text">Client side</td>
+                    <td colspan="2" class="blue-bg">Accepted by:</td>
+                    <td colspan="2" class="blue-bg">Client side</td>
                 </tr>
                 <tr>
                     <td class="bold" style="width: 25%">Name:</td>
@@ -704,6 +711,35 @@ export const generateCompletionCertificatePdf = asyncHandler(
                 <tr>
                     <td class="bold">Date:</td>
                     <td>${formatDate(project.acceptanceDate)}</td>
+                    <td></td>
+                    <td></td>
+                </tr>
+            </table>
+
+            <table class="bordered" style="margin-top: 15px;">
+                <tr>
+                    <td colspan="2" class="blue-bg">Prepared by:</td>
+                    <td colspan="2" class="blue-bg">AL GHAZAL AL ABYAD TECHNICAL SERVICES</td>
+                </tr>
+                <tr>
+                    <td class="bold" style="width: 25%">Name:</td>
+                    <td style="width: 25%">${engineer?.firstName} ${
+      engineer?.lastName || ""
+    }</td>
+                    <td class="bold" style="width: 25%">Signature:</td>
+                    <td style="width: 25%">
+                        ${
+                          engineer?.signatureImage
+                            ? `<img src="${engineer.signatureImage}" class="signature-img" />`
+                            : "(signature)"
+                        }
+                    </td>
+                </tr>
+                <tr>
+                    <td class="bold">Date:</td>
+                    <td><span class="green-text">${formatDate(
+                      project.handoverDate
+                    )}</span></td>
                     <td></td>
                     <td></td>
                 </tr>
@@ -729,7 +765,6 @@ export const generateCompletionCertificatePdf = asyncHandler(
         <div class="footer-container">
             <div class="tagline">We work U Relax</div>
             <div class="footer">
-                <h1>Completion Certificate</h1>
                 <p><strong>AL GHAZAL AL ABYAD TECHNICAL SERVICES</strong></p>
                 <p>Office No:04, R09-France Cluster, International City-Dubai | P.O.Box:262760, Dubai-U.A.E</p>
                 <p>Tel: 044102555 | <a href="http://www.alghazalgroup.com/">www.alghazalgroup.com</a></p>
