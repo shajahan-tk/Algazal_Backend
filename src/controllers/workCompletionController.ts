@@ -487,6 +487,10 @@ export const generateCompletionCertificatePdf = asyncHandler(
         <meta charset="UTF-8">
         <title>Completion Certificate</title>
         <style>
+            @page {
+              size: A4;
+              margin: 0.4in;
+            }
             body {
                 font-family: Arial, sans-serif;
                 margin: 0;
@@ -498,6 +502,7 @@ export const generateCompletionCertificatePdf = asyncHandler(
                 width: 96%;
                 margin: 0 auto;
                 padding: 10px;
+                padding-bottom: 80px; /* Reduced space for footer */
             }
             .logo-container {
                 width: 100%;
@@ -523,7 +528,7 @@ export const generateCompletionCertificatePdf = asyncHandler(
             table {
                 width: 100%;
                 border-collapse: collapse;
-                margin: 10px 0;
+                margin: 8px 0;
                 font-size: 12px;
             }
             td {
@@ -560,25 +565,42 @@ export const generateCompletionCertificatePdf = asyncHandler(
                 display: flex;
                 flex-wrap: wrap;
                 gap: 8px;
-                margin: 10px 0;
+                margin: 10px 0 5px 0;
                 justify-content: center;
             }
             .image-container img {
-                height: 120px;
+                height: 100px;
                 border: 1px solid #000;
                 object-fit: cover;
                 flex-grow: 1;
-                max-width: 200px;
+                max-width: 180px;
+            }
+            .footer-container {
+                margin-top: 20px;
+                width: 96%;
+                margin-left: auto;
+                margin-right: auto;
+                page-break-inside: avoid;
+            }
+            .tagline {
+                text-align: center;
+                font-weight: bold;
+                font-size: 12pt;
+                margin: 10px 0 5px 0;
+                color: #333;
             }
             .footer {
-                margin-top: 20px;
                 text-align: center;
                 font-size: 11px;
                 color: #555;
+                border-top: 1px solid #ddd;
+                padding-top: 8px;
+                margin-top: 5px;
             }
             .footer h1 {
-                font-size: 20px;
+                font-size: 16px;
                 margin: 5px 0;
+                color: #333;
             }
         </style>
     </head>
@@ -597,11 +619,12 @@ export const generateCompletionCertificatePdf = asyncHandler(
                 </tr>
                 <tr>
                     <td class="bold">FM CONTRACTOR</td>
-                    <td>: IMDAAD LLC</td>
+                      <td>: ${client.clientName}</td>
                 </tr>
                 <tr>
                     <td class="bold">SUB CONTRACTOR</td>
-                    <td>: ${client.clientName}</td>
+                  
+                    <td>: AL GHAZAL ALABYAD TECHNICAL SERVICES</td>
                 </tr>
                 <tr>
                     <td class="bold">PROJECT DESCRIPTION</td>
@@ -701,11 +724,16 @@ export const generateCompletionCertificatePdf = asyncHandler(
                     : '<p style="text-align: center; width: 100%;">No site pictures available</p>'
                 }
             </div>
+        </div>
 
+        <div class="footer-container">
+            <div class="tagline">We work U Relax</div>
             <div class="footer">
                 <h1>Completion Certificate</h1>
-                <p>PO Box No. 63509, Dubai, UAE<br>
-                Website: www.alghazalgroup.com</p>
+                <p><strong>AL GHAZAL AL ABYAD TECHNICAL SERVICES</strong></p>
+                <p>Office No:04, R09-France Cluster, International City-Dubai | P.O.Box:262760, Dubai-U.A.E</p>
+                <p>Tel: 044102555 | <a href="http://www.alghazalgroup.com/">www.alghazalgroup.com</a></p>
+                <p>Generated on ${formatDate(new Date())}</p>
             </div>
         </div>
     </body>

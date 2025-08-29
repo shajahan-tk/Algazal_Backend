@@ -45,44 +45,39 @@ export const createUser = asyncHandler(async (req: Request, res: Response) => {
     accountNumber,
     emiratesId,
     passportNumber,
+    iBANNumber,
+    address,
   } = req.body;
 
-  // Convert phoneNumbers to array
+  // Only validate required fields
+  if (!email || !password || !firstName || !lastName) {
+    throw new ApiError(400, "Email, password, first name, and last name are required");
+  }
+
+  // Convert phoneNumbers to array if provided
   let phoneNumbersArray: string[] = [];
 
-  try {
-    if (typeof phoneNumbers === "string") {
-      // Clean the string if it has single quotes
-      const cleanedPhoneNumbers = phoneNumbers.replace(/'/g, '"');
-      phoneNumbersArray = JSON.parse(cleanedPhoneNumbers);
-    } else if (Array.isArray(phoneNumbers)) {
-      phoneNumbersArray = phoneNumbers;
-    } else {
-      phoneNumbersArray = [phoneNumbers];
+  if (phoneNumbers) {
+    try {
+      if (typeof phoneNumbers === "string") {
+        const cleanedPhoneNumbers = phoneNumbers.replace(/'/g, '"');
+        phoneNumbersArray = JSON.parse(cleanedPhoneNumbers);
+      } else if (Array.isArray(phoneNumbers)) {
+        phoneNumbersArray = phoneNumbers;
+      } else {
+        phoneNumbersArray = [phoneNumbers];
+      }
+
+      phoneNumbersArray = phoneNumbersArray.map((num) => String(num).trim());
+      phoneNumbersArray = phoneNumbersArray.filter((num) => num.length > 0);
+    } catch (e) {
+      console.error("Error parsing phone numbers:", e);
+      throw new ApiError(400, "Invalid phone numbers format");
     }
-
-    // Ensure all elements are strings and trim them
-    phoneNumbersArray = phoneNumbersArray.map((num) => String(num).trim());
-  } catch (e) {
-    console.error("Error parsing phone numbers:", e);
-    throw new ApiError(400, "Invalid phone numbers format");
   }
 
-  // Remove empty strings
-  phoneNumbersArray = phoneNumbersArray.filter((num) => num.length > 0);
-
-  if (phoneNumbersArray.length === 0) {
-    throw new ApiError(400, "At least one phone number is required");
-  }
-
-  if (!email || !password || !firstName || !lastName || !role) {
-    throw new ApiError(400, "All required fields are missing");
-  }
-
-  if (
-    !["super_admin", "admin"].includes(role) &&
-    (salary === undefined || salary === null)
-  ) {
+  // Validate salary only if role is provided and not admin/super_admin
+  if (role && !["super_admin", "admin"].includes(role) && (salary === undefined || salary === null)) {
     throw new ApiError(400, "Salary is required for this role");
   }
 
@@ -106,26 +101,35 @@ export const createUser = asyncHandler(async (req: Request, res: Response) => {
     processFileUpload(files.passportDocument?.[0], uploadPassportDocument),
   ]);
 
-  const user = await User.create({
+  const userData: any = {
     email,
     password: hashedPassword,
-    phoneNumbers: phoneNumbersArray,
     firstName,
     lastName,
-    role,
-    salary: ["super_admin", "admin"].includes(role) ? undefined : salary,
-    accountNumber,
-    emiratesId,
-    emiratesIdDocument: emiratesIdDocumentUrl,
-    passportNumber,
-    passportDocument: passportDocumentUrl,
-    profileImage: profileImageUrl,
-    signatureImage: signatureImageUrl,
     createdBy: req.user?.userId,
-  });
+  };
+
+  // Add optional fields only if provided
+  if (phoneNumbersArray.length > 0) userData.phoneNumbers = phoneNumbersArray;
+  if (role) userData.role = role;
+  if (salary !== undefined && salary !== null && !["super_admin", "admin"].includes(role || "worker")) {
+    userData.salary = salary;
+  }
+  if (accountNumber) userData.accountNumber = accountNumber;
+  if (emiratesId) userData.emiratesId = emiratesId;
+  if (passportNumber) userData.passportNumber = passportNumber;
+  if (iBANNumber) userData.iBANNumber = iBANNumber;
+  if (address) userData.address = address;
+  if (profileImageUrl) userData.profileImage = profileImageUrl;
+  if (signatureImageUrl) userData.signatureImage = signatureImageUrl;
+  if (emiratesIdDocumentUrl) userData.emiratesIdDocument = emiratesIdDocumentUrl;
+  if (passportDocumentUrl) userData.passportDocument = passportDocumentUrl;
+
+  const user = await User.create(userData);
 
   res.status(201).json(new ApiResponse(201, user, "User created successfully"));
 });
+
 
 export const getUsers = asyncHandler(async (req: Request, res: Response) => {
   const page = parseInt(req.query.page as string) || 1;
@@ -259,11 +263,8 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
         phoneNumbersArray = updateData.phoneNumbers;
       }
 
-      // Ensure all elements are strings and trim them
       phoneNumbersArray = phoneNumbersArray.map((num) => String(num).trim());
-      updateData.phoneNumbers = phoneNumbersArray.filter(
-        (num) => num.length > 0
-      );
+      updateData.phoneNumbers = phoneNumbersArray.filter((num) => num.length > 0);
     } catch (e) {
       console.error("Error parsing phone numbers:", e);
       throw new ApiError(400, "Invalid phone numbers format");
@@ -336,6 +337,7 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
     delete updateData.removePassportDocument;
   }
 
+  // Remove salary for admin/super_admin roles
   if (updateData.role && ["super_admin", "admin"].includes(updateData.role)) {
     updateData.salary = undefined;
   }
@@ -476,7 +478,7 @@ export const exportUsersToCSV = asyncHandler(async (req: Request, res: Response)
     user.firstName,
     user.lastName,
     user.email,
-    user.phoneNumbers.join(", "),
+    Array.isArray(user.phoneNumbers) ? user.phoneNumbers.join(", ") : "N/A",
     user.role,
     user.salary || "N/A",
     user.isActive ? "Active" : "Inactive",

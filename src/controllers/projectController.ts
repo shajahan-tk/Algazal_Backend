@@ -728,7 +728,7 @@ export const generateInvoiceData = asyncHandler(
       vendor: vendorInfo,
       vendee: vendeeInfo,
       subject: quotation.scopeOfWork?.join(", ") || "N/A",
-      paymentTerms: "90 DAYS",
+      paymentTerms: quotation.validUntil || "N/A",
       amountInWords: convertToWords(quotation.netAmount || 0),
       products,
       summary: {

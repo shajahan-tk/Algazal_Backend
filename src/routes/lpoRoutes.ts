@@ -5,6 +5,7 @@ import {
   getLPOsByProject,
   getLPODetails,
   deleteLPO,
+  updateLPO,
 } from "../controllers/lpoController";
 import { upload } from "../config/multer";
 
@@ -26,7 +27,7 @@ router.get(
   authorize(["admin", "super_admin", "finance", "engineer"]),
   getLPOsByProject
 );
-
+router.put('/:id', upload.array('documents', 5 ), updateLPO);
 // Get LPO details
 router.get(
   "/:id",

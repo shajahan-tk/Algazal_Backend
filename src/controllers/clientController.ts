@@ -18,25 +18,17 @@ export const createClient = asyncHandler(
       locations,
     } = req.body;
 
-    // Validate required fields
-    if (
-      !clientName ||
-      !clientAddress ||
-      !pincode ||
-      !mobileNumber ||
-      !trnNumber ||
-      !email
-    ) {
-      throw new ApiError(
-        400,
-        "Client name, address, pincode, mobile number, email and TRN are required"
-      );
+    // Validate required fields - only clientName is required
+    if (!clientName) {
+      throw new ApiError(400, "Client name is required");
     }
 
-    // Check if TRN already exists
-    const existingClient = await Client.findOne({ trnNumber });
-    if (existingClient) {
-      throw new ApiError(400, "Client with this TRN already exists");
+    // Check if TRN already exists (only if TRN is provided)
+    if (trnNumber) {
+      const existingClient = await Client.findOne({ trnNumber });
+      if (existingClient) {
+        throw new ApiError(400, "Client with this TRN already exists");
+      }
     }
 
     const client = await Client.create({
@@ -325,12 +317,12 @@ export const addApartmentToBuilding = asyncHandler(
       throw new ApiError(404, "Client not found");
     }
 
-    const location = client.locations.id(locationId); // Changed _id to id
+    const location = client.locations.id(locationId);
     if (!location) {
       throw new ApiError(404, "Location not found");
     }
 
-    const building = location.buildings.id(buildingId); // Changed _id to id
+    const building = location.buildings.id(buildingId);
     if (!building) {
       throw new ApiError(404, "Building not found");
     }

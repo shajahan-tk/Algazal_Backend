@@ -16,12 +16,12 @@ export interface ILocation extends Document {
 
 export interface IClient extends Document {
   clientName: string;
-  clientAddress: string;
-  pincode: string;
-  mobileNumber: string;
+  clientAddress?: string;
+  pincode?: string;
+  mobileNumber?: string;
   telephoneNumber?: string;
-  trnNumber: string;
-  email: string;
+  trnNumber?: string;
+  email?: string;
   accountNumber?: string;
   locations: Types.DocumentArray<ILocation>;
   createdBy: Types.ObjectId;
@@ -64,56 +64,70 @@ const clientSchema = new Schema<IClient>(
     },
     clientAddress: {
       type: String,
-      required: true,
+      required: false,  // Changed from true to false
       trim: true,
     },
     pincode: {
       type: String,
-      required: true,
+      required: false,  // Changed from true to false
       trim: true,
       validate: {
         validator: function (v: string) {
-          return /^[0-9]{6}$/.test(v);
+          // Only validate if value exists
+          return !v || /^[0-9]{6}$/.test(v);
         },
         message: (props: any) => `${props.value} is not a valid pincode!`,
       },
     },
     mobileNumber: {
       type: String,
-      required: true,
+      required: false,  // Changed from true to false
       trim: true,
       validate: {
         validator: function (v: string) {
-          return /^\+?[\d\s-]{6,}$/.test(v);
+          // Only validate if value exists
+          return !v || /^\+?[\d\s-]{6,}$/.test(v);
         },
         message: (props: any) => `${props.value} is not a valid phone number!`,
       },
     },
     email: {
       type: String,
-      trim: true,
-    },
-    telephoneNumber: {
-      type: String,
+      required: false,  // Already was false, keeping it explicit
       trim: true,
       validate: {
         validator: function (v: string) {
-          return v ? /^\+?[\d\s-]{6,}$/.test(v) : true;
+          // Only validate if value exists
+          return !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+        },
+        message: (props: any) => `${props.value} is not a valid email!`,
+      },
+    },
+    telephoneNumber: {
+      type: String,
+      required: false,  // Already was false
+      trim: true,
+      validate: {
+        validator: function (v: string) {
+          return !v || /^\+?[\d\s-]{6,}$/.test(v);
         },
         message: (props: any) => `${props.value} is not a valid phone number!`,
       },
     },
     trnNumber: {
       type: String,
-      required: true,
-
+      required: false,  // Changed from true to false
       trim: true,
     },
     accountNumber: {
       type: String,
+      required: false,  // Already was false
       trim: true,
     },
-    locations: [locationSchema],
+    locations: {
+      type: [locationSchema],
+      default: [],  // Provide default empty array
+    },
     createdBy: {
       type: Schema.Types.ObjectId,
       ref: "User",

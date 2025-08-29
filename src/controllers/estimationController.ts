@@ -665,7 +665,6 @@ export const generateEstimationPdf = asyncHandler(
       throw new ApiError(404, "Estimation not found");
     }
     const quotation = await Quotation.findOne({ estimation: estimation._id });
-    // console.log(quotation);
 
     // Verify populated data exists
     if (!estimation.project || !estimation.project.client) {
@@ -708,2270 +707,460 @@ export const generateEstimationPdf = asyncHandler(
     const commissionAmount = estimation?.commissionAmount ?? 0;
 
     let profit = netAmount - estimatedAmount - commissionAmount;
-    if (profit<0) {
-      profit=0;
+    if (profit < 0) {
+      profit = 0;
     }
-    console.log("profit:", profit);
 
     // Format dates
     const formatDate = (date?: Date) => {
       return date ? new Date(date).toLocaleDateString("en-GB") : "";
     };
-    // const approvedBy = estimation.approvedBy;
-    // const checkedBy = estimation.checkedBy;
-    // const preparedBy = estimation.preparedBy;
 
     // Prepare HTML content
     let htmlContent = `
     <!DOCTYPE html>
     <html>
-     <head>
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    <meta
-      name=""
-      content=""
-    />
-    <meta name="" content="" />
-    <style type="text/css">
-      html {
-        font-family: Calibri, Arial, Helvetica, sans-serif;
-        font-size: 11pt;
-        background-color: white;
-      }
-      a.comment-indicator:hover + div.comment {
-        background: #ffd;
-        position: absolute;
-        display: block;
-        border: 1px solid black;
-        padding: 0.5em;
-      }
-      a.comment-indicator {
-        background: red;
-        display: inline-block;
-        border: 1px solid black;
-        width: 0.5em;
-        height: 0.5em;
-      }
-      td{
-        padding-left: 10px;
-      }
-      div.comment {
-        display: none;
-      }
-      table {
-        border-collapse: collapse;
-        page-break-after: always;
-      }
-      .gridlines td {
-        border: 1px dotted black;
-      }
-      .gridlines th {
-        border: 1px dotted black;
-      }
-      .b {
-        text-align: center;
-      }
-      .e {
-        text-align: center;
-      }
-      .f {
-        text-align: right;
-      }
-      .inlineStr {
-        text-align: left;
-      }
-      .n {
-        text-align: right;
-      }
-      .s {
-        text-align: left;
-      }
-      td.style0 {
-        vertical-align: bottom;
-        border-bottom: none #000000;
-        border-top: none #000000;
-        border-left: none #000000;
-        border-right: none #000000;
-        color: #000000;
-        font-family: 'Aptos Narrow';
-        font-size: 11pt;
-        background-color: white;
-      }
-      th.style0 {
-        vertical-align: bottom;
-        border-bottom: none #000000;
-        border-top: none #000000;
-        border-left: none #000000;
-        border-right: none #000000;
-        color: #000000;
-        font-family: 'Aptos Narrow';
-        font-size: 11pt;
-        background-color: white;
-      }
-      td.style1 {
-        vertical-align: bottom;
-        text-align: center;
-        border-bottom: none #000000;
-        border-top: none #000000;
-        border-left: none #000000;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style1 {
-        vertical-align: bottom;
-        text-align: center;
-        border-bottom: none #000000;
-        border-top: none #000000;
-        border-left: none #000000;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style2 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #bfbfbf !important;
-        border-top: none #000000;
-        border-left: none #000000;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style2 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #bfbfbf !important;
-        border-top: none #000000;
-        border-left: none #000000;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style3 {
-        vertical-align: bottom;
-        text-align: center;
-        border-bottom: none #000000;
-        border-top: none #000000;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style3 {
-        vertical-align: bottom;
-        text-align: center;
-        border-bottom: none #000000;
-        border-top: none #000000;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style4 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #bfbfbf !important;
-        border-top: none #000000;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style4 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #bfbfbf !important;
-        border-top: none #000000;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style5 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #bfbfbf !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style5 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #bfbfbf !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style6 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style6 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style7 {
-        vertical-align: middle;
-        text-align: left;
-        padding-left: 9px;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style7 {
-        vertical-align: middle;
-        text-align: left;
-        padding-left: 9px;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style8 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style8 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style9 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style9 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style10 {
-        vertical-align: bottom;
-        text-align: center;
-        border-bottom: none #000000;
-        border-top: none #000000;
-        border-left: 1px solid #000000 !important;
-        border-right: 2px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style10 {
-        vertical-align: bottom;
-        text-align: center;
-        border-bottom: none #000000;
-        border-top: none #000000;
-        border-left: 1px solid #000000 !important;
-        border-right: 2px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style11 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #bfbfbf !important;
-        border-top: none #000000;
-        border-left: 1px solid #000000 !important;
-        border-right: 2px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style11 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #bfbfbf !important;
-        border-top: none #000000;
-        border-left: 1px solid #000000 !important;
-        border-right: 2px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style12 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #bfbfbf !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 2px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style12 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #bfbfbf !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 2px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style13 {
-        vertical-align: middle;
-        border-bottom: none #000000;
-        border-top: none #000000;
-        border-left: 2px solid #000000 !important;
-        border-right: none #000000;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style13 {
-        vertical-align: middle;
-        border-bottom: none #000000;
-        border-top: none #000000;
-        border-left: 2px solid #000000 !important;
-        border-right: none #000000;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style14 {
-        vertical-align: middle;
-        border-bottom: none #000000;
-        border-top: none #000000;
-        border-left: none #000000;
-        border-right: 2px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style14 {
-        vertical-align: middle;
-        border-bottom: none #000000;
-        border-top: none #000000;
-        border-left: none #000000;
-        border-right: 2px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style15 {
-        vertical-align: middle;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style15 {
-        vertical-align: middle;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style16 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 2px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style16 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 2px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style17 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 2px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style17 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 2px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style18 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 2px solid #000000 !important;
-        font-weight: bold;
-        color: #000000;
-        font-family: 'Aptos Narrow';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style18 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 2px solid #000000 !important;
-        font-weight: bold;
-        color: #000000;
-        font-family: 'Aptos Narrow';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style19 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 2px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style19 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 2px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style20 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 2px solid #000000 !important;
-        font-weight: bold;
-        color: #000000;
-        font-family: 'Aptos Narrow';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style20 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 2px solid #000000 !important;
-        font-weight: bold;
-        color: #000000;
-        font-family: 'Aptos Narrow';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style21 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: 1px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style21 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: 1px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style22 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style22 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style23 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style23 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style24 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: none #000000;
-        border-top: none #000000;
-        border-left: none #000000;
-        border-right: 2px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style24 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: none #000000;
-        border-top: none #000000;
-        border-left: none #000000;
-        border-right: 2px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style25 {
-        vertical-align: middle;
-        border-bottom: none #000000;
-        border-top: none #000000;
-        border-left: none #000000;
-        border-right: none #000000;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style25 {
-        vertical-align: middle;
-        border-bottom: none #000000;
-        border-top: none #000000;
-        border-left: none #000000;
-        border-right: none #000000;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style26 {
-        vertical-align: middle;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style26 {
-        vertical-align: middle;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style27 {
-        vertical-align: middle;
-        text-align: left;
-        padding-left: 0px;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style27 {
-        vertical-align: middle;
-        text-align: left;
-        padding-left: 0px;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style28 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 2px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style28 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 2px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style29 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 2px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style29 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 2px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style30 {
-        vertical-align: middle;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style30 {
-        vertical-align: middle;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style31 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style31 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style32 {
-        vertical-align: middle;
-        border-bottom: 1px solid #000000 !important;
-        border-top: none #000000;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 11pt;
-        background-color: white;
-      }
-      th.style32 {
-        vertical-align: middle;
-        border-bottom: 1px solid #000000 !important;
-        border-top: none #000000;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 11pt;
-        background-color: white;
-      }
-      td.style33 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 2px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: #ffff00;
-      }
-      th.style33 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 2px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: #ffff00;
-      }
-      td.style34 {
-        vertical-align: middle;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style34 {
-        vertical-align: middle;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style35 {
-        vertical-align: middle;
-        text-align: right;
-        padding-right: 0px;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #ffffff;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: #7f7f7f;
-      }
-      th.style35 {
-        vertical-align: middle;
-        text-align: right;
-        padding-right: 0px;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #ffffff;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: #7f7f7f;
-      }
-      td.style36 {
-        vertical-align: middle;
-        text-align: right;
-        padding-right: 0px;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #ffffff;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: #7f7f7f;
-      }
-      th.style36 {
-        vertical-align: middle;
-        text-align: right;
-        padding-right: 0px;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #ffffff;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: #7f7f7f;
-      }
-      td.style37 {
-        vertical-align: middle;
-        text-align: right;
-        padding-right: 0px;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #ffffff;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: #7f7f7f;
-      }
-      th.style37 {
-        vertical-align: middle;
-        text-align: right;
-        padding-right: 0px;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #ffffff;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: #7f7f7f;
-      }
-      td.style38 {
-        vertical-align: middle;
-        text-align: left;
-        padding-left: 0px;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style38 {
-        vertical-align: middle;
-        text-align: left;
-        padding-left: 0px;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style39 {
-        vertical-align: middle;
-        text-align: left;
-        padding-left: 0px;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style39 {
-        vertical-align: middle;
-        text-align: left;
-        padding-left: 0px;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style40 {
-        vertical-align: middle;
-        text-align: left;
-        padding-left: 0px;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style40 {
-        vertical-align: middle;
-        text-align: left;
-        padding-left: 0px;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style41 {
-        vertical-align: middle;
-        text-align: left;
-        padding-left: 0px;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style41 {
-        vertical-align: middle;
-        text-align: left;
-        padding-left: 0px;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style42 {
-        vertical-align: middle;
-        text-align: left;
-        padding-left: 0px;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style42 {
-        vertical-align: middle;
-        text-align: left;
-        padding-left: 0px;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style43 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: none #000000;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style43 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: none #000000;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style44 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: none #000000;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style44 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: none #000000;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style45 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: 2px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style45 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: 2px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style46 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: none #000000;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style46 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: none #000000;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style47 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: none #000000;
-        border-top: none #000000;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style47 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: none #000000;
-        border-top: none #000000;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style48 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: none #000000;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style48 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: none #000000;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a3041;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style49 {
-        vertical-align: middle;
-        text-align: left;
-        padding-left: 0px;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style49 {
-        vertical-align: middle;
-        text-align: left;
-        padding-left: 0px;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style50 {
-        vertical-align: middle;
-        text-align: left;
-        padding-left: 0px;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style50 {
-        vertical-align: middle;
-        text-align: left;
-        padding-left: 0px;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style51 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 2px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #d8d8d8;
-        font-family: 'Century Gothic';
-        font-size: 28pt;
-        background-color: white;
-      }
-      th.style51 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 2px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #d8d8d8;
-        font-family: 'Century Gothic';
-        font-size: 28pt;
-        background-color: white;
-      }
-      td.style52 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 2px solid #000000 !important;
-        border-left: none #000000;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #d8d8d8;
-        font-family: 'Century Gothic';
-        font-size: 28pt;
-        background-color: white;
-      }
-      th.style52 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 2px solid #000000 !important;
-        border-left: none #000000;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #d8d8d8;
-        font-family: 'Century Gothic';
-        font-size: 28pt;
-        background-color: white;
-      }
-      td.style53 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 2px solid #000000 !important;
-        border-left: none #000000;
-        border-right: 2px solid #000000 !important;
-        font-weight: bold;
-        color: #d8d8d8;
-        font-family: 'Century Gothic';
-        font-size: 28pt;
-        background-color: white;
-      }
-      th.style53 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 2px solid #000000 !important;
-        border-left: none #000000;
-        border-right: 2px solid #000000 !important;
-        font-weight: bold;
-        color: #d8d8d8;
-        font-family: 'Century Gothic';
-        font-size: 28pt;
-        background-color: white;
-      }
-      td.style54 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 2px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #000000;
-        font-family: 'Cambria';
-        font-size: 18pt;
-        background-color: white;
-      }
-      th.style54 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 2px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #000000;
-        font-family: 'Cambria';
-        font-size: 18pt;
-        background-color: white;
-      }
-      td.style55 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 2px solid #000000 !important;
-        border-left: none #000000;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #000000;
-        font-family: 'Cambria';
-        font-size: 18pt;
-        background-color: white;
-      }
-      th.style55 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 2px solid #000000 !important;
-        border-left: none #000000;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #000000;
-        font-family: 'Cambria';
-        font-size: 18pt;
-        background-color: white;
-      }
-      td.style56 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 2px solid #000000 !important;
-        border-left: none #000000;
-        border-right: 2px solid #000000 !important;
-        font-weight: bold;
-        color: #000000;
-        font-family: 'Cambria';
-        font-size: 18pt;
-        background-color: white;
-      }
-      th.style56 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 2px solid #000000 !important;
-        border-left: none #000000;
-        border-right: 2px solid #000000 !important;
-        font-weight: bold;
-        color: #000000;
-        font-family: 'Cambria';
-        font-size: 18pt;
-        background-color: white;
-      }
-      td.style57 {
-        vertical-align: middle;
-        text-align: left;
-        padding-left: 0px;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style57 {
-        vertical-align: middle;
-        text-align: left;
-        padding-left: 0px;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style58 {
-        vertical-align: middle;
-        text-align: left;
-        padding-left: 0px;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style58 {
-        vertical-align: middle;
-        text-align: left;
-        padding-left: 0px;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style59 {
-        vertical-align: middle;
-        text-align: left;
-        padding-left: 0px;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style59 {
-        vertical-align: middle;
-        text-align: left;
-        padding-left: 0px;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style60 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 2px solid #000000 !important;
-        border-left: none #000000;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style60 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 2px solid #000000 !important;
-        border-left: none #000000;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style61 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 2px solid #000000 !important;
-        border-left: none #000000;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style61 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 2px solid #000000 !important;
-        border-left: none #000000;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style62 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: none #000000;
-        border-top: 2px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 2px solid #000000 !important;
-        font-weight: bold;
-        color: #000000;
-        font-family: 'Aptos Narrow';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style62 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: none #000000;
-        border-top: 2px solid #000000 !important;
-        border-left: 1px solid #000000 !important;
-        border-right: 2px solid #000000 !important;
-        font-weight: bold;
-        color: #000000;
-        font-family: 'Aptos Narrow';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style63 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: none #000000;
-        border-left: 1px solid #000000 !important;
-        border-right: 2px solid #000000 !important;
-        font-weight: bold;
-        color: #000000;
-        font-family: 'Aptos Narrow';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style63 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: none #000000;
-        border-left: 1px solid #000000 !important;
-        border-right: 2px solid #000000 !important;
-        font-weight: bold;
-        color: #000000;
-        font-family: 'Aptos Narrow';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style64 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style64 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style65 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style65 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style66 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style66 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 2px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style67 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style67 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style68 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style68 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: none #000000;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style69 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      th.style69 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: 1px solid #000000 !important;
-        border-left: none #000000;
-        border-right: 1px solid #000000 !important;
-        font-weight: bold;
-        color: #0a1e30;
-        font-family: 'Times New Roman';
-        font-size: 12pt;
-        background-color: white;
-      }
-      td.style70 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: none #000000;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 11pt;
-        background-color: white;
-      }
-      th.style70 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: none #000000;
-        border-top: 1px solid #000000 !important;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 11pt;
-        background-color: white;
-      }
-      td.style71 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: none #000000;
-        border-top: none #000000;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 11pt;
-        background-color: white;
-      }
-      th.style71 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: none #000000;
-        border-top: none #000000;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 11pt;
-        background-color: white;
-      }
-      td.style72 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: none #000000;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 11pt;
-        background-color: white;
-      }
-
-      th.style72 {
-        vertical-align: middle;
-        text-align: center;
-        border-bottom: 1px solid #000000 !important;
-        border-top: none #000000;
-        border-left: 2px solid #000000 !important;
-        border-right: 1px solid #000000 !important;
-        color: #000000;
-        font-family: 'Times New Roman';
-        font-size: 11pt;
-        background-color: white;
-      }
-      table.sheet0 col.col0 {
-        width: 8.13333324pt;
-      }
-      table.sheet0 col.col1 {
-        width: 170.12222027pt;
-      }
-      table.sheet0 col.col2 {
-        width: 126.74444299pt;
-      }
-      table.sheet0 col.col3 {
-        width: 93.53333226pt;
-      }
-      table.sheet0 col.col4 {
-        width: 80.65555463pt;
-      }
-      table.sheet0 col.col5 {
-        width: 94.21111003pt;
-      }
-      table.sheet0 tr {
-        height: 15pt;
-      }
-      table.sheet0 tr.row0 {
-        height: 15.75pt;
-      }
-      table.sheet0 tr.row1 {
-        height: 123pt;
-      }
-      table.sheet0 tr.row2 {
-        height: 25.5pt;
-      }
-      table.sheet0 tr.row3 {
-        height: 26.25pt;
-      }
-      table.sheet0 tr.row4 {
-        height: 26.25pt;
-      }
-      table.sheet0 tr.row5 {
-        height: 26.25pt;
-      }
-      table.sheet0 tr.row6 {
-        height: 26.25pt;
-      }
-      table.sheet0 tr.row7 {
-        height: 26.25pt;
-      }
-      table.sheet0 tr.row8 {
-        height: 26.25pt;
-      }
-      table.sheet0 tr.row9 {
-        height: 27pt;
-      }
-      table.sheet0 tr.row10 {
-        height: 28.5pt;
-      }
-      table.sheet0 tr.row11 {
-        height: 21pt;
-      }
-      table.sheet0 tr.row12 {
-        height: 21pt;
-      }
-      table.sheet0 tr.row13 {
-        height: 21pt;
-      }
-      table.sheet0 tr.row14 {
-        height: 21pt;
-      }
-      table.sheet0 tr.row15 {
-        height: 21pt;
-      }
-      table.sheet0 tr.row16 {
-        height: 22.5pt;
-      }
-      table.sheet0 tr.row17 {
-        height: 12.75pt;
-      }
-      table.sheet0 tr.row18 {
-        height: 33.75pt;
-      }
-      table.sheet0 tr.row19 {
-        height: 26.25pt;
-      }
-      table.sheet0 tr.row20 {
-        height: 26.25pt;
-      }
-      table.sheet0 tr.row21 {
-        height: 26.25pt;
-      }
-      table.sheet0 tr.row22 {
-        height: 33.75pt;
-      }
-      table.sheet0 tr.row23 {
-        height: 26.25pt;
-      }
-      table.sheet0 tr.row24 {
-        height: 33.75pt;
-      }
-      table.sheet0 tr.row25 {
-        height: 33.75pt;
-      }
-      table.sheet0 tr.row26 {
-        height: 33.75pt;
-      }
-      table.sheet0 tr.row27 {
-        height: 33.75pt;
-      }
-      table.sheet0 tr.row28 {
-        height: 28.5pt;
-      }
-      table.sheet0 tr.row29 {
-        height: 42.75pt;
-      }
-    </style>
-  </head>
-      <body>
-  <table border="0" cellpadding="0" cellspacing="0" id="sheet0" class="sheet0 gridlines" 
-       style="width: 50%; margin: 0 auto; border: 2px solid #000000 !important;">
-    <col class="col0" />
-    <col class="col1" />
-    <col class="col2" />
-    <col class="col3" />
-    <col class="col4" />
-    <col class="col5" />
-    <tbody>
-      <tr class="row1">
-        <td class="column1 style51 null style53" colspan="5">
-          <div style="position: relative">
-            <img
-              style="z-index: 1; left: 1px; top: 6px; width: 929px; height: 155px;"
-              src="https://agats.s3.ap-south-1.amazonaws.com/logo/logo.jpeg"
-              border="0"
-            />
-          </div>
-        </td>
-      </tr>
-      <tr class="row2">
-        <td class="column1 style54 s style56" colspan="5">ESTIMATION</td>
-      </tr>
-      <tr class="row3">
-        <td class="column1 style49 s style50" colspan="2" style="padding-left: 10px;">${
-          estimation.project.client.clientName
-        }</td>
-        <td class="column3 style10 s">DATE</td>
-        <td class="column4 style10 null">ESTIMATION</td>
-        <td class="column5 style10 null">PAYMENT</td>
-      </tr>
-      <tr class="row4">
-        <td class="column1 style41 s style42" colspan="2" style="padding-left: 10px;">${
-          estimation.project.client.clientAddress
-        }</td>
-        <td class="column3 style11 s">OF ESTIMATION</td>
-        <td class="column4 style11 null">NUMBER</td>
-        <td class="column5 style11 null">DUE BY</td>
-      </tr>
-      <tr class="row5">
-        <td class="column1 style41 s style42" colspan="2" style="padding-left: 10px;">
-          ${estimation.project.location} ,  ${estimation.project.building} ,  ${
-      estimation.project.apartmentNumber
-    } 
-        </td>
-        <td class="column3 style12 s">${formatDate(new Date())}</td>
-        <td class="column4 style12 null">${estimation.estimationNumber}</td>
-        <td class="column5 style12 null">${estimation.paymentDueBy} Days</td>
-      </tr>
-    
-      <tr class="row5">      
-              <td class="column1 style41 s style42" colspan="5" style="padding-left: 10px;">
-              <br/>
-Email: ${estimation.project.client.email} <br/> <br/>
-Mobile:  ${ estimation.project.client.mobileNumber} <br/> <br/>
-Tel: ${estimation.project.client.telephoneNumber}
-<br/>
-</td>
-
+    <head>
+      <meta charset="utf-8">
+      <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
         
-   
-      </tr>
-  
-      <tr class="row9">
-        <td class="column1 style13 null">${estimation.subject}</td>
-        <td class="column2 style25 null"></td>
-        <td class="column3 style25 null"></td>
-        <td class="column4 style25 null"></td>
-        <td class="column5 style14 null"></td>
-      </tr>
-
-      <!-- Materials section -->
-      <tr class="row10">
-        <td class="column2 style6 s">MATERIAL</td>
-        <td class="column5 style16 s">UOM</td>
-        <td class="column3 style6 s">QTY</td>
-        <td class="column4 style22 s">UNIT PRICE</td>
-        <td class="column5 style16 s">TOTAL</td>
-      </tr>
-      ${estimation.materials
-        .map(
-          (material) => `
-        <tr class="row11">
-          <td class="column2 style7 s">${material.description}</td>
-          <td class="column5 style16 f">${material.uom}</td>
-          <td class="column3 style8 n">${material.quantity.toFixed(2)}</td>
-          <td class="column4 style21 n">${material.unitPrice.toFixed(2)}</td>
-          <td class="column5 style16 f">${material.total.toFixed(2)}</td>
-        </tr>
-      `
-        )
-        .join("")}
-      <tr class="row16">
-        <td class="column2 style35 s style37" colspan="4">TOTAL MATERIALS&nbsp;&nbsp;</td>
-        <td class="column5 style18 f">${materialsTotal.toFixed(2)}</td>
-      </tr>
-      <tr class="row17">
-        <td class="column1 style43 null style45" colspan="5"></td>
-      </tr>
-
-      <!-- Labour section -->
-      <tr class="row18">
-        <td class="column1 style15 s">LABOUR CHARGES</td>
-        <td class="column2 style9 s">DESIGNATION</td>
-        <td class="column3 style22 s">QTY/DAYS</td>
-        <td class="column4 style6 s">PRICE</td>
-        <td class="column5 style16 s">TOTAL</td>
-      </tr>
-      ${estimation.labour
-        .map(
-          (labour, index) => `
-          <tr class="row19">
-            ${
-              index === 0
-                ? `<td class="column1 style46 null style48" rowspan="${
-                    estimation.labour.length + 1
-                  }"></td>`
-                : ""
-            }
-            <td class="column2 style7 s">${labour.designation}</td>
-            <td class="column3 style21 n">${labour.days.toFixed(2)}</td>
-            <td class="column4 style21 n">${labour.price.toFixed(2)}</td>
-            <td class="column5 style17 f">${labour.total.toFixed(2)}</td>
-          </tr>
-        `
-        )
-        .join("")}
-      <tr class="row21">
-        <td class="column2 style35 s style37" colspan="3">TOTAL LABOUR &nbsp;&nbsp;</td>
-        <td class="column5 style18 f">${labourTotal.toFixed(2)}</td>
-      </tr>
-
-      <!-- Terms and conditions section -->
-      <tr class="row18">
-        <td class="column1 style15 s">TERMS AND CONDITIONS</td>
-        <td class="column2 style9 s">MISCELLANEOUS CHARGES</td>
-        <td class="column3 style22 s">QTY</td>
-        <td class="column4 style6 s">PRICE</td>
-        <td class="column5 style16 s">TOTAL</td>
-      </tr>
-      ${estimation.termsAndConditions
-        .map(
-          (term, index) => `
-          <tr class="row19">
-            ${
-              index === 0
-                ? `<td class="column1 style34 null" rowspan="${
-                    estimation.termsAndConditions.length + 1
-                  }"></td>`
-                : ""
-            }
-            <td class="column2 style7 s">${term.description}</td>
-            <td class="column3 style21 n">${term.quantity.toFixed(2)}</td>
-            <td class="column4 style8 n">${term.unitPrice.toFixed(2)}</td>
-            <td class="column5 style17 f">${term.total.toFixed(2)}</td>
-          </tr>
-        `
-        )
-        .join("")}
-      <tr class="row24">
-        <td class="column2 style35 s style37" colspan="3">
-          TOTAL MISCELLANEOUS &nbsp;&nbsp;
-        </td>
-        <td class="column5 style18 f">${termsTotal.toFixed(2)}</td>
-      </tr>
-
-      <!-- Amount summary -->
-      <tr class="row25">
-        <td class="column1 style38 s style40" colspan="4" style="padding-left: 10px;">
-          ESTIMATED AMOUNT
-        </td>
-        <td class="column5 style17 f">${estimatedAmount.toFixed(2)}</td>
-      </tr>
-      <tr class="row26">
-        <td class="column1 style38 s style40" colspan="4" style="padding-left: 10px;">
-          QUOTATION AMOUNT
-        </td>
-        <td class="column5 style33 n">${
-          quotation?.netAmount?.toFixed(2) || "0.00"
-        }</td>
-      </tr>
-        <tr class="row26">
-        <td class="column1 style38 s style40" colspan="4" style="padding-left: 10px;">
-          COMMISSION AMOUNT
-        </td>
-        <td class="column5 style33 n">${
-          estimation.commissionAmount?.toFixed(2) || "0.00"
-        }</td>
-      </tr>
-      <tr class="row27">
-        <td class="column1 style57 s style59" colspan="4" style="padding-left: 10px;">PROFIT</td>
-        <td class="column5 style20 f">
-          ${profit || "0.00"}
-        </td>
-      </tr>
-
-      <!-- Approval section -->
-      <tr class="row28">
-        <td class="column1 style28 s">Prepared By: ${
-          preparedBy?.firstName || "N/A"
-        }</td>
-        <td class="column2 style29 s">Checked By: ${
-          checkedBy?.firstName || "N/A"
-        }</td>
-        <td class="column3 style60 s style61" colspan="2">
-          Approved by: ${approvedBy?.firstName || "N/A"}
-        </td>
-        <td class="column5 style62 null style63" rowspan="2"></td>
-      </tr>
-      
-    </tbody>
-  </table>
-</body>
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+        }
+        
+        body {
+          font-family: 'Inter', sans-serif;
+          color: #333;
+          background-color: #fff;
+          line-height: 1.5;
+          padding: 20px;
+        }
+        
+        .container {
+          max-width: 1000px;
+          margin: 0 auto;
+          border: 1px solid #e0e0e0;
+          border-radius: 8px;
+          overflow: hidden;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+        
+        .header {
+          background: linear-gradient(135deg, #0a3041 0%, #1a4d70 100%);
+          color: white;
+          padding: 25px 30px;
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+        }
+        
+        .logo-container {
+          flex: 1;
+        }
+        
+        .logo {
+          max-width: 180px;
+          height: auto;
+        }
+        
+        .document-info {
+          text-align: right;
+        }
+        
+        .document-title {
+          font-size: 28px;
+          font-weight: 700;
+          margin-bottom: 5px;
+        }
+        
+        .document-number {
+          font-size: 16px;
+          font-weight: 500;
+          opacity: 0.9;
+        }
+        
+        .content {
+          padding: 30px;
+        }
+        
+        .section {
+          margin-bottom: 30px;
+        }
+        
+        .section-title {
+          font-size: 18px;
+          font-weight: 600;
+          color: #0a3041;
+          padding-bottom: 10px;
+          border-bottom: 2px solid #0a3041;
+          margin-bottom: 20px;
+        }
+        
+        .client-info {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 30px;
+          margin-bottom: 30px;
+        }
+        
+        .info-card {
+          background-color: #f9fafb;
+          border-radius: 6px;
+          padding: 20px;
+          border-left: 4px solid #0a3041;
+        }
+        
+        .info-card h3 {
+          font-size: 16px;
+          font-weight: 600;
+          color: #0a3041;
+          margin-bottom: 15px;
+        }
+        
+        .info-item {
+          margin-bottom: 8px;
+          display: flex;
+        }
+        
+        .info-label {
+          font-weight: 500;
+          min-width: 120px;
+          color: #666;
+        }
+        
+        .info-value {
+          font-weight: 400;
+          color: #333;
+        }
+        
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 20px;
+        }
+        
+        th {
+          background-color: #f3f4f6;
+          text-align: left;
+          padding: 12px 15px;
+          font-weight: 600;
+          color: #0a3041;
+          border-bottom: 2px solid #e5e7eb;
+        }
+        
+        td {
+          padding: 12px 15px;
+          border-bottom: 1px solid #e5e7eb;
+        }
+        
+        tr:last-child td {
+          border-bottom: none;
+        }
+        
+        .text-right {
+          text-align: right;
+        }
+        
+        .text-center {
+          text-align: center;
+        }
+        
+        .summary-table {
+          width: 60%;
+          margin-left: auto;
+        }
+        
+        .summary-table td {
+          padding: 10px 15px;
+        }
+        
+        .summary-table tr:last-child td {
+          border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .total-row {
+          font-weight: 600;
+          background-color: #f8f9fa;
+        }
+        
+        .profit-row {
+          font-weight: 700;
+          background-color: #e8f5e9;
+          color: #2e7d32;
+        }
+        
+        .signatures {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 20px;
+          margin-top: 40px;
+          padding-top: 30px;
+          border-top: 1px dashed #ccc;
+        }
+        
+        .signature-box {
+          text-align: center;
+        }
+        
+        .signature-line {
+          height: 1px;
+          background-color: #ccc;
+          margin: 40px 0 10px;
+        }
+        
+        .signature-name {
+          font-weight: 600;
+          color: #0a3041;
+        }
+        
+        .signature-role {
+          font-size: 14px;
+          color: #666;
+        }
+        
+        .footer {
+          margin-top: 40px;
+          text-align: center;
+          font-size: 14px;
+          color: #666;
+          padding: 20px;
+          border-top: 1px solid #e5e7eb;
+        }
+        
+        .company-info {
+          margin-top: 10px;
+          font-size: 13px;
+        }
+        
+        .notes {
+          background-color: #f9fafb;
+          padding: 15px;
+          border-radius: 6px;
+          margin-top: 30px;
+          font-size: 14px;
+        }
+        
+        .notes-title {
+          font-weight: 600;
+          margin-bottom: 10px;
+          color: #0a3041;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div class="logo-container">
+            <img class="logo" src="https://agats.s3.ap-south-1.amazonaws.com/logo/logo.jpeg" alt="Company Logo">
+          </div>
+          <div class="document-info">
+            <div class="document-title">ESTIMATION</div>
+            <div class="document-number">Ref: ${estimation.estimationNumber}</div>
+          </div>
+        </div>
+        
+        <div class="content">
+          <div class="client-info">
+            <div class="info-card">
+              <h3>CLIENT INFORMATION</h3>
+              <div class="info-item">
+                <span class="info-label">Name:</span>
+                <span class="info-value">${estimation.project.client.clientName}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Address:</span>
+                <span class="info-value">${estimation.project.client.clientAddress}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Project:</span>
+                <span class="info-value">${estimation.project.location}, ${estimation.project.building}, ${estimation.project.apartmentNumber}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Email:</span>
+                <span class="info-value">${estimation.project.client.email}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Phone:</span>
+                <span class="info-value">${estimation.project.client.mobileNumber} ${estimation.project.client.telephoneNumber ? '/ ' + estimation.project.client.telephoneNumber : ''}</span>
+              </div>
+            </div>
+            
+            <div class="info-card">
+              <h3>ESTIMATION DETAILS</h3>
+              <div class="info-item">
+                <span class="info-label">Date:</span>
+                <span class="info-value">${formatDate(new Date())}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Estimation #:</span>
+                <span class="info-value">${estimation.estimationNumber}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Payment Terms:</span>
+                <span class="info-value">${estimation.paymentDueBy} Days</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Subject:</span>
+                <span class="info-value">${estimation.subject}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="section">
+            <h2 class="section-title">MATERIALS</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Description</th>
+                  <th>UOM</th>
+                  <th class="text-right">Quantity</th>
+                  <th class="text-right">Unit Price</th>
+                  <th class="text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${estimation.materials
+                  .map(
+                    (material) => `
+                  <tr>
+                    <td>${material.description}</td>
+                    <td>${material.uom}</td>
+                    <td class="text-right">${material.quantity.toFixed(2)}</td>
+                    <td class="text-right">${material.unitPrice.toFixed(2)}</td>
+                    <td class="text-right">${material.total.toFixed(2)}</td>
+                  </tr>
+                `
+                  )
+                  .join("")}
+                <tr class="total-row">
+                  <td colspan="4" class="text-right">TOTAL MATERIALS</td>
+                  <td class="text-right">${materialsTotal.toFixed(2)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          
+          <div class="section">
+            <h2 class="section-title">LABOR CHARGES</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Designation</th>
+                  <th class="text-right">Qty/Days</th>
+                  <th class="text-right">Price</th>
+                  <th class="text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${estimation.labour
+                  .map(
+                    (labour) => `
+                  <tr>
+                    <td>${labour.designation}</td>
+                    <td class="text-right">${labour.days.toFixed(2)}</td>
+                    <td class="text-right">${labour.price.toFixed(2)}</td>
+                    <td class="text-right">${labour.total.toFixed(2)}</td>
+                  </tr>
+                `
+                  )
+                  .join("")}
+                <tr class="total-row">
+                  <td colspan="3" class="text-right">TOTAL LABOR</td>
+                  <td class="text-right">${labourTotal.toFixed(2)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          
+          <div class="section">
+            <h2 class="section-title">MISCELLANEOUS CHARGES</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Description</th>
+                  <th class="text-right">Quantity</th>
+                  <th class="text-right">Unit Price</th>
+                  <th class="text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${estimation.termsAndConditions
+                  .map(
+                    (term) => `
+                  <tr>
+                    <td>${term.description}</td>
+                    <td class="text-right">${term.quantity.toFixed(2)}</td>
+                    <td class="text-right">${term.unitPrice.toFixed(2)}</td>
+                    <td class="text-right">${term.total.toFixed(2)}</td>
+                  </tr>
+                `
+                  )
+                  .join("")}
+                <tr class="total-row">
+                  <td colspan="3" class="text-right">TOTAL MISCELLANEOUS</td>
+                  <td class="text-right">${termsTotal.toFixed(2)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          
+          <div class="section">
+            <h2 class="section-title">SUMMARY</h2>
+            <table class="summary-table">
+              <tr class="total-row">
+                <td>Estimated Amount</td>
+                <td class="text-right">${estimatedAmount.toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td>Quotation Amount</td>
+                <td class="text-right">${quotation?.netAmount?.toFixed(2) || "0.00"}</td>
+              </tr>
+              <tr>
+                <td>Commission Amount</td>
+                <td class="text-right">${estimation.commissionAmount?.toFixed(2) || "0.00"}</td>
+              </tr>
+              <tr class="profit-row">
+                <td>PROFIT</td>
+                <td class="text-right">${profit.toFixed(2)}</td>
+              </tr>
+            </table>
+          </div>
+          
+          <div class="signatures">
+            <div class="signature-box">
+              <div class="signature-role">Prepared By</div>
+              <div class="signature-line"></div>
+              <div class="signature-name">${preparedBy?.firstName || "N/A"}</div>
+            </div>
+            <div class="signature-box">
+              <div class="signature-role">Checked By</div>
+              <div class="signature-line"></div>
+              <div class="signature-name">${checkedBy?.firstName || "N/A"}</div>
+            </div>
+            <div class="signature-box">
+              <div class="signature-role">Approved By</div>
+              <div class="signature-line"></div>
+              <div class="signature-name">${approvedBy?.firstName || "N/A"}</div>
+            </div>
+          </div>
+          
+          <div class="notes">
+            <div class="notes-title">Notes:</div>
+            <div>This estimation is valid for 30 days from the date of issue. Prices are subject to change without prior notice.</div>
+          </div>
+        </div>
+        
+        <div class="footer">
+          Thank you for your business!
+          <div class="company-info">
+            AGATS SOFTWARE CO. LTD. | support@agatsoftware.com | +94 77 123 4567
+          </div>
+        </div>
+      </div>
+    </body>
     </html>
   `;
 

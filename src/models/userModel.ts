@@ -4,7 +4,7 @@ export interface IUser extends Document {
   _id: Types.ObjectId;
   email: string;
   password: string;
-  phoneNumbers: string[];
+  phoneNumbers?: string[];
   firstName: string;
   lastName: string;
   role: string;
@@ -13,13 +13,12 @@ export interface IUser extends Document {
   profileImage?: string;
   signatureImage?: string;
   address?: string;
-
   accountNumber?: string;
   emiratesId?: string;
-  emiratesIdDocument?: string; // URL to the document
+  emiratesIdDocument?: string;
   passportNumber?: string;
-  passportDocument?: string; // URL to the document
-
+  passportDocument?: string;
+  iBANNumber?: string;
   createdBy?: Types.ObjectId;
   createdAt?: Date;
   updatedAt?: Date;
@@ -36,15 +35,12 @@ const userSchema = new Schema<IUser>(
     password: {
       type: String,
       required: true,
-      select: false, // Never return password in queries
+      select: false,
     },
     phoneNumbers: {
       type: [String],
-      required: true,
-      validate: {
-        validator: (numbers: string[]) => numbers.length > 0,
-        message: "At least one phone number is required",
-      },
+      required: false,
+      default: [],
     },
     firstName: {
       type: String,
@@ -72,13 +68,12 @@ const userSchema = new Schema<IUser>(
     },
     salary: {
       type: Number,
-      required: function () {
-        return !["super_admin", "admin"].includes(this.role);
-      },
+      required: false,
       min: 0,
       validate: {
         validator: function (this: IUser, value: number) {
-          return ["super_admin", "admin"].includes(this.role) || value > 0;
+          if (value === undefined || value === null) return true;
+          return ["super_admin", "admin"].includes(this.role || "worker") || value > 0;
         },
         message: "Salary must be greater than 0 for this role",
       },
@@ -95,8 +90,8 @@ const userSchema = new Schema<IUser>(
     },
     address: {
       type: String,
+      trim: true,
     },
-
     accountNumber: {
       type: String,
       trim: true,
@@ -115,7 +110,10 @@ const userSchema = new Schema<IUser>(
     passportDocument: {
       type: String,
     },
-
+    iBANNumber: {
+      type: String,
+      trim: true,
+    },
     createdBy: {
       type: Schema.Types.ObjectId,
       ref: "User",
@@ -126,8 +124,8 @@ const userSchema = new Schema<IUser>(
     toJSON: {
       virtuals: true,
       transform: function (doc, ret) {
-        delete ret.password; // Always remove password from JSON output
-        delete ret.__v; // Remove version key
+        delete ret.password;
+        delete ret.__v;
         return ret;
       },
     },

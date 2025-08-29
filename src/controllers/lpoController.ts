@@ -173,3 +173,105 @@ export const getLPOsByProject = asyncHandler(
       .json(new ApiResponse(200, lpo, "LPOs retrieved successfully"));
   }
 );
+
+export const updateLPO = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { projectId, lpoDate, supplier, lpoNumber, existingDocuments } = req.body;
+    const files = req.files as Express.Multer.File[];
+
+    // Parse and validate items
+    let items = [];
+    try {
+        items = JSON.parse(req.body.items);
+        if (!Array.isArray(items)) {
+            throw new Error("Items must be an array");
+        }
+    } catch (err) {
+        throw new ApiError(400, "Invalid items format - must be valid JSON array");
+    }
+
+    // Validate required fields
+    if (!projectId || !lpoDate || !supplier || items.length === 0) {
+        throw new ApiError(400, "All required fields must be provided");
+    }
+
+    // Check if LPO exists
+    const existingLPO = await LPO.findById(id);
+    if (!existingLPO) {
+        throw new ApiError(404, "LPO not found");
+    }
+
+    // Process uploaded documents
+    let newDocuments: any[] = [];
+    if (files && files.length > 0) {
+        const uploadResult = await handleMultipleFileUploads(files);
+        if (!uploadResult.success || !uploadResult.uploadData) {
+            throw new ApiError(500, "Failed to upload LPO documents");
+        }
+
+        newDocuments = uploadResult.uploadData.map((upload, index) => ({
+            url: upload.url,
+            key: upload.key,
+            name: files[index].originalname,
+            mimetype: files[index].mimetype,
+            size: files[index].size,
+        }));
+    }
+
+    // Process existing documents
+    let finalExistingDocuments: any[] = [];
+    if (existingDocuments) {
+        try {
+            finalExistingDocuments = JSON.parse(existingDocuments);
+        } catch (err) {
+            throw new ApiError(400, "Invalid existing documents format");
+        }
+    }
+
+    // Process and validate items
+    const processedItems = items.map((item: any) => {
+        if (!item.description || !item.quantity || !item.unitPrice) {
+            throw new ApiError(400, "All item fields are required");
+        }
+        return {
+            description: item.description,
+            quantity: Number(item.quantity),
+            unitPrice: Number(item.unitPrice),
+            totalPrice: Number(item.quantity) * Number(item.unitPrice),
+        };
+    });
+
+    // Delete removed documents from S3
+    const documentsToDelete = existingLPO.documents.filter(
+        (doc: any) => !finalExistingDocuments.some((ed: any) => ed.key === doc.key)
+    );
+
+    await Promise.all(
+        documentsToDelete.map(async (doc: any) => {
+            try {
+                await deleteFileFromS3(doc.key);
+            } catch (err) {
+                console.error(`Failed to delete file ${doc.key}:`, err);
+            }
+        })
+    );
+
+    // Update LPO
+    const updatedLPO = await LPO.findByIdAndUpdate(
+        id,
+        {
+            lpoNumber,
+            lpoDate: new Date(lpoDate),
+            supplier,
+            items: processedItems,
+            documents: [...finalExistingDocuments, ...newDocuments],
+            totalAmount: processedItems.reduce(
+                (sum: any, item: any) => sum + item.totalPrice,
+                0
+            ),
+        },
+        { new: true, runValidators: true }
+    );
+
+    res.status(200).json(new ApiResponse(200, updatedLPO, "LPO updated successfully"));
+});
