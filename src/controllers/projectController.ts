@@ -718,7 +718,22 @@ export const generateInvoiceData = asyncHandler(
       unitPrice: item.unitPrice || 0,
       total: item.totalPrice || 0,
     }));
+function getDaysLeft(validUntil?: Date): string {
+  if (!validUntil) return "N/A";
 
+  const today = new Date();
+
+  // Calculate difference in ms
+  const diffTime = validUntil.getTime() - today.getTime();
+
+  // Convert ms → days
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) return "Expired"; 
+  if (diffDays === 0) return "Today";
+
+  return `${diffDays} days left`;
+}
     // Enhanced response structure with type-safe checks
     const response = {
       _id: project._id.toString(),
@@ -728,7 +743,7 @@ export const generateInvoiceData = asyncHandler(
       vendor: vendorInfo,
       vendee: vendeeInfo,
       subject: quotation.scopeOfWork?.join(", ") || "N/A",
-      paymentTerms: quotation.validUntil || "N/A",
+      paymentTerms: getDaysLeft(quotation.validUntil) || "N/A",
       amountInWords: convertToWords(quotation.netAmount || 0),
       products,
       summary: {
