@@ -1191,10 +1191,10 @@ export const generateEstimationPdf = asyncHandler(
         format: "A4",
         printBackground: true,
         margin: {
-          top: "0.5in",
-          right: "0.5in",
-          bottom: "0.5in",
-          left: "0.5in",
+          top: "0.1in",
+          right: "0.1in",
+          bottom: "0.1in",
+          left: "0.1in",
         },
         preferCSSPageSize: true,
       });
