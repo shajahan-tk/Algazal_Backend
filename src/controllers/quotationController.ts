@@ -265,6 +265,7 @@ export const deleteQuotation = asyncHandler(
 );
 
 
+
 export const generateQuotationPdf = asyncHandler(
   async (req: Request, res: Response) => {
     const { id } = req.params;
@@ -331,8 +332,15 @@ export const generateQuotationPdf = asyncHandler(
       color: #333;
       margin: 0;
       padding: 0;
-      position: relative;
+      padding-bottom: 20px;
+    }
+    .container {
       min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .content {
+      flex: 1;
     }
     .header {
       display: flex;
@@ -451,31 +459,11 @@ export const generateQuotationPdf = asyncHandler(
       width: auto;
       min-width: 50%;
     }
-    .footer-container {
-      position: absolute;
-      bottom: 0;
-      width: 100%;
-    }
-    .tagline {
-      text-align: center;
-      font-weight: bold;
-      font-size: 12pt;
-      margin: 20px 0 10px 0;
-      color: #333;
-    }
-    .footer {
-      font-size: 9pt;
-      color: #777;
-      text-align: center;
-      border-top: 1px solid #ddd;
-      padding-top: 10px;
-      margin-top: 10px;
-    }
     .prepared-by {
       margin-top: 30px;
       padding-top: 15px;
       border-top: 1px solid #ddd;
-      margin-bottom: 60px;
+      margin-bottom: 30px;
     }
     .prepared-by-name {
       font-weight: bold;
@@ -485,111 +473,135 @@ export const generateQuotationPdf = asyncHandler(
       font-size: 9pt;
       color: #777;
     }
+    .tagline {
+      text-align: center;
+      font-weight: bold;
+      font-size: 12pt;
+      margin: 30px 0 15px 0;
+      color: #333;
+      border-top: 2px solid #ddd;
+      padding-top: 20px;
+    }
+    .footer {
+      font-size: 9pt;
+      color: #777;
+      text-align: center;
+      margin-top: 10px;
+      page-break-inside: avoid;
+    }
+    .text-center {
+      text-align: center;
+    }
+    .text-right {
+      text-align: right;
+    }
   </style>
 </head>
 <body>
-  <div class="header">
-    <img class="logo" src="https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/sample-spmc/logo+(1).png" alt="Company Logo">
-    <div class="header-content">
-      <div class="document-title">QUOTE</div>
-    </div>
-  </div>
-
-  <div class="client-info-container">
-    <div class="client-info">
-      <p><strong>Client:</strong> ${client.clientName || "N/A"}</p>
-      <p><strong>Address:</strong> ${client.clientAddress || "N/A"}</p>
-      <p><strong>Contact:</strong> ${client.mobileNumber || client.telephoneNumber || "N/A"}</p>
-      <p><strong>Email:</strong> ${client.email || "N/A"}</p>
-      <p><strong>Site:</strong> ${site}</p>
-      <p><strong>Subject:</strong> ${project.projectName || "N/A"}</p>
-    </div>
-
-    <div class="quotation-info">
-      <table class="quotation-details">
-        <tr>
-          <td>Quotation #:</td>
-          <td>${quotation.quotationNumber}</td>
-        </tr>
-        <tr>
-          <td>Date:</td>
-          <td>${formatDate(quotation.date)}</td>
-        </tr>
-        <tr>
-          <td>Valid Until:</td>
-          <td>${getDaysRemaining(quotation.validUntil)}</td>
-        </tr>
-      </table>
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">ITEMS</div>
-    <table>
-      <thead>
-        <tr>
-          <th width="5%">No.</th>
-          <th width="35%">Description</th>
-          <th width="10%">UOM</th>
-          <th width="15%">Image</th>
-          <th width="10%">Qty</th>
-          <th width="15%">Unit Price (AED)</th>
-          <th width="10%" class="text-right">Total (AED)</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${quotation.items.map((item, index) => `
-          <tr>
-            <td class="text-center">${index + 1}</td>
-            <td>${item.description}</td>
-            <td class="text-center">${item.uom || "NOS"}</td>
-            <td class="text-center">
-              ${item.image?.url ? `<img src="${item.image.url}" style="max-height: 50px; max-width: 100px;"/>` : ""}
-            </td>
-            <td class="text-center">${item.quantity.toFixed(2)}</td>
-            <td class="text-right">${item.unitPrice.toFixed(2)}</td>
-            <td class="text-right">${item.totalPrice.toFixed(2)}</td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>
-
-    <div class="amount-summary">
-      <div class="amount-summary-row">
-        <div class="amount-label">SUBTOTAL:</div>
-        <div class="amount-value">${subtotal.toFixed(2)} AED</div>
+  <div class="container">
+    <div class="content">
+      <div class="header">
+        <img class="logo" src="https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/sample-spmc/logo+(1).png" alt="Company Logo">
+        <div class="header-content">
+          <div class="document-title">QUOTE</div>
+        </div>
       </div>
-      <div class="amount-summary-row">
-        <div class="amount-label">VAT ${quotation.vatPercentage}%:</div>
-        <div class="amount-value">${vatAmount.toFixed(2)} AED</div>
+
+      <div class="client-info-container">
+        <div class="client-info">
+          <p><strong>Client:</strong> ${client.clientName || "N/A"}</p>
+          <p><strong>Address:</strong> ${client.clientAddress || "N/A"}</p>
+          <p><strong>Contact:</strong> ${client.mobileNumber || client.telephoneNumber || "N/A"}</p>
+          <p><strong>Email:</strong> ${client.email || "N/A"}</p>
+          <p><strong>Site:</strong> ${site}</p>
+          <p><strong>Subject:</strong> ${project.projectName || "N/A"}</p>
+        </div>
+
+        <div class="quotation-info">
+          <table class="quotation-details">
+            <tr>
+              <td>Quotation #:</td>
+              <td>${quotation.quotationNumber}</td>
+            </tr>
+            <tr>
+              <td>Date:</td>
+              <td>${formatDate(quotation.date)}</td>
+            </tr>
+            <tr>
+              <td>Valid Until:</td>
+              <td>${getDaysRemaining(quotation.validUntil)}</td>
+            </tr>
+          </table>
+        </div>
       </div>
-      <div class="net-amount-row">
-        <div class="amount-label">NET AMOUNT:</div>
-        <div class="amount-value">${netAmount.toFixed(2)} AED</div>
+
+      <div class="section">
+        <div class="section-title">ITEMS</div>
+        <table>
+          <thead>
+            <tr>
+              <th width="5%">No.</th>
+              <th width="35%">Description</th>
+              <th width="10%">UOM</th>
+              <th width="15%">Image</th>
+              <th width="10%">Qty</th>
+              <th width="15%">Unit Price (AED)</th>
+              <th width="10%" class="text-right">Total (AED)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${quotation.items.map((item, index) => `
+              <tr>
+                <td class="text-center">${index + 1}</td>
+                <td>${item.description}</td>
+                <td class="text-center">${item.uom || "NOS"}</td>
+                <td class="text-center" style="padding: 5px;">
+                  ${item.image?.url ? `<img src="${item.image.url}" style="width: 100%; height: auto; max-height: 80px; object-fit: contain;"/>` : ""}
+                </td>
+                <td class="text-center">${item.quantity.toFixed(2)}</td>
+                <td class="text-right">${item.unitPrice.toFixed(2)}</td>
+                <td class="text-right">${item.totalPrice.toFixed(2)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+
+        <div class="amount-summary">
+          <div class="amount-summary-row">
+            <div class="amount-label">SUBTOTAL:</div>
+            <div class="amount-value">${subtotal.toFixed(2)} AED</div>
+          </div>
+          <div class="amount-summary-row">
+            <div class="amount-label">VAT ${quotation.vatPercentage}%:</div>
+            <div class="amount-value">${vatAmount.toFixed(2)} AED</div>
+          </div>
+          <div class="net-amount-row">
+            <div class="amount-label">NET AMOUNT:</div>
+            <div class="amount-value">${netAmount.toFixed(2)} AED</div>
+          </div>
+        </div>
+      </div>
+
+      ${quotation.termsAndConditions.length > 0 ? `
+      <div class="section">
+        <div class="section-title">TERMS & CONDITIONS</div>
+        <div class="terms-box">
+          <ol>
+            ${quotation.termsAndConditions.map(term => `<li>${term}</li>`).join("")}
+          </ol>
+        </div>
+      </div>
+      ` : ''}
+
+      <div class="prepared-by">
+        <div class="section-title">PREPARED BY</div>
+        <div class="prepared-by-name">${preparedBy?.firstName || "N/A"} ${preparedBy?.lastName || ""}</div>
+        ${preparedBy?.phoneNumbers?.length ? `
+        <div class="prepared-by-title">Phone: ${preparedBy.phoneNumbers.join(", ")}</div>
+        ` : ''}
       </div>
     </div>
-  </div>
 
-  ${quotation.termsAndConditions.length > 0 ? `
-  <div class="section">
-    <div class="section-title">TERMS & CONDITIONS</div>
-    <div class="terms-box">
-      <ol>
-        ${quotation.termsAndConditions.map(term => `<li>${term}</li>`).join("")}
-      </ol>
-    </div>
-  </div>
-  ` : ''}
-
-  <div class="prepared-by">
-    <div class="section-title">PREPARED BY</div>
-    <div class="prepared-by-name">${preparedBy?.firstName || "N/A"} ${preparedBy?.lastName || ""}</div>
-    ${preparedBy?.phoneNumbers?.length ? `
-    <div class="prepared-by-title">Phone: ${preparedBy.phoneNumbers.join(", ")}</div>
-    ` : ''}
-  </div>
-
-  <div class="footer-container">
     <div class="tagline">We work U Relax</div>
     <div class="footer">
       <p><strong>AL GHAZAL AL ABYAD TECHNICAL SERVICES</strong></p>

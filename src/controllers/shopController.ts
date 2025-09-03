@@ -14,15 +14,17 @@ export const createShop = asyncHandler(async (req: Request, res: Response) => {
   const { shopName, shopNo, address, vat, ownerName, ownerEmail, contact } =
     req.body;
 
-  // Validate required fields
-  if (!shopName || !shopNo || !address || !vat || !ownerName || !contact) {
-    throw new ApiError(400, "All fields except ownerEmail are required");
+  // Validate required fields - only shopName, shopNo, address, and contact are required now
+  if (!shopName || !shopNo || !address || !contact) {
+    throw new ApiError(400, "shopName, shopNo, address, and contact are required");
   }
 
-  // Check if VAT number already exists
-  const existingShop = await Shop.findOne({ vat });
-  if (existingShop) {
-    throw new ApiError(400, "Shop with this VAT number already exists");
+  // Check if VAT number already exists (only if provided)
+  if (vat && vat.trim()) {
+    const existingShop = await Shop.findOne({ vat: vat.trim() });
+    if (existingShop) {
+      throw new ApiError(400, "Shop with this VAT number already exists");
+    }
   }
 
   // Check if shop number already exists
@@ -62,8 +64,8 @@ export const createShop = asyncHandler(async (req: Request, res: Response) => {
     shopName,
     shopNo,
     address,
-    vat,
-    ownerName,
+    vat: vat && vat.trim() ? vat.trim() : undefined, // Only set if provided and not empty
+    ownerName: ownerName && ownerName.trim() ? ownerName.trim() : undefined, // Only set if provided and not empty
     ownerEmail,
     contact,
     shopAttachments,
@@ -72,6 +74,7 @@ export const createShop = asyncHandler(async (req: Request, res: Response) => {
 
   res.status(201).json(new ApiResponse(201, shop, "Shop created successfully"));
 });
+
 export const getShops = asyncHandler(async (req: Request, res: Response) => {
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;
@@ -81,14 +84,16 @@ export const getShops = asyncHandler(async (req: Request, res: Response) => {
 
   // Search functionality
   if (req.query.search) {
-    filter.$or = [
+    const searchConditions: any[] = [
       { shopName: { $regex: req.query.search, $options: "i" } },
-      { vat: { $regex: req.query.search, $options: "i" } },
       { contact: { $regex: req.query.search, $options: "i" } },
-      { ownerName: { $regex: req.query.search, $options: "i" } },
       { shopNo: { $regex: req.query.search, $options: "i" } },
       { address: { $regex: req.query.search, $options: "i" } },
+      { vat: { $regex: req.query.search, $options: "i" } },
+      { ownerName: { $regex: req.query.search, $options: "i" } }
     ];
+    
+    filter.$or = searchConditions;
   }
 
   const total = await Shop.countDocuments(filter);
@@ -143,15 +148,17 @@ export const updateShop = asyncHandler(async (req: Request, res: Response) => {
     throw new ApiError(404, "Shop not found");
   }
 
-  // Check if VAT is being updated and conflicts with other shops
-  if (vat && vat !== shop.vat) {
-    const existingShop = await Shop.findOne({
-      vat,
-      _id: { $ne: id },
-    });
+  // Check if VAT is being updated and conflicts with other shops (only if provided)
+  if (vat !== undefined) {
+    if (vat && vat.trim() && vat.trim() !== shop.vat) {
+      const existingShop = await Shop.findOne({
+        vat: vat.trim(),
+        _id: { $ne: id },
+      });
 
-    if (existingShop) {
-      throw new ApiError(400, "Another shop already uses this VAT number");
+      if (existingShop) {
+        throw new ApiError(400, "Another shop already uses this VAT number");
+      }
     }
   }
 
@@ -194,16 +201,29 @@ export const updateShop = asyncHandler(async (req: Request, res: Response) => {
       })) || [];
   }
 
+  // Prepare update object
+  const updateData: any = {};
+  
+  if (shopName !== undefined) updateData.shopName = shopName;
+  if (shopNo !== undefined) updateData.shopNo = shopNo;
+  if (address !== undefined) updateData.address = address;
+  if (contact !== undefined) updateData.contact = contact;
+  
+  // Handle optional fields - set to undefined if empty string, otherwise use provided value
+  if (vat !== undefined) {
+    updateData.vat = vat && vat.trim() ? vat.trim() : undefined;
+  }
+  if (ownerName !== undefined) {
+    updateData.ownerName = ownerName && ownerName.trim() ? ownerName.trim() : undefined;
+  }
+  if (ownerEmail !== undefined) {
+    updateData.ownerEmail = ownerEmail && ownerEmail.trim() ? ownerEmail.trim() : undefined;
+  }
+
   const updatedShop = await Shop.findByIdAndUpdate(
     id,
     {
-      shopName: shopName || shop.shopName,
-      shopNo: shopNo || shop.shopNo,
-      address: address || shop.address,
-      vat: vat || shop.vat,
-      ownerName: ownerName || shop.ownerName,
-      ownerEmail: ownerEmail !== undefined ? ownerEmail : shop.ownerEmail,
-      contact: contact || shop.contact,
+      ...updateData,
       $push: { shopAttachments: { $each: newAttachments } },
     },
     { new: true }

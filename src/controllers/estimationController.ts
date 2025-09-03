@@ -1156,7 +1156,7 @@ export const generateEstimationPdf = asyncHandler(
         <div class="footer">
           Thank you for your business!
           <div class="company-info">
-            AGATS SOFTWARE CO. LTD. | support@agatsoftware.com | +94 77 123 4567
+            Alghazal Alabyad Technical Services
           </div>
         </div>
       </div>
