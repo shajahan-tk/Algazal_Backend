@@ -48,14 +48,7 @@ const shopSchema = new Schema<IShop>(
       type: String,
       required: false, // Made optional
       trim: true,
-      sparse: true, // Allows multiple null/undefined values for unique index
-      validate: {
-        validator: function (v: string) {
-          // Only validate if value exists (not null/undefined/empty)
-          return !v || v.trim().length > 0;
-        },
-        message: "VAT number cannot be empty if provided",
-      },
+     
     },
     ownerName: {
       type: String,
@@ -96,7 +89,6 @@ const shopSchema = new Schema<IShop>(
 
 // Indexes
 shopSchema.index({ shopName: 1 });
-shopSchema.index({ vat: 1 }, { sparse: true }); // Sparse index for optional unique field
 shopSchema.index({ shopNo: 1 });
 shopSchema.index({ ownerName: 1 });
 shopSchema.index({ address: "text" }); // Text index for address search

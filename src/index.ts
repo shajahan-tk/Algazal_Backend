@@ -31,6 +31,7 @@ import employeeExpenseRouter from "./routes/employeeExpenseRoutes";
 import payrollRouter from "./routes/payrollRoutes";
 import visaRouter from "./routes/visaExpenseRoutes";
 import reportTouter from "./routes/reportRoutes"
+import employeeSummaryRouter from "./routes/employeeSummaryRoutes";
 import { connectDb } from "./config/db";
 import { seedSuperAdmin } from "./utils/seeder";
 dotenv.config();
@@ -92,7 +93,7 @@ app.use("/api/employee-expenses", employeeExpenseRouter);
 app.use("/api/payroll", payrollRouter);
 app.use("/api/visa-expenses", visaRouter);
 app.use("/api/reports", reportTouter);
-
+app.use("/api/employee-summary", employeeSummaryRouter);
 
 app.use(errorHandler as ErrorRequestHandler);
 
