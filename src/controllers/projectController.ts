@@ -1286,23 +1286,27 @@ export const generateInvoicePdf = asyncHandler(
     }
     .header {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       margin-bottom: 15px;
+      gap: 15px;
     }
     .logo {
       height: 50px;
       width: auto;
-      margin-right: 20px;
     }
     .header-content {
       flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
     }
     .document-title {
       font-size: 14pt;
       font-weight: bold;
-      margin: 5px 0;
+      margin: 0;
       text-align: center;
       color: #000;
+      padding-top: 8px;
     }
     .invoice-header {
       display: flex;
@@ -1310,6 +1314,7 @@ export const generateInvoicePdf = asyncHandler(
       margin-bottom: 20px;
       padding-bottom: 10px;
       border-bottom: 2px solid #94d7f4;
+      align-items: flex-start;
     }
     .invoice-info {
       text-align: right;
@@ -1317,11 +1322,11 @@ export const generateInvoicePdf = asyncHandler(
     .client-info-container {
       display: flex;
       margin-bottom: 20px;
+      gap: 20px;
     }
     .client-info {
       flex: 1;
       padding: 10px;
-      margin-right: 20px;
       border: 1px solid #ddd;
       border-radius: 5px;
     }
@@ -1425,7 +1430,7 @@ export const generateInvoicePdf = asyncHandler(
       padding-top: 10px;
       margin-top: 30px;
     }
-      .tagline {
+    .tagline {
       text-align: center;
       font-weight: bold;
       font-size: 12pt;
@@ -1437,6 +1442,13 @@ export const generateInvoicePdf = asyncHandler(
       padding-top: 8px;
       border-top: 1px solid #eee;
       font-weight: bold;
+    }
+    p {
+      margin: 5px 0;
+    }
+    h3 {
+      margin: 0 0 8px 0;
+      color: #333;
     }
   </style>
 </head>
@@ -1463,10 +1475,10 @@ export const generateInvoicePdf = asyncHandler(
   <div class="client-info-container">
     <div class="client-info">
       <h3>BILL TO:</h3>
-      <p><strong>Client:</strong> ${client.clientName || "N/A"}</p>
-      <p><strong>Address:</strong> ${client.clientAddress || "N/A"}</p>
-      <p><strong>Contact:</strong> ${client.mobileNumber || client.telephoneNumber || "N/A"}</p>
-      <p><strong>Email:</strong> ${client.email || "N/A"}</p>
+      <p><strong>CLIENT:</strong> ${client.clientName || "N/A"}</p>
+      <p><strong>ADDRESS:</strong> ${client.clientAddress || "N/A"}</p>
+      <p><strong>CONTACT:</strong> ${client.mobileNumber || client.telephoneNumber || "N/A"}</p>
+      <p><strong>EMAIL:</strong> ${client.email || "N/A"}</p>
       <p><strong>TRN:</strong> ${client.trnNumber || "N/A"}</p>
     </div>
 
@@ -1479,7 +1491,7 @@ export const generateInvoicePdf = asyncHandler(
       <p>TRN: 104037793700003</p>
       <p class="service-period">
         <strong>SERVICE PERIOD:</strong> 
-${formatDate(project.completionDate)} - ${formatDate(project.handoverDate || new Date())}
+        ${formatDate(project.completionDate)} - ${formatDate(project.handoverDate || new Date())}
       </p>
     </div>
   </div>
@@ -1541,10 +1553,8 @@ ${formatDate(project.completionDate)} - ${formatDate(project.handoverDate || new
     <p><strong>Payment Terms:</strong> ${"30 days from invoice date"}</p>
   </div>
     
-  
-
   <div class="footer">
-  <div class="tagline">We work U Relax</div>
+    <div class="tagline">We work U Relax</div>
     <p><strong>AL GHAZAL AL ABYAD TECHNICAL SERVICES</strong></p>
     <p>Office No:04, R09-France Cluster, International City-Dubai | P.O.Box:262760, Dubai-U.A.E</p>
     <p>Tel: 044102555 | <a href="http://www.alghazalgroup.com/">www.alghazalgroup.com</a></p>

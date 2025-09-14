@@ -264,8 +264,6 @@ export const deleteQuotation = asyncHandler(
   }
 );
 
-
-
 export const generateQuotationPdf = asyncHandler(
   async (req: Request, res: Response) => {
     const { id } = req.params;
@@ -321,180 +319,255 @@ export const generateQuotationPdf = asyncHandler(
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
   <style type="text/css">
-    @page {
-      size: A4;
-      margin: 1cm;
-    }
-    body {
-      font-family: 'Arial', sans-serif;
-      font-size: 10pt;
-      line-height: 1.4;
-      color: #333;
-      margin: 0;
-      padding: 0;
-      padding-bottom: 20px;
-    }
-    .container {
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-    .content {
-      flex: 1;
-    }
-    .header {
-      display: flex;
-      align-items: center;
-      margin-bottom: 15px;
-    }
-    .logo {
-      height: 50px;
-      width: auto;
-      margin-right: 20px;
-    }
-    .header-content {
-      flex-grow: 1;
-    }
-    .document-title {
-      font-size: 14pt;
-      font-weight: bold;
-      margin: 5px 0;
-      text-align: center;
-      color: #000;
-    }
-    .client-info-container {
-      display: flex;
-      margin-bottom: 20px;
-    }
-    .client-info {
-      flex: 1;
-      padding: 10px;
-      margin-right: 20px;
-    }
-    .quotation-info {
-      width: 250px;
-    }
-    .quotation-details {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    .quotation-details tr:not(:last-child) {
-      border-bottom: 1px solid #eee;
-    }
-    .quotation-details td {
-      padding: 8px 10px;
-      vertical-align: top;
-    }
-    .quotation-details td:first-child {
-      font-weight: bold;
-      width: 40%;
-      color: #555;
-    }
-    .section {
-      margin-bottom: 15px;
-      page-break-inside: avoid;
-    }
-    .section-title {
-      font-size: 11pt;
-      font-weight: bold;
-      padding: 5px 0;
-      margin: 10px 0 5px 0;
-      border-bottom: 1px solid #ddd;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 15px;
-      page-break-inside: avoid;
-    }
-    th {
-      background-color: #94d7f4;
-      color: #000;
-      font-weight: bold;
-      padding: 6px 8px;
-      text-align: left;
-      border: 1px solid #ddd;
-    }
-    td {
-      padding: 6px 8px;
-      border: 1px solid #ddd;
-      vertical-align: top;
-    }
-    .amount-summary {
-      margin-top: 10px;
-      width: 100%;
-      text-align: right;
-    }
-    .amount-summary-row {
-      display: flex;
-      justify-content: flex-end;
-      margin-bottom: 5px;
-    }
-    .amount-label {
-      width: 150px;
-      font-weight: bold;
-      text-align: right;
-      padding-right: 10px;
-    }
-    .amount-value {
-      width: 100px;
-      text-align: right;
-    }
-    .net-amount-row {
-      display: flex;
-      justify-content: flex-end;
-      background-color: #94d7f4;
-      color: #000;
-      font-weight: bold;
-      font-size: 11pt;
-      margin-top: 5px;
-      padding: 5px 0;
-      border-top: 1px solid #333;
-    }
-    .terms-box {
-      border: 1px solid #000;
-      padding: 10px;
-      margin-top: 15px;
-      display: inline-block;
-      width: auto;
-      min-width: 50%;
-    }
-    .prepared-by {
-      margin-top: 30px;
-      padding-top: 15px;
-      border-top: 1px solid #ddd;
-      margin-bottom: 30px;
-    }
-    .prepared-by-name {
-      font-weight: bold;
-      margin-top: 20px;
-    }
-    .prepared-by-title {
-      font-size: 9pt;
-      color: #777;
-    }
-    .tagline {
-      text-align: center;
-      font-weight: bold;
-      font-size: 12pt;
-      margin: 30px 0 15px 0;
-      color: #333;
-      border-top: 2px solid #ddd;
-      padding-top: 20px;
-    }
-    .footer {
-      font-size: 9pt;
-      color: #777;
-      text-align: center;
-      margin-top: 10px;
-      page-break-inside: avoid;
-    }
-    .text-center {
-      text-align: center;
-    }
-    .text-right {
-      text-align: right;
-    }
+   @page {
+  size: A4;
+  margin: 1cm;
+}
+body {
+  font-family: 'Arial', sans-serif;
+  font-size: 10pt;
+  line-height: 1.4;
+  color: #333;
+  margin: 0;
+  padding: 0;
+}
+
+/* Remove problematic flexbox layout */
+.container {
+  /* Remove min-height: 100vh and flex properties */
+  display: block; /* Changed from flex */
+}
+
+.content {
+  /* Remove flex: 1 */
+  margin-bottom: 20px; /* Add some space before tagline */
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 15px;
+  gap: 15px;
+}
+
+.logo {
+  height: 50px;
+  width: auto;
+}
+
+.header-content {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-end;
+}
+
+.document-title {
+  font-size: 14pt;
+  font-weight: bold;
+  margin: 0;
+  color: #000;
+  padding-top: 8px;
+}
+
+.client-info-container {
+  display: flex;
+  margin-bottom: 10px;
+  gap: 20px;
+}
+
+.client-info {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #eee;
+  border-radius: 4px;
+}
+
+.quotation-info {
+  width: 250px;
+}
+
+.quotation-details {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.quotation-details tr:not(:last-child) {
+  border-bottom: 1px solid #eee;
+}
+
+.quotation-details td {
+  padding: 8px 10px;
+  vertical-align: top;
+}
+
+.quotation-details td:first-child {
+  font-weight: bold;
+  width: 40%;
+  color: #555;
+}
+
+.section {
+  margin-bottom: 15px;
+  page-break-inside: avoid;
+}
+
+.section-title {
+  font-size: 11pt;
+  font-weight: bold;
+  padding: 5px 0;
+  margin: 10px 0 5px 0;
+  border-bottom: 1px solid #ddd;
+}
+
+.terms-prepared-section {
+  margin-top: 15px;
+  page-break-inside: avoid;
+}
+
+.terms-prepared-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #ddd;
+  margin-bottom: 10px;
+}
+
+.terms-title, .prepared-title {
+  font-size: 11pt;
+  font-weight: bold;
+  margin: 0;
+  color: #333;
+}
+
+.terms-prepared-content {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.terms-content {
+  flex: 1;
+}
+
+.prepared-content {
+  width: 250px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 15px;
+  page-break-inside: avoid;
+}
+
+th {
+  background-color: #94d7f4;
+  color: #000;
+  font-weight: bold;
+  padding: 6px 8px;
+  text-align: left;
+  border: 1px solid #ddd;
+}
+
+td {
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  vertical-align: top;
+}
+
+.amount-summary {
+  margin-top: 10px;
+  width: 100%;
+  text-align: right;
+}
+
+.amount-summary-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 5px;
+}
+
+.amount-label {
+  width: 150px;
+  font-weight: bold;
+  text-align: right;
+  padding-right: 10px;
+}
+
+.amount-value {
+  width: 100px;
+  text-align: right;
+}
+
+.net-amount-row {
+  display: flex;
+  justify-content: flex-end;
+  background-color: #94d7f4;
+  color: #000;
+  font-weight: bold;
+  font-size: 11pt;
+  margin-top: 5px;
+  padding: 5px 0;
+  border-top: 1px solid #333;
+}
+
+.terms-box {
+  border: 1px solid #000;
+  padding: 10px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.prepared-by-name {
+  font-weight: bold;
+  margin-top: 5px;
+}
+
+.prepared-by-title {
+  font-size: 9pt;
+  color: #777;
+  margin-top: 5px;
+}
+
+/* Improved tagline and footer positioning */
+.tagline {
+  text-align: center;
+  font-weight: bold;
+  font-size: 12pt;
+  margin: 20px 0 10px 0; /* Reduced top margin */
+  color: #333;
+  border-top: 2px solid #ddd;
+  padding-top: 15px; /* Reduced padding */
+  page-break-before: avoid; /* Prevent page break before tagline */
+}
+
+.footer {
+  font-size: 9pt;
+  color: #777;
+  text-align: center;
+  margin-top: 10px;
+  page-break-inside: avoid;
+  page-break-before: avoid; /* Keep footer with tagline */
+}
+
+.text-center {
+  text-align: center;
+}
+
+.text-right {
+  text-align: right;
+}
+
+p {
+  margin: 5px 0;
+}
   </style>
 </head>
 <body>
@@ -509,12 +582,12 @@ export const generateQuotationPdf = asyncHandler(
 
       <div class="client-info-container">
         <div class="client-info">
-          <p><strong>Client:</strong> ${client.clientName || "N/A"}</p>
-          <p><strong>Address:</strong> ${client.clientAddress || "N/A"}</p>
-          <p><strong>Contact:</strong> ${client.mobileNumber || client.telephoneNumber || "N/A"}</p>
-          <p><strong>Email:</strong> ${client.email || "N/A"}</p>
-          <p><strong>Site:</strong> ${site}</p>
-          <p><strong>Subject:</strong> ${project.projectName || "N/A"}</p>
+          <p><strong>CLIENT:</strong> ${client.clientName || "N/A"}</p>
+          <p><strong>ADRESS:</strong> ${client.clientAddress || "N/A"}</p>
+          <p><strong>CONTACT:</strong> ${client.mobileNumber || client.telephoneNumber || "N/A"}</p>
+          <p><strong>EMAIL:</strong> ${client.email || "N/A"}</p>
+          <p><strong>SITE:</strong> ${site}</p>
+          <p><strong>SUBJECT:</strong> ${project.projectName || "N/A"}</p>
         </div>
 
         <div class="quotation-info">
@@ -583,23 +656,36 @@ export const generateQuotationPdf = asyncHandler(
       </div>
 
       ${quotation.termsAndConditions.length > 0 ? `
-      <div class="section">
-        <div class="section-title">TERMS & CONDITIONS</div>
-        <div class="terms-box">
-          <ol>
-            ${quotation.termsAndConditions.map(term => `<li>${term}</li>`).join("")}
-          </ol>
+      <div class="terms-prepared-section">
+        <div class="terms-prepared-header">
+          <div class="terms-title">TERMS & CONDITIONS</div>
+          <div class="prepared-title">PREPARED BY</div>
+        </div>
+        <div class="terms-prepared-content">
+          <div class="terms-content">
+            <div class="terms-box">
+              <ol>
+                ${quotation.termsAndConditions.map(term => `<li>${term}</li>`).join("")}
+              </ol>
+            </div>
+          </div>
+          <div class="prepared-content">
+            <div class="prepared-by-name">${preparedBy?.firstName || "N/A"} ${preparedBy?.lastName || ""}</div>
+            ${preparedBy?.phoneNumbers?.length ? `
+            <div class="prepared-by-title">Phone: ${preparedBy.phoneNumbers.join(", ")}</div>
+            ` : ''}
+          </div>
         </div>
       </div>
-      ` : ''}
-
-      <div class="prepared-by">
+      ` : `
+      <div class="section">
         <div class="section-title">PREPARED BY</div>
-        <div class="prepared-by-name">${preparedBy?.firstName || "N/A"} ${preparedBy?.lastName || ""}</div>
+        <div class="prepared-by-name" >${preparedBy?.firstName || "N/A"} ${preparedBy?.lastName || ""}</div>
         ${preparedBy?.phoneNumbers?.length ? `
         <div class="prepared-by-title">Phone: ${preparedBy.phoneNumbers.join(", ")}</div>
         ` : ''}
       </div>
+      `}
     </div>
 
     <div class="tagline">We work U Relax</div>

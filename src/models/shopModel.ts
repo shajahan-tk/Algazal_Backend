@@ -8,12 +8,12 @@ export interface IShopAttachment extends Document {
 
 export interface IShop extends Document {
   shopName: string;
-  shopNo: string;
-  address: string; // Simplified to string
-  vat?: string; // Made optional
-  ownerName?: string; // Made optional
+  shopNo?: string; // Made optional
+  address: string;
+  vat?: string;
+  ownerName?: string;
   ownerEmail?: string;
-  contact: string;
+  contact?: string; // Made optional
   shopAttachments: Types.DocumentArray<IShopAttachment>;
   createdBy: Types.ObjectId;
   createdAt?: Date;
@@ -35,9 +35,10 @@ const shopSchema = new Schema<IShop>(
     },
     shopNo: {
       type: String,
-      required: true,
+      required: false, // Made optional
       trim: true,
       unique: true,
+      sparse: true, // Allow multiple null/undefined values
     },
     address: {
       type: String,
@@ -46,13 +47,12 @@ const shopSchema = new Schema<IShop>(
     },
     vat: {
       type: String,
-      required: false, // Made optional
+      required: false,
       trim: true,
-     
     },
     ownerName: {
       type: String,
-      required: false, // Made optional
+      required: false,
       trim: true,
     },
     ownerEmail: {
@@ -68,11 +68,11 @@ const shopSchema = new Schema<IShop>(
     },
     contact: {
       type: String,
-      required: true,
+      required: false, // Made optional
       trim: true,
       validate: {
         validator: function (v: string) {
-          return /^\+?[\d\s-]{6,}$/.test(v);
+          return !v || /^\+?[\d\s-]{6,}$/.test(v);
         },
         message: (props: any) => `${props.value} is not a valid phone number!`,
       },
@@ -89,8 +89,7 @@ const shopSchema = new Schema<IShop>(
 
 // Indexes
 shopSchema.index({ shopName: 1 });
-shopSchema.index({ shopNo: 1 });
-shopSchema.index({ ownerName: 1 });
-shopSchema.index({ address: "text" }); // Text index for address search
+
+shopSchema.index({ address: "text" });
 
 export const Shop = model<IShop>("Shop", shopSchema);

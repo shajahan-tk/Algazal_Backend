@@ -9,7 +9,7 @@ import {
   getS3KeyFromUrl,
 } from "../utils/uploadConf";
 import ExcelJS from "exceljs";
-import { IUser } from "@/models/userModel";
+import { IUser } from "../models/userModel";
 export const createProjectProfit = asyncHandler(
   async (req: Request, res: Response) => {
     const { projectName, poNumber, startDate, budget, expenses, description } = req.body;

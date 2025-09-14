@@ -14,9 +14,9 @@ export const createShop = asyncHandler(async (req: Request, res: Response) => {
   const { shopName, shopNo, address, vat, ownerName, ownerEmail, contact } =
     req.body;
 
-  // Validate required fields - only shopName, shopNo, address, and contact are required now
-  if (!shopName || !shopNo || !address || !contact) {
-    throw new ApiError(400, "shopName, shopNo, address, and contact are required");
+  // Validate required fields - only shopName and address are required now
+  if (!shopName || !address) {
+    throw new ApiError(400, "shopName and address are required");
   }
 
   // Check if VAT number already exists (only if provided)
@@ -27,10 +27,12 @@ export const createShop = asyncHandler(async (req: Request, res: Response) => {
     }
   }
 
-  // Check if shop number already exists
-  const existingShopNo = await Shop.findOne({ shopNo });
-  if (existingShopNo) {
-    throw new ApiError(400, "Shop with this number already exists");
+  // Check if shop number already exists (only if provided)
+  if (shopNo && shopNo.trim()) {
+    const existingShopNo = await Shop.findOne({ shopNo: shopNo.trim() });
+    if (existingShopNo) {
+      throw new ApiError(400, "Shop with this number already exists");
+    }
   }
 
   // Handle file uploads
@@ -62,12 +64,12 @@ export const createShop = asyncHandler(async (req: Request, res: Response) => {
 
   const shop = await Shop.create({
     shopName,
-    shopNo,
+    shopNo: shopNo && shopNo.trim() ? shopNo.trim() : undefined,
     address,
-    vat: vat && vat.trim() ? vat.trim() : undefined, // Only set if provided and not empty
-    ownerName: ownerName && ownerName.trim() ? ownerName.trim() : undefined, // Only set if provided and not empty
+    vat: vat && vat.trim() ? vat.trim() : undefined,
+    ownerName: ownerName && ownerName.trim() ? ownerName.trim() : undefined,
     ownerEmail,
-    contact,
+    contact: contact && contact.trim() ? contact.trim() : undefined,
     shopAttachments,
     createdBy: req.user?.userId,
   });
@@ -162,15 +164,17 @@ export const updateShop = asyncHandler(async (req: Request, res: Response) => {
     }
   }
 
-  // Check if shop number is being updated and conflicts with other shops
-  if (shopNo && shopNo !== shop.shopNo) {
-    const existingShopNo = await Shop.findOne({
-      shopNo,
-      _id: { $ne: id },
-    });
+  // Check if shop number is being updated and conflicts with other shops (only if provided)
+  if (shopNo !== undefined && shopNo !== shop.shopNo) {
+    if (shopNo && shopNo.trim()) {
+      const existingShopNo = await Shop.findOne({
+        shopNo: shopNo.trim(),
+        _id: { $ne: id },
+      });
 
-    if (existingShopNo) {
-      throw new ApiError(400, "Another shop already uses this shop number");
+      if (existingShopNo) {
+        throw new ApiError(400, "Another shop already uses this shop number");
+      }
     }
   }
 
@@ -205,11 +209,15 @@ export const updateShop = asyncHandler(async (req: Request, res: Response) => {
   const updateData: any = {};
   
   if (shopName !== undefined) updateData.shopName = shopName;
-  if (shopNo !== undefined) updateData.shopNo = shopNo;
+  if (shopNo !== undefined) {
+    updateData.shopNo = shopNo && shopNo.trim() ? shopNo.trim() : undefined;
+  }
   if (address !== undefined) updateData.address = address;
-  if (contact !== undefined) updateData.contact = contact;
+  if (contact !== undefined) {
+    updateData.contact = contact && contact.trim() ? contact.trim() : undefined;
+  }
   
-  // Handle optional fields - set to undefined if empty string, otherwise use provided value
+  // Handle optional fields
   if (vat !== undefined) {
     updateData.vat = vat && vat.trim() ? vat.trim() : undefined;
   }

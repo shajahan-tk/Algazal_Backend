@@ -10,7 +10,7 @@ import ExcelJS from "exceljs";
 import { Types } from "mongoose";
 
 // Helper function to calculate overtime for a period
-const calculateOvertime = async (userId: Types.ObjectId, period: string) => {
+export const calculateOvertime = async (userId: Types.ObjectId, period: string) => {
   try {
     // Extract month and year from period (assuming format "MM-YYYY")
     const [month, year] = period.split('-').map(Number);
@@ -34,7 +34,7 @@ const calculateOvertime = async (userId: Types.ObjectId, period: string) => {
 
 // Create payroll record
 export const createPayroll = asyncHandler(async (req: Request, res: Response) => {
-  const {
+  let {
     employee,
     labourCard,
     labourCardPersonalNo,
@@ -46,10 +46,14 @@ export const createPayroll = asyncHandler(async (req: Request, res: Response) =>
     remark
   } = req.body;
 
+  // Convert to numbers safely
+  allowance = Number(allowance) || 0;
+  deduction = Number(deduction) || 0;
+  mess = Number(mess) || 0;
+  advance = Number(advance) || 0;
+
   // Validate required fields
-  if (!employee || !labourCard || !labourCardPersonalNo || !period || 
-      allowance === undefined || deduction === undefined || 
-      mess === undefined || advance === undefined) {
+  if (!employee || !labourCard || !labourCardPersonalNo || !period) {
     throw new ApiError(400, "Required fields are missing");
   }
 
@@ -60,27 +64,22 @@ export const createPayroll = asyncHandler(async (req: Request, res: Response) =>
   }
 
   // Check for existing payroll for same employee and period
-  const existingPayroll = await Payroll.findOne({
-    employee,
-    period
-  });
-
+  const existingPayroll = await Payroll.findOne({ employee, period });
   if (existingPayroll) {
     throw new ApiError(400, "Payroll already exists for this employee and period");
   }
 
-  // Get basic salary from EmployeeExpense
+  // Get basic salary
   const employeeExpense = await EmployeeExpense.findOne({ employee });
-  const basicSalary = employeeExpense?.basicSalary || 0;
+  const basicSalary = Number(employeeExpense?.basicSalary) || 0;
 
   // Calculate overtime
   const overtime = await calculateOvertime(employee, period);
 
-  // Calculate totals
+  // Totals
   const totalEarnings = basicSalary + allowance + overtime;
   const net = totalEarnings - deduction - mess - advance;
 
-  // Create payroll record
   const payroll = await Payroll.create({
     employee,
     labourCard,
@@ -99,6 +98,7 @@ export const createPayroll = asyncHandler(async (req: Request, res: Response) =>
     new ApiResponse(201, payroll, "Payroll created successfully")
   );
 });
+
 
 // Get all payroll records with comprehensive data
 export const getPayrolls = asyncHandler(async (req: Request, res: Response) => {
@@ -322,7 +322,7 @@ export const updatePayroll = asyncHandler(async (req: Request, res: Response) =>
     throw new ApiError(404, "Payroll not found");
   }
 
-  // Check for existing payroll if employee or period is being updated
+  // Check for duplicate payroll if employee/period is updated
   if (updateData.employee || updateData.period) {
     const employeeId = updateData.employee || payroll.employee;
     const period = updateData.period || payroll.period;
@@ -338,21 +338,29 @@ export const updatePayroll = asyncHandler(async (req: Request, res: Response) =>
     }
   }
 
-  // Recalculate net if financial fields are updated
-  if (updateData.allowance !== undefined || 
-      updateData.deduction !== undefined || 
-      updateData.mess !== undefined || 
-      updateData.advance !== undefined) {
-    
+  // --- Cast incoming financial fields to numbers ---
+  if (updateData.allowance !== undefined) updateData.allowance = Number(updateData.allowance) || 0;
+  if (updateData.deduction !== undefined) updateData.deduction = Number(updateData.deduction) || 0;
+  if (updateData.mess !== undefined) updateData.mess = Number(updateData.mess) || 0;
+  if (updateData.advance !== undefined) updateData.advance = Number(updateData.advance) || 0;
+
+  // Recalculate net if financial fields changed
+  if (
+    updateData.allowance !== undefined || 
+    updateData.deduction !== undefined || 
+    updateData.mess !== undefined || 
+    updateData.advance !== undefined
+  ) {
     const employeeExpense = await EmployeeExpense.findOne({ 
       employee: updateData.employee || payroll.employee 
     });
 
-    const basicSalary = employeeExpense?.basicSalary || 0;
+    const basicSalary = Number(employeeExpense?.basicSalary) || 0;
     const allowance = updateData.allowance ?? payroll.allowance;
     const deduction = updateData.deduction ?? payroll.deduction;
     const mess = updateData.mess ?? payroll.mess;
     const advance = updateData.advance ?? payroll.advance;
+
     const overtime = await calculateOvertime(
       updateData.employee || payroll.employee,
       updateData.period || payroll.period
@@ -365,18 +373,19 @@ export const updatePayroll = asyncHandler(async (req: Request, res: Response) =>
     new: true
   })
     .populate({
-      path: 'employee',
-      select: 'firstName lastName role emiratesId'
+      path: "employee",
+      select: "firstName lastName role emiratesId"
     })
     .populate({
-      path: 'createdBy',
-      select: 'firstName lastName'
+      path: "createdBy",
+      select: "firstName lastName"
     });
 
   res.status(200).json(
     new ApiResponse(200, updatedPayroll, "Payroll updated successfully")
   );
 });
+
 
 // Delete payroll record
 export const deletePayroll = asyncHandler(async (req: Request, res: Response) => {

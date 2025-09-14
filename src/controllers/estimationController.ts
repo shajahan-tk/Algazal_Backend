@@ -666,10 +666,18 @@ export const generateEstimationPdf = asyncHandler(
     }
     const quotation = await Quotation.findOne({ estimation: estimation._id });
 
-    // Verify populated data exists
-    if (!estimation.project || !estimation.project.client) {
-      throw new ApiError(400, "Client information not found");
-    }
+    // Safe data access functions
+    const safeGet = (value: any, defaultValue = "N/A") => {
+      return value !== null && value !== undefined && value !== "" ? value : defaultValue;
+    };
+
+    const safeGetNumber = (value: any, defaultValue = 0) => {
+      return value !== null && value !== undefined ? Number(value) : defaultValue;
+    };
+
+    const safeGetDate = (date?: Date) => {
+      return date ? new Date(date).toLocaleDateString("en-GB") : "N/A";
+    };
 
     // Type guard to check if populated fields are IUser objects
     const isPopulatedUser = (
@@ -689,32 +697,44 @@ export const generateEstimationPdf = asyncHandler(
       ? estimation.approvedBy
       : null;
 
-    // Calculate totals
-    const materialsTotal = estimation.materials.reduce(
-      (sum, item) => sum + item.total,
+    // Calculate totals with safe defaults
+    const materialsTotal = estimation.materials?.reduce(
+      (sum, item) => sum + safeGetNumber(item.total),
       0
-    );
-    const labourTotal = estimation.labour.reduce(
-      (sum, item) => sum + item.total,
+    ) || 0;
+    
+    const labourTotal = estimation.labour?.reduce(
+      (sum, item) => sum + safeGetNumber(item.total),
       0
-    );
-    const termsTotal = estimation.termsAndConditions.reduce(
-      (sum, item) => sum + item.total,
+    ) || 0;
+    
+    const termsTotal = estimation.termsAndConditions?.reduce(
+      (sum, item) => sum + safeGetNumber(item.total),
       0
-    );
+    ) || 0;
+    
     const estimatedAmount = materialsTotal + labourTotal + termsTotal;
-    const netAmount = quotation?.netAmount ?? 0;
-    const commissionAmount = estimation?.commissionAmount ?? 0;
+    const netAmount = safeGetNumber(quotation?.netAmount);
+    const commissionAmount = safeGetNumber(estimation?.commissionAmount);
 
     let profit = netAmount - estimatedAmount - commissionAmount;
     if (profit < 0) {
       profit = 0;
     }
 
-    // Format dates
-    const formatDate = (date?: Date) => {
-      return date ? new Date(date).toLocaleDateString("en-GB") : "";
-    };
+    // Safe access to nested properties
+    const clientName = estimation.project?.client?.clientName || "N/A";
+    const clientAddress = estimation.project?.client?.clientAddress || "N/A";
+    const projectLocation = estimation.project?.location || "N/A";
+    const projectBuilding = estimation.project?.building || "N/A";
+    const apartmentNumber = estimation.project?.apartmentNumber || "N/A";
+    const clientEmail = estimation.project?.client?.email || "N/A";
+    const clientMobile = estimation.project?.client?.mobileNumber || "";
+    const clientTelephone = estimation.project?.client?.telephoneNumber || "";
+    
+    const clientPhone = clientMobile || clientTelephone 
+      ? `${clientMobile}${clientMobile && clientTelephone ? ' / ' : ''}${clientTelephone}`
+      : "N/A";
 
     // Prepare HTML content
     let htmlContent = `
@@ -958,7 +978,7 @@ export const generateEstimationPdf = asyncHandler(
           </div>
           <div class="document-info">
             <div class="document-title">ESTIMATION</div>
-            <div class="document-number">Ref: ${estimation.estimationNumber}</div>
+            <div class="document-number">Ref: ${safeGet(estimation.estimationNumber)}</div>
           </div>
         </div>
         
@@ -968,23 +988,23 @@ export const generateEstimationPdf = asyncHandler(
               <h3>CLIENT INFORMATION</h3>
               <div class="info-item">
                 <span class="info-label">Name:</span>
-                <span class="info-value">${estimation.project.client.clientName}</span>
+                <span class="info-value">${clientName}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">Address:</span>
-                <span class="info-value">${estimation.project.client.clientAddress}</span>
+                <span class="info-value">${clientAddress}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">Project:</span>
-                <span class="info-value">${estimation.project.location}, ${estimation.project.building}, ${estimation.project.apartmentNumber}</span>
+                <span class="info-value">${projectLocation}, ${projectBuilding}, ${apartmentNumber}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">Email:</span>
-                <span class="info-value">${estimation.project.client.email}</span>
+                <span class="info-value">${clientEmail}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">Phone:</span>
-                <span class="info-value">${estimation.project.client.mobileNumber} ${estimation.project.client.telephoneNumber ? '/ ' + estimation.project.client.telephoneNumber : ''}</span>
+                <span class="info-value">${clientPhone}</span>
               </div>
             </div>
             
@@ -992,19 +1012,19 @@ export const generateEstimationPdf = asyncHandler(
               <h3>ESTIMATION DETAILS</h3>
               <div class="info-item">
                 <span class="info-label">Date:</span>
-                <span class="info-value">${formatDate(new Date())}</span>
+                <span class="info-value">${safeGetDate(new Date())}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">Estimation #:</span>
-                <span class="info-value">${estimation.estimationNumber}</span>
+                <span class="info-value">${safeGet(estimation.estimationNumber)}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">Payment Terms:</span>
-                <span class="info-value">${estimation.paymentDueBy} Days</span>
+                <span class="info-value">${safeGet(estimation.paymentDueBy, "N/A")} ${estimation.paymentDueBy ? "Days" : ""}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">Subject:</span>
-                <span class="info-value">${estimation.subject}</span>
+                <span class="info-value">${safeGet(estimation.subject)}</span>
               </div>
             </div>
           </div>
@@ -1022,19 +1042,19 @@ export const generateEstimationPdf = asyncHandler(
                 </tr>
               </thead>
               <tbody>
-                ${estimation.materials
-                  .map(
+                ${(estimation.materials || []).length > 0 
+                  ? estimation.materials.map(
                     (material) => `
                   <tr>
-                    <td>${material.description}</td>
-                    <td>${material.uom}</td>
-                    <td class="text-right">${material.quantity.toFixed(2)}</td>
-                    <td class="text-right">${material.unitPrice.toFixed(2)}</td>
-                    <td class="text-right">${material.total.toFixed(2)}</td>
+                    <td>${safeGet(material.description)}</td>
+                    <td>${safeGet(material.uom)}</td>
+                    <td class="text-right">${safeGetNumber(material.quantity).toFixed(2)}</td>
+                    <td class="text-right">${safeGetNumber(material.unitPrice).toFixed(2)}</td>
+                    <td class="text-right">${safeGetNumber(material.total).toFixed(2)}</td>
                   </tr>
-                `
-                  )
-                  .join("")}
+                `).join("")
+                  : `<tr><td colspan="5" class="text-center">No materials listed</td></tr>`
+                }
                 <tr class="total-row">
                   <td colspan="4" class="text-right">TOTAL MATERIALS</td>
                   <td class="text-right">${materialsTotal.toFixed(2)}</td>
@@ -1055,18 +1075,18 @@ export const generateEstimationPdf = asyncHandler(
                 </tr>
               </thead>
               <tbody>
-                ${estimation.labour
-                  .map(
+                ${(estimation.labour || []).length > 0 
+                  ? estimation.labour.map(
                     (labour) => `
                   <tr>
-                    <td>${labour.designation}</td>
-                    <td class="text-right">${labour.days.toFixed(2)}</td>
-                    <td class="text-right">${labour.price.toFixed(2)}</td>
-                    <td class="text-right">${labour.total.toFixed(2)}</td>
+                    <td>${safeGet(labour.designation)}</td>
+                    <td class="text-right">${safeGetNumber(labour.days).toFixed(2)}</td>
+                    <td class="text-right">${safeGetNumber(labour.price).toFixed(2)}</td>
+                    <td class="text-right">${safeGetNumber(labour.total).toFixed(2)}</td>
                   </tr>
-                `
-                  )
-                  .join("")}
+                `).join("")
+                  : `<tr><td colspan="4" class="text-center">No labor charges listed</td></tr>`
+                }
                 <tr class="total-row">
                   <td colspan="3" class="text-right">TOTAL LABOR</td>
                   <td class="text-right">${labourTotal.toFixed(2)}</td>
@@ -1087,18 +1107,18 @@ export const generateEstimationPdf = asyncHandler(
                 </tr>
               </thead>
               <tbody>
-                ${estimation.termsAndConditions
-                  .map(
+                ${(estimation.termsAndConditions || []).length > 0 
+                  ? estimation.termsAndConditions.map(
                     (term) => `
                   <tr>
-                    <td>${term.description}</td>
-                    <td class="text-right">${term.quantity.toFixed(2)}</td>
-                    <td class="text-right">${term.unitPrice.toFixed(2)}</td>
-                    <td class="text-right">${term.total.toFixed(2)}</td>
+                    <td>${safeGet(term.description)}</td>
+                    <td class="text-right">${safeGetNumber(term.quantity).toFixed(2)}</td>
+                    <td class="text-right">${safeGetNumber(term.unitPrice).toFixed(2)}</td>
+                    <td class="text-right">${safeGetNumber(term.total).toFixed(2)}</td>
                   </tr>
-                `
-                  )
-                  .join("")}
+                `).join("")
+                  : `<tr><td colspan="4" class="text-center">No miscellaneous charges listed</td></tr>`
+                }
                 <tr class="total-row">
                   <td colspan="3" class="text-right">TOTAL MISCELLANEOUS</td>
                   <td class="text-right">${termsTotal.toFixed(2)}</td>
@@ -1116,11 +1136,11 @@ export const generateEstimationPdf = asyncHandler(
               </tr>
               <tr>
                 <td>Quotation Amount</td>
-                <td class="text-right">${quotation?.netAmount?.toFixed(2) || "0.00"}</td>
+                <td class="text-right">${netAmount.toFixed(2)}</td>
               </tr>
               <tr>
                 <td>Commission Amount</td>
-                <td class="text-right">${estimation.commissionAmount?.toFixed(2) || "0.00"}</td>
+                <td class="text-right">${commissionAmount.toFixed(2)}</td>
               </tr>
               <tr class="profit-row">
                 <td>PROFIT</td>
@@ -1202,7 +1222,7 @@ export const generateEstimationPdf = asyncHandler(
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(
         "Content-Disposition",
-        `attachment; filename=estimation-${estimation.estimationNumber}.pdf`
+        `attachment; filename=estimation-${safeGet(estimation.estimationNumber, "unknown")}.pdf`
       );
       res.send(pdfBuffer);
     } finally {
