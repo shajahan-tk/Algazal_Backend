@@ -464,7 +464,7 @@ export const generateCompletionCertificatePdf = asyncHandler(
       .populate("createdBy", "firstName lastName signatureImage")
       .sort({ createdAt: -1 });
 
-    const engineer: any = workCompletion?.createdBy || project.assignedTo;
+    const engineer: any = project.assignedTo;
 
     // Format dates - updated to use project dates
     const formatDate = (date: Date | string | undefined) => {
@@ -515,7 +515,7 @@ export const generateCompletionCertificatePdf = asyncHandler(
             }
             .title-container {
                 flex-grow: 1;
-                text-align: center;
+                text-align: end;
             }
             h1 {
                 color: purple;
@@ -524,7 +524,6 @@ export const generateCompletionCertificatePdf = asyncHandler(
                 margin: 0;
             }
             .highlight {
-             
                 padding: 1px 3px;
             }
             table {
@@ -572,12 +571,29 @@ export const generateCompletionCertificatePdf = asyncHandler(
                 margin: 10px 0 5px 0;
                 justify-content: center;
             }
-            .image-container img {
-                height: 100px;
-                border: 1px solid #000;
-                object-fit: cover;
+            .image-item {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
                 flex-grow: 1;
                 max-width: 180px;
+                margin-bottom: 10px;
+            }
+            .image-item img {
+                height: 100px;
+                width: 100%;
+                border: 1px solid #000;
+                object-fit: cover;
+                margin-bottom: 5px;
+            }
+            .image-title {
+                font-size: 10px;
+                font-weight: bold;
+                text-align: center;
+                color: #333;
+                word-wrap: break-word;
+                width: 100%;
+                padding: 2px 4px;
             }
             .footer-container {
                 margin-top: 20px;
@@ -752,9 +768,10 @@ export const generateCompletionCertificatePdf = asyncHandler(
                     ? workCompletion.images
                         .map(
                           (image) =>
-                            `<img src="${image.imageUrl}" alt="${
-                              image.title || "Site picture"
-                            }">`
+                            `<div class="image-item">
+                               <img src="${image.imageUrl}" alt="${image.title || "Site picture"}" />
+                               <div class="image-title">${image.title || "Untitled"}</div>
+                             </div>`
                         )
                         .join("")
                     : '<p style="text-align: center; width: 100%;">No site pictures available</p>'

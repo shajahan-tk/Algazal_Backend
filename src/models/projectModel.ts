@@ -11,23 +11,23 @@ export interface IProject extends Document {
   building: string;
   apartmentNumber: string;
   status:
-    | "draft"
-    | "estimation_prepared"
-    | "quotation_sent"
-    | "quotation_approved"
-    | "quotation_rejected"
-    | "lpo_received"
-    | "team_assigned"
-    | "work_started"
-    | "in_progress"
-    | "work_completed"
-    | "quality_check"
-    | "client_handover"
-    | "final_invoice_sent"
-    | "payment_received"
-    | "on_hold"
-    | "cancelled"
-    | "project_closed";
+  | "draft"
+  | "estimation_prepared"
+  | "quotation_sent"
+  | "quotation_approved"
+  | "quotation_rejected"
+  | "lpo_received"
+  | "team_assigned"
+  | "work_started"
+  | "in_progress"
+  | "work_completed"
+  | "quality_check"
+  | "client_handover"
+  | "final_invoice_sent"
+  | "payment_received"
+  | "on_hold"
+  | "cancelled"
+  | "project_closed";
   projectNumber: string;
   progress: number;
   createdBy: Types.ObjectId;
@@ -40,6 +40,9 @@ export interface IProject extends Document {
   handoverDate?: Date;
   acceptanceDate?: Date;
 
+  // New work date fields
+  workStartDate?: Date;
+  workEndDate?: Date;
   //for some customers
   grnNumber?: string;
   createdAt?: Date;
@@ -142,8 +145,10 @@ const projectSchema = new Schema<IProject>(
       ref: "User",
     },
     grnNumber: {
-      typw: String,
+      type: String,
     },
+    workStartDate: { type: Date },
+    workEndDate: { type: Date },
   },
   { timestamps: true }
 );

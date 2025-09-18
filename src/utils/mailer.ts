@@ -72,20 +72,16 @@ export interface MailerConfig {
     ciphers?: string;
   };
 }
-
-export const mailerConfig: MailerConfig = {
-   host: "host",
+export const mailerConfig :MailerConfig= {
+  host: "smtp.office365.com",
   port: 587,
-  secure: false, // STARTTLS
+  secure: false,
   auth: {
-       user: "mail", // full email
-    pass: "passs", // same password as in Outlook
+    user: "info@alghazalgroup.com",
+    pass: "Ghazalgroup@2025"
   },
-  from: `"ALGHAZAL ALABYAD TECHNICAL SERVICES" <info@alghazalgroup.com>`,
-   tls: {
-    ciphers: "SSLv3",
-  },
-};
+  from:"info@alghazalgroup.com"
 
-// Singletonghazalgroup.com instance (optional)
+};
+// ✅ Singleton instance
 export const mailer = new Mailer(mailerConfig);

@@ -642,7 +642,7 @@ export const generateInvoiceData = asyncHandler(
     const project = await Project.findById(projectId)
       .populate<{ client: IClient }>(
         "client",
-        "clientName clientAddress mobileNumber contactPerson trnNumber pincode"
+        "clientName clientAddress mobileNumber contactPerson trnNumber pincode workStartDate workEndDate"
       )
       .populate<{ createdBy: IUser }>("createdBy", "firstName lastName")
       .populate<{ assignedTo: IUser }>("assignedTo", "firstName lastName")
@@ -1304,20 +1304,26 @@ export const generateInvoicePdf = asyncHandler(
       font-size: 14pt;
       font-weight: bold;
       margin: 0;
-      text-align: center;
+      text-align: right;
       color: #000;
       padding-top: 8px;
     }
     .invoice-header {
       display: flex;
       justify-content: space-between;
-      margin-bottom: 20px;
+      margin-bottom: 15px;
       padding-bottom: 10px;
       border-bottom: 2px solid #94d7f4;
       align-items: flex-start;
     }
     .invoice-info {
       text-align: right;
+    }
+    .service-period {
+      margin: 0 0 20px 0;
+      padding: 8px 0;
+      font-weight: bold;
+      border-bottom: 1px solid #eee;
     }
     .client-info-container {
       display: flex;
@@ -1437,12 +1443,6 @@ export const generateInvoicePdf = asyncHandler(
       margin: 20px 0 10px 0;
       color: #333;
     }
-    .service-period {
-      margin-top: 8px;
-      padding-top: 8px;
-      border-top: 1px solid #eee;
-      font-weight: bold;
-    }
     p {
       margin: 5px 0;
     }
@@ -1454,7 +1454,7 @@ export const generateInvoicePdf = asyncHandler(
 </head>
 <body>
   <div class="header">
-    <img class="logo" src="https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/sample-spmc/logo+(1).png" alt="Company Logo">
+    <img class="logo" src="https://agats.s3.ap-south-1.amazonaws.com/logo/logo.jpeg" alt="Company Logo">
     <div class="header-content">
       <div class="document-title">TAX INVOICE</div>
     </div>
@@ -1469,6 +1469,10 @@ export const generateInvoicePdf = asyncHandler(
     </div>
     <div class="invoice-info">
       <p><strong>Project:</strong> ${project.projectName || "N/A"}</p>
+      <!-- Service Period moved to top below project name -->
+      <div class="service-period">
+        <strong>Service Period:</strong> ${formatDate(project.workStartDate)} - ${formatDate(project.workEndDate || new Date())}
+      </div>
     </div>
   </div>
 
@@ -1489,10 +1493,6 @@ export const generateInvoicePdf = asyncHandler(
       <p>P.O.Box:262760, Dubai-U.A.E</p>
       <p>Tel: 044102555</p>
       <p>TRN: 104037793700003</p>
-      <p class="service-period">
-        <strong>SERVICE PERIOD:</strong> 
-        ${formatDate(project.completionDate)} - ${formatDate(project.handoverDate || new Date())}
-      </p>
     </div>
   </div>
 
@@ -1753,5 +1753,125 @@ export const addGrnNumber = asyncHandler(
     res
       .status(200)
       .json({ message: "grn Number update successfully", success: true });
+  }
+);
+
+// Set work start date
+export const setWorkStartDate = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { workStartDate } = req.body;
+
+    if (!workStartDate) {
+      throw new ApiError(400, "workStartDate is required");
+    }
+
+    const project = await Project.findById(id);
+    if (!project) {
+      throw new ApiError(404, "Project not found");
+    }
+
+    const parsedDate = new Date(workStartDate);
+    if (isNaN(parsedDate.getTime())) {
+      throw new ApiError(400, "Invalid date format");
+    }
+
+    const updatedProject = await Project.findByIdAndUpdate(
+      id,
+      {
+        workStartDate: parsedDate,
+        updatedBy: req.user?.userId,
+      },
+      { new: true, runValidators: true }
+    );
+    console.log(updatedProject);
+    
+
+    res.status(200).json(
+      new ApiResponse(200, updatedProject, "Work start date set successfully")
+    );
+  }
+);
+
+// Set work end date
+export const setWorkEndDate = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { workEndDate } = req.body;
+
+    if (!workEndDate) {
+      throw new ApiError(400, "workEndDate is required");
+    }
+
+    const project = await Project.findById(id);
+    if (!project) {
+      throw new ApiError(404, "Project not found");
+    }
+
+    const parsedDate = new Date(workEndDate);
+    if (isNaN(parsedDate.getTime())) {
+      throw new ApiError(400, "Invalid date format");
+    }
+
+    const updatedProject = await Project.findByIdAndUpdate(
+      id,
+      {
+        workEndDate: parsedDate,
+        updatedBy: req.user?.userId,
+      },
+      { new: true, runValidators: true }
+    );
+
+    res.status(200).json(
+      new ApiResponse(200, updatedProject, "Work end date set successfully")
+    );
+  }
+);
+
+// Get work duration information
+export const getWorkDuration = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    const project = await Project.findById(id);
+    if (!project) {
+      throw new ApiError(404, "Project not found");
+    }
+
+    let durationInDays: number | null = null;
+    let isCompleted = false;
+    let isInProgress = false;
+
+    if (project.workStartDate) {
+      const start = new Date(project.workStartDate);
+      const now = new Date();
+
+      if (project.workEndDate) {
+        const end = new Date(project.workEndDate);
+        durationInDays = Math.floor(
+          (end.getTime() - start.getTime()) / (1000 * 3600 * 24)
+        );
+        isCompleted = true;
+      } else {
+        durationInDays = Math.floor(
+          (now.getTime() - start.getTime()) / (1000 * 3600 * 24)
+        );
+        isInProgress = true;
+      }
+    }
+
+    res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          workStartDate: project.workStartDate,
+          workEndDate: project.workEndDate,
+          durationInDays,
+          isCompleted,
+          isInProgress,
+        },
+        "Work duration information retrieved successfully"
+      )
+    );
   }
 );

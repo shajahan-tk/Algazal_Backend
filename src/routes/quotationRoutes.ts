@@ -9,6 +9,7 @@ import {
 } from "../controllers/quotationController";
 import { authenticate, authorize } from "../middlewares/authMiddleware";
 import { upload } from "../config/multer";
+import { sendQuotationEmail } from "@/controllers/sendMailPdfController";
 
 const router = express.Router();
 
@@ -52,6 +53,11 @@ router.patch(
 
 router.delete("/:id", authorize(["admin", "super_admin"]), deleteQuotation);
 
+router.post(
+  "/:id/send-email",
+  authorize(["admin", "super_admin", "engineer"]),
+  sendQuotationEmail
+);
 
 router.get("/:id/generate-pdf", authorize(["admin", "super_admin"]),generateQuotationPdf);
 export default router;

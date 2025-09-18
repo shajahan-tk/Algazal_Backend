@@ -17,6 +17,9 @@ import {
   generateInvoicePdf,
   updateWorkersAndDriver,
   addGrnNumber,
+  setWorkStartDate,
+  setWorkEndDate,
+  getWorkDuration,
 } from "../controllers/projectController";
 import { authenticate, authorize } from "../middlewares/authMiddleware";
 
@@ -106,5 +109,21 @@ router.post(
   authorize(["admin", "super_admin"]), // Only admins can assign teams
   assignTeamAndDriver
 );
+router.patch(
+  "/:id/work-start-date",
+  authorize(["admin", "super_admin", "engineer"]),
+  setWorkStartDate
+);
 
+router.patch(
+  "/:id/work-end-date",
+  authorize(["admin", "super_admin", "engineer"]),
+  setWorkEndDate
+);
+
+router.get(
+  "/:id/work-duration",
+  authorize(["admin", "super_admin", "engineer", "finance"]),
+  getWorkDuration
+);
 export default router;
