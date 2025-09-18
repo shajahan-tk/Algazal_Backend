@@ -7,12 +7,14 @@ import {
   getAttendanceSummary,
   dailyNormalAttendance,
   getNormalMonthlyAttendance,
+  getUserMonthlyAttendanceByType,
 } from "../controllers/attendanceController";
 import { authenticate, authorize } from "../middlewares/authMiddleware";
 
 const router = express.Router();
 
-// Driver marks attendance
+// PROJECT ATTENDANCE ROUTES
+// Driver marks project attendance
 router.post(
   "/project/:projectId/user/:userId",
   authenticate,
@@ -20,7 +22,7 @@ router.post(
   markAttendance
 );
 
-// Get user attendance
+// Get user project attendance
 router.get("/project/:projectId/user/:userId", authenticate, getAttendance);
 
 // Get project-wide attendance
@@ -31,6 +33,7 @@ router.get(
   getProjectAttendance
 );
 
+// Get today's project attendance
 router.get(
   "/project/:projectId/today",
   authenticate,
@@ -38,20 +41,53 @@ router.get(
   getTodayProjectAttendance
 );
 
-// Add this to your existing attendanceRoutes.ts
+// Get project attendance summary
 router.get(
   "/project/:projectId/summary",
   authenticate,
   authorize(["admin", "super_admin", "project_manager", "engineer"]),
   getAttendanceSummary
 );
+
+// NORMAL ATTENDANCE ROUTES
+// Mark normal attendance
 router.post(
   "/normal/:userId",
   authenticate,
   authorize(["super_admin", "admin"]),
   markAttendance
 );
-router.get("/normal/daily", dailyNormalAttendance);
-router.get("/normal/monthly/:userId", getNormalMonthlyAttendance);
+
+// Get daily normal attendance for all users
+router.get(
+  "/normal/daily",
+  authenticate,
+  authorize(["super_admin", "admin"]),
+  dailyNormalAttendance
+);
+
+// FIXED: Get user's monthly attendance (all types combined)
+router.get(
+  "/normal/monthly/:userId",
+  authenticate,
+  authorize(["super_admin", "admin", "project_manager"]),
+  getNormalMonthlyAttendance
+);
+
+// NEW: Get user's monthly attendance by specific type or all types
+router.get(
+  "/user/:userId/monthly",
+  authenticate,
+  authorize(["super_admin", "admin", "project_manager"]),
+  getUserMonthlyAttendanceByType
+);
+
+// NEW: Get user's all attendance records (for calendar view)
+router.get(
+  "/user/:userId",
+  authenticate,
+  authorize(["super_admin", "admin", "project_manager"]),
+  getAttendance
+);
 
 export default router;

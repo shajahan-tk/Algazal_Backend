@@ -416,6 +416,7 @@ export const dailyNormalAttendance = asyncHandler(
   }
 );
 
+// FIXED: Get user's monthly attendance (both project and normal types)
 export const getNormalMonthlyAttendance = asyncHandler(
   async (req: Request, res: Response) => {
     const { userId } = req.params;
@@ -440,25 +441,110 @@ export const getNormalMonthlyAttendance = asyncHandler(
     const endDate = new Date(yearNum, monthNum, 0);
     endDate.setHours(23, 59, 59, 999);
 
+    // Get ALL attendance records for the user (both project and normal)
     const attendance = await Attendance.find({
       user: userId,
-      type: "normal",
       date: {
         $gte: startDate,
         $lte: endDate,
       },
     })
-      .sort({ date: 1 })
-      .populate("markedBy", "firstName lastName");
+      .sort({ date: 1, type: 1 }) // Sort by date, then type for consistent ordering
+      .populate("markedBy", "firstName lastName")
+      .populate("project", "projectName");
+
+    // Separate attendance by type
+    const normalAttendance = attendance.filter(a => a.type === 'normal');
+    const projectAttendance = attendance.filter(a => a.type === 'project');
+
+    // Calculate totals for each type
+    const normalTotals = {
+      presentDays: normalAttendance.filter((a) => a.present).length,
+      totalWorkingHours: normalAttendance.reduce((sum, a) => sum + a.workingHours, 0),
+      totalOvertimeHours: normalAttendance.reduce((sum, a) => sum + a.overtimeHours, 0),
+    };
+
+    const projectTotals = {
+      presentDays: projectAttendance.filter((a) => a.present).length,
+      totalWorkingHours: projectAttendance.reduce((sum, a) => sum + a.workingHours, 0),
+      totalOvertimeHours: projectAttendance.reduce((sum, a) => sum + a.overtimeHours, 0),
+    };
+
+    const overallTotals = {
+      presentDays: attendance.filter((a) => a.present).length,
+      totalWorkingHours: attendance.reduce((sum, a) => sum + a.workingHours, 0),
+      totalOvertimeHours: attendance.reduce((sum, a) => sum + a.overtimeHours, 0),
+    };
+
+    res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          attendance: attendance, // All attendance records
+          normalAttendance,
+          projectAttendance,
+          totals: {
+            normal: normalTotals,
+            project: projectTotals,
+            overall: overallTotals,
+          },
+          month: monthNum,
+          year: yearNum,
+        },
+        "Monthly attendance retrieved successfully"
+      )
+    );
+  }
+);
+
+// NEW: Get user's monthly attendance by type
+export const getUserMonthlyAttendanceByType = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { userId } = req.params;
+    const { month, year, type = 'all' } = req.query;
+
+    if (!month || !year) {
+      throw new ApiError(400, "Month and year are required");
+    }
+
+    const monthNum = parseInt(month as string);
+    const yearNum = parseInt(year as string);
+
+    if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+      throw new ApiError(400, "Invalid month (must be 1-12)");
+    }
+
+    if (isNaN(yearNum) || yearNum < 2000 || yearNum > 2100) {
+      throw new ApiError(400, "Invalid year");
+    }
+
+    const startDate = new Date(yearNum, monthNum - 1, 1);
+    const endDate = new Date(yearNum, monthNum, 0);
+    endDate.setHours(23, 59, 59, 999);
+
+    const filter: any = {
+      user: userId,
+      date: {
+        $gte: startDate,
+        $lte: endDate,
+      },
+    };
+
+    // Add type filter if specified
+    if (type !== 'all' && ['project', 'normal'].includes(type as string)) {
+      filter.type = type;
+    }
+
+    const attendance = await Attendance.find(filter)
+      .sort({ date: 1, type: 1 })
+      .populate("markedBy", "firstName lastName")
+      .populate("project", "projectName");
 
     // Calculate totals
     const totals = {
       presentDays: attendance.filter((a) => a.present).length,
       totalWorkingHours: attendance.reduce((sum, a) => sum + a.workingHours, 0),
-      totalOvertimeHours: attendance.reduce(
-        (sum, a) => sum + a.overtimeHours,
-        0
-      ),
+      totalOvertimeHours: attendance.reduce((sum, a) => sum + a.overtimeHours, 0),
     };
 
     res.status(200).json(
@@ -467,8 +553,11 @@ export const getNormalMonthlyAttendance = asyncHandler(
         {
           attendance,
           totals,
+          type: type as string,
+          month: monthNum,
+          year: yearNum,
         },
-        "Monthly normal attendance retrieved successfully"
+        `Monthly ${type === 'all' ? '' : type + ' '}attendance retrieved successfully`
       )
     );
   }

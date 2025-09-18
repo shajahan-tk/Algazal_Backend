@@ -72,13 +72,31 @@ attendanceSchema.pre<IAttendance>("save", function (next) {
   next();
 });
 
-// Compound index for quick lookups (only for project type)
+// FIXED: Separate compound indexes for different attendance types
+// Index for project attendance (project + user + date must be unique)
 attendanceSchema.index(
-  { project: 1, user: 1, date: 1 },
+  { project: 1, user: 1, date: 1, type: 1 },
   {
     unique: true,
     partialFilterExpression: { type: "project" },
+    name: "project_attendance_unique"
   }
 );
+
+// Index for normal attendance (user + date must be unique for normal type)
+attendanceSchema.index(
+  { user: 1, date: 1, type: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { type: "normal" },
+    name: "normal_attendance_unique"
+  }
+);
+
+// Additional indexes for query optimization
+attendanceSchema.index({ user: 1, date: 1 }, { name: "user_date_lookup" });
+attendanceSchema.index({ user: 1, type: 1, date: 1 }, { name: "user_type_date_lookup" });
+attendanceSchema.index({ project: 1, date: 1 }, { name: "project_date_lookup" });
+attendanceSchema.index({ date: 1, type: 1 }, { name: "date_type_lookup" });
 
 export const Attendance = model<IAttendance>("Attendance", attendanceSchema);

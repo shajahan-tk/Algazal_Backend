@@ -80,7 +80,7 @@ app.use("/api/comment", commentRouter);
 app.use("/api/quotation", quotationRouter);
 app.use("/api/lpo", lpoRouter);
 app.use("/api/work-completion", workCompletionRouter);
-app.use("/api/attandance", attandanceRouter);
+app.use("/api/attendance", attandanceRouter);
 app.use("/api/expense", expenseRouter);
 app.use("/api/analytics", analyticsRouter);
 app.use("/api/shops", shopRouter);
