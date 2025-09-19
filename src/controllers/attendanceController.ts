@@ -12,7 +12,7 @@ import { Types } from "mongoose";
 export const markAttendance = asyncHandler(
   async (req: Request, res: Response) => {
     const { projectId, userId } = req.params;
-    const { present, type = "project", workingHours = 0 } = req.body;
+    let { present, type = "project", workingHours = 0 } = req.body;
 
     // Ensure markedBy exists and is valid
     if (!req.user?.userId) {
@@ -31,12 +31,19 @@ export const markAttendance = asyncHandler(
     if (!["project", "normal"].includes(type)) {
       throw new ApiError(400, "Invalid attendance type");
     }
-    if (
-      typeof workingHours !== "number" ||
-      workingHours < 0 ||
-      workingHours > 24
-    ) {
-      throw new ApiError(400, "Working hours must be between 0 and 24");
+    
+    // FIX: Allow 0 working hours for absent cases
+    if (present) {
+      if (
+        typeof workingHours !== "number" ||
+        workingHours < 0 ||
+        workingHours > 24
+      ) {
+        throw new ApiError(400, "Working hours must be between 0 and 24");
+      }
+    } else {
+      // For absent, force workingHours to 0
+      workingHours  = 0;
     }
 
     let project;
@@ -108,7 +115,7 @@ export const markAttendance = asyncHandler(
       .status(200)
       .json(new ApiResponse(200, attendance, "Attendance marked successfully"));
   }
-);
+);;
 
 // Get attendance records (supports both types)
 export const getAttendance = asyncHandler(
