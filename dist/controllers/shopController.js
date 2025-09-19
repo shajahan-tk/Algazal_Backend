@@ -8,19 +8,23 @@ const shopModel_1 = require("../models/shopModel");
 const uploadConf_1 = require("../utils/uploadConf");
 exports.createShop = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const { shopName, shopNo, address, vat, ownerName, ownerEmail, contact } = req.body;
-    // Validate required fields
-    if (!shopName || !shopNo || !address || !vat || !ownerName || !contact) {
-        throw new apiHandlerHelpers_2.ApiError(400, "All fields except ownerEmail are required");
+    // Validate required fields - only shopName and address are required now
+    if (!shopName || !address) {
+        throw new apiHandlerHelpers_2.ApiError(400, "shopName and address are required");
     }
-    // Check if VAT number already exists
-    const existingShop = await shopModel_1.Shop.findOne({ vat });
-    if (existingShop) {
-        throw new apiHandlerHelpers_2.ApiError(400, "Shop with this VAT number already exists");
+    // Check if VAT number already exists (only if provided)
+    if (vat && vat.trim()) {
+        const existingShop = await shopModel_1.Shop.findOne({ vat: vat.trim() });
+        if (existingShop) {
+            throw new apiHandlerHelpers_2.ApiError(400, "Shop with this VAT number already exists");
+        }
     }
-    // Check if shop number already exists
-    const existingShopNo = await shopModel_1.Shop.findOne({ shopNo });
-    if (existingShopNo) {
-        throw new apiHandlerHelpers_2.ApiError(400, "Shop with this number already exists");
+    // Check if shop number already exists (only if provided)
+    if (shopNo && shopNo.trim()) {
+        const existingShopNo = await shopModel_1.Shop.findOne({ shopNo: shopNo.trim() });
+        if (existingShopNo) {
+            throw new apiHandlerHelpers_2.ApiError(400, "Shop with this number already exists");
+        }
     }
     // Handle file uploads
     let shopAttachments = [];
@@ -44,12 +48,12 @@ exports.createShop = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     }
     const shop = await shopModel_1.Shop.create({
         shopName,
-        shopNo,
+        shopNo: shopNo && shopNo.trim() ? shopNo.trim() : undefined,
         address,
-        vat,
-        ownerName,
+        vat: vat && vat.trim() ? vat.trim() : undefined,
+        ownerName: ownerName && ownerName.trim() ? ownerName.trim() : undefined,
         ownerEmail,
-        contact,
+        contact: contact && contact.trim() ? contact.trim() : undefined,
         shopAttachments,
         createdBy: req.user?.userId,
     });
@@ -62,14 +66,15 @@ exports.getShops = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const filter = {};
     // Search functionality
     if (req.query.search) {
-        filter.$or = [
+        const searchConditions = [
             { shopName: { $regex: req.query.search, $options: "i" } },
-            { vat: { $regex: req.query.search, $options: "i" } },
             { contact: { $regex: req.query.search, $options: "i" } },
-            { ownerName: { $regex: req.query.search, $options: "i" } },
             { shopNo: { $regex: req.query.search, $options: "i" } },
             { address: { $regex: req.query.search, $options: "i" } },
+            { vat: { $regex: req.query.search, $options: "i" } },
+            { ownerName: { $regex: req.query.search, $options: "i" } }
         ];
+        filter.$or = searchConditions;
     }
     const total = await shopModel_1.Shop.countDocuments(filter);
     const shops = await shopModel_1.Shop.find(filter)
@@ -106,24 +111,28 @@ exports.updateShop = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     if (!shop) {
         throw new apiHandlerHelpers_2.ApiError(404, "Shop not found");
     }
-    // Check if VAT is being updated and conflicts with other shops
-    if (vat && vat !== shop.vat) {
-        const existingShop = await shopModel_1.Shop.findOne({
-            vat,
-            _id: { $ne: id },
-        });
-        if (existingShop) {
-            throw new apiHandlerHelpers_2.ApiError(400, "Another shop already uses this VAT number");
+    // Check if VAT is being updated and conflicts with other shops (only if provided)
+    if (vat !== undefined) {
+        if (vat && vat.trim() && vat.trim() !== shop.vat) {
+            const existingShop = await shopModel_1.Shop.findOne({
+                vat: vat.trim(),
+                _id: { $ne: id },
+            });
+            if (existingShop) {
+                throw new apiHandlerHelpers_2.ApiError(400, "Another shop already uses this VAT number");
+            }
         }
     }
-    // Check if shop number is being updated and conflicts with other shops
-    if (shopNo && shopNo !== shop.shopNo) {
-        const existingShopNo = await shopModel_1.Shop.findOne({
-            shopNo,
-            _id: { $ne: id },
-        });
-        if (existingShopNo) {
-            throw new apiHandlerHelpers_2.ApiError(400, "Another shop already uses this shop number");
+    // Check if shop number is being updated and conflicts with other shops (only if provided)
+    if (shopNo !== undefined && shopNo !== shop.shopNo) {
+        if (shopNo && shopNo.trim()) {
+            const existingShopNo = await shopModel_1.Shop.findOne({
+                shopNo: shopNo.trim(),
+                _id: { $ne: id },
+            });
+            if (existingShopNo) {
+                throw new apiHandlerHelpers_2.ApiError(400, "Another shop already uses this shop number");
+            }
         }
     }
     // Handle file uploads for new attachments
@@ -146,14 +155,30 @@ exports.updateShop = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
                 filePath: file.url,
             })) || [];
     }
+    // Prepare update object
+    const updateData = {};
+    if (shopName !== undefined)
+        updateData.shopName = shopName;
+    if (shopNo !== undefined) {
+        updateData.shopNo = shopNo && shopNo.trim() ? shopNo.trim() : undefined;
+    }
+    if (address !== undefined)
+        updateData.address = address;
+    if (contact !== undefined) {
+        updateData.contact = contact && contact.trim() ? contact.trim() : undefined;
+    }
+    // Handle optional fields
+    if (vat !== undefined) {
+        updateData.vat = vat && vat.trim() ? vat.trim() : undefined;
+    }
+    if (ownerName !== undefined) {
+        updateData.ownerName = ownerName && ownerName.trim() ? ownerName.trim() : undefined;
+    }
+    if (ownerEmail !== undefined) {
+        updateData.ownerEmail = ownerEmail && ownerEmail.trim() ? ownerEmail.trim() : undefined;
+    }
     const updatedShop = await shopModel_1.Shop.findByIdAndUpdate(id, {
-        shopName: shopName || shop.shopName,
-        shopNo: shopNo || shop.shopNo,
-        address: address || shop.address,
-        vat: vat || shop.vat,
-        ownerName: ownerName || shop.ownerName,
-        ownerEmail: ownerEmail !== undefined ? ownerEmail : shop.ownerEmail,
-        contact: contact || shop.contact,
+        ...updateData,
         $push: { shopAttachments: { $each: newAttachments } },
     }, { new: true });
     if (!updatedShop) {

@@ -18,9 +18,12 @@ exports.createBill = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     // General fields
     category, shop, invoiceNo, remarks, 
     // Fuel fields
-    description, vehicle, kilometer, liter, 
+    description, vehicle, // For single vehicle (backward compatibility)
+    vehicles, // For multiple vehicles in fuel bills
+    kilometer, liter, 
     // Vehicle fields
-    purpose, vehicles, 
+    purpose, 
+    // vehicles is used for vehicle bills too
     // Accommodation fields
     roomNo, note, } = req.body;
     // Validate required fields
@@ -36,10 +39,10 @@ exports.createBill = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             break;
         case "fuel":
             if (!description ||
-                !vehicle ||
+                (!vehicle && (!vehicles || vehicles.length === 0)) ||
                 kilometer === undefined ||
                 liter === undefined) {
-                throw new apiHandlerHelpers_2.ApiError(400, "Description, vehicle, kilometer and liter are required for fuel bills");
+                throw new apiHandlerHelpers_2.ApiError(400, "Description, vehicle(s), kilometer and liter are required for fuel bills");
             }
             break;
         case "mess":
@@ -76,13 +79,31 @@ exports.createBill = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             throw new apiHandlerHelpers_2.ApiError(404, "Category not found");
         }
     }
-    if (vehicle) {
+    // Handle vehicle validation for fuel bills (can have multiple vehicles)
+    if (billType === "fuel") {
+        let vehicleIds = [];
+        if (vehicles && Array.isArray(vehicles)) {
+            vehicleIds = vehicles;
+        }
+        else if (vehicle) {
+            vehicleIds = [vehicle];
+        }
+        if (vehicleIds.length > 0) {
+            const vehiclesExist = await vehicleModel_1.Vehicle.find({ _id: { $in: vehicleIds } });
+            if (vehiclesExist.length !== vehicleIds.length) {
+                throw new apiHandlerHelpers_2.ApiError(404, "One or more vehicles not found");
+            }
+        }
+    }
+    // Handle single vehicle validation for other bill types
+    if (vehicle && billType !== "fuel") {
         const vehicleExists = await vehicleModel_1.Vehicle.findById(vehicle);
         if (!vehicleExists) {
             throw new apiHandlerHelpers_2.ApiError(404, "Vehicle not found");
         }
     }
-    if (vehicles && vehicles.length > 0) {
+    // Handle multiple vehicles validation for vehicle bills
+    if (vehicles && vehicles.length > 0 && billType === "vehicle") {
         const vehiclesExist = await vehicleModel_1.Vehicle.find({ _id: { $in: vehicles } });
         if (vehiclesExist.length !== vehicles.length) {
             throw new apiHandlerHelpers_2.ApiError(404, "One or more vehicles not found");
@@ -108,8 +129,8 @@ exports.createBill = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
                 filePath: file.url,
             })) || [];
     }
-    // Create the bill with proper typing
-    const bill = await billModel_1.Bill.create({
+    // Prepare bill data
+    const billData = {
         billType,
         billDate: new Date(billDate),
         paymentMethod,
@@ -123,16 +144,34 @@ exports.createBill = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         remarks,
         // Fuel fields
         description,
-        vehicle,
         kilometer,
         liter,
         // Vehicle fields
         purpose,
-        vehicles,
         // Accommodation fields
         roomNo,
         note,
-    });
+    };
+    // Handle vehicle assignment based on bill type
+    if (billType === "fuel") {
+        // For fuel bills, use vehicles array to support multiple vehicles
+        if (vehicles && Array.isArray(vehicles)) {
+            billData.vehicles = vehicles;
+        }
+        else if (vehicle) {
+            billData.vehicles = [vehicle];
+        }
+    }
+    else if (billType === "vehicle") {
+        // For vehicle bills, use vehicles array
+        billData.vehicles = vehicles;
+    }
+    else {
+        // For other bill types, use single vehicle field
+        billData.vehicle = vehicle;
+    }
+    // Create the bill with proper typing
+    const bill = await billModel_1.Bill.create(billData);
     res.status(201).json(new apiHandlerHelpers_1.ApiResponse(201, bill, "Bill created successfully"));
 });
 // Get all bills with filters
@@ -140,14 +179,15 @@ exports.getBills = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
-    const filter = {};
+    // Build base match conditions
+    const matchConditions = {};
     // Bill type filter
     if (req.query.billType) {
-        filter.billType = req.query.billType;
+        matchConditions.billType = req.query.billType;
     }
     // Date range filter (takes precedence over year/month)
     if (req.query.startDate && req.query.endDate) {
-        filter.billDate = {
+        matchConditions.billDate = {
             $gte: new Date(req.query.startDate),
             $lte: new Date(req.query.endDate),
         };
@@ -159,89 +199,254 @@ exports.getBills = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             if (isNaN(year)) {
                 throw new apiHandlerHelpers_2.ApiError(400, "Invalid year value");
             }
-            filter.billDate = {
+            matchConditions.billDate = {
                 $gte: new Date(year, 0, 1),
                 $lte: new Date(year + 1, 0, 1),
             };
         }
-        // Month filter (works with year filter)
+        // Month filter
         if (req.query.month) {
             const month = parseInt(req.query.month);
             if (isNaN(month) || month < 1 || month > 12) {
                 throw new apiHandlerHelpers_2.ApiError(400, "Invalid month value (1-12)");
             }
-            if (!filter.billDate) {
-                // If no year specified, use current year
+            if (!matchConditions.billDate) {
                 const currentYear = new Date().getFullYear();
-                filter.billDate = {
+                matchConditions.billDate = {
                     $gte: new Date(currentYear, month - 1, 1),
                     $lt: new Date(currentYear, month, 1),
                 };
             }
             else {
-                // Adjust existing year filter to specific month
-                const startDate = new Date(filter.billDate.$gte);
+                const startDate = new Date(matchConditions.billDate.$gte);
                 startDate.setMonth(month - 1);
                 startDate.setDate(1);
                 const endDate = new Date(startDate);
                 endDate.setMonth(month);
-                filter.billDate.$gte = startDate;
-                filter.billDate.$lte = endDate;
+                matchConditions.billDate.$gte = startDate;
+                matchConditions.billDate.$lte = endDate;
             }
         }
     }
-    // Shop filter
-    if (req.query.shop) {
-        filter.shop = req.query.shop;
-    }
-    // Category filter
-    if (req.query.category) {
-        filter.category = req.query.category;
-    }
-    if (req.query.paymentMethod) {
-        filter.paymentMethod = req.query.paymentMethod;
-    }
-    // Vehicle filter
+    // Other filters
+    if (req.query.shop)
+        matchConditions.shop = req.query.shop;
+    if (req.query.category)
+        matchConditions.category = req.query.category;
+    if (req.query.paymentMethod)
+        matchConditions.paymentMethod = req.query.paymentMethod;
     if (req.query.vehicle) {
-        filter.$or = [
+        matchConditions.$or = [
             { vehicle: req.query.vehicle },
             { vehicles: req.query.vehicle },
         ];
     }
     // Amount range filter
     if (req.query.minAmount || req.query.maxAmount) {
-        filter.amount = {};
+        const amountFilter = {};
         if (req.query.minAmount) {
-            filter.amount.$gte = parseFloat(req.query.minAmount);
+            amountFilter.$gte = parseFloat(req.query.minAmount);
         }
         if (req.query.maxAmount) {
-            filter.amount.$lte = parseFloat(req.query.maxAmount);
+            amountFilter.$lte = parseFloat(req.query.maxAmount);
         }
+        matchConditions.amount = amountFilter;
     }
-    // Search by invoice number or description
+    // Build aggregation pipeline
+    const pipeline = [
+        // Lookup related collections
+        {
+            $lookup: {
+                from: "shops",
+                localField: "shop",
+                foreignField: "_id",
+                as: "shopData",
+            },
+        },
+        {
+            $lookup: {
+                from: "vehicles",
+                localField: "vehicle",
+                foreignField: "_id",
+                as: "vehicleData",
+            },
+        },
+        {
+            $lookup: {
+                from: "vehicles",
+                localField: "vehicles",
+                foreignField: "_id",
+                as: "vehiclesData",
+            },
+        },
+        {
+            $lookup: {
+                from: "categories",
+                localField: "category",
+                foreignField: "_id",
+                as: "categoryData",
+            },
+        },
+        {
+            $lookup: {
+                from: "users",
+                localField: "createdBy",
+                foreignField: "_id",
+                as: "createdByData",
+            },
+        },
+    ];
+    // Add search filter if provided
     if (req.query.search) {
-        filter.$or = [
-            { invoiceNo: { $regex: req.query.search, $options: "i" } },
-            { description: { $regex: req.query.search, $options: "i" } },
-            { purpose: { $regex: req.query.search, $options: "i" } },
-        ];
+        const searchTerm = req.query.search;
+        const searchRegex = { $regex: searchTerm, $options: "i" };
+        pipeline.push({
+            $match: {
+                $or: [
+                    // Bill fields
+                    { invoiceNo: searchRegex },
+                    { description: searchRegex },
+                    { purpose: searchRegex },
+                    { remarks: searchRegex },
+                    { roomNo: searchRegex },
+                    { note: searchRegex },
+                    // Shop fields
+                    { "shopData.shopName": searchRegex },
+                    { "shopData.shopNo": searchRegex },
+                    { "shopData.ownerName": searchRegex },
+                    // Vehicle fields
+                    { "vehicleData.vehicleNumber": searchRegex },
+                    { "vehicleData.make": searchRegex },
+                    { "vehicleData.vechicleModel": searchRegex },
+                    { "vehiclesData.vehicleNumber": searchRegex },
+                    { "vehiclesData.make": searchRegex },
+                    { "vehiclesData.vechicleModel": searchRegex },
+                    // Category fields
+                    { "categoryData.name": searchRegex },
+                    { "categoryData.description": searchRegex },
+                ],
+            },
+        });
     }
-    const total = await billModel_1.Bill.countDocuments(filter);
-    // Calculate total amount of all matching bills
-    const totalAmountResult = await billModel_1.Bill.aggregate([
-        { $match: filter },
-        { $group: { _id: null, totalAmount: { $sum: "$amount" } } },
-    ]);
-    const totalAmount = totalAmountResult[0]?.totalAmount || 0;
-    const bills = await billModel_1.Bill.find(filter)
-        .skip(skip)
-        .limit(limit)
-        .sort({ billDate: -1 })
-        .populate("category", "name description")
-        .populate("shop", "shopName shopNo")
-        .populate("vehicle", "vehicleNumber make model")
-        .populate("vehicles", "vehicleNumber make model")
-        .populate("createdBy", "firstName lastName email");
+    // Add other match conditions
+    if (Object.keys(matchConditions).length > 0) {
+        pipeline.unshift({ $match: matchConditions });
+    }
+    // Add facet stage for pagination and total count
+    pipeline.push({
+        $facet: {
+            data: [
+                { $sort: { billDate: -1 } },
+                { $skip: skip },
+                { $limit: limit },
+                {
+                    $project: {
+                        _id: 1,
+                        billType: 1,
+                        billDate: 1,
+                        paymentMethod: 1,
+                        amount: 1,
+                        attachments: 1,
+                        invoiceNo: 1,
+                        description: 1,
+                        purpose: 1,
+                        remarks: 1,
+                        roomNo: 1,
+                        note: 1,
+                        kilometer: 1,
+                        liter: 1,
+                        createdAt: 1,
+                        updatedAt: 1,
+                        category: {
+                            $arrayElemAt: [
+                                {
+                                    $map: {
+                                        input: "$categoryData",
+                                        as: "cat",
+                                        in: {
+                                            _id: "$$cat._id",
+                                            name: "$$cat.name",
+                                            description: "$$cat.description",
+                                        },
+                                    },
+                                },
+                                0,
+                            ],
+                        },
+                        shop: {
+                            $arrayElemAt: [
+                                {
+                                    $map: {
+                                        input: "$shopData",
+                                        as: "shop",
+                                        in: {
+                                            _id: "$$shop._id",
+                                            shopName: "$$shop.shopName",
+                                            shopNo: "$$shop.shopNo",
+                                            ownerName: "$$shop.ownerName",
+                                        },
+                                    },
+                                },
+                                0,
+                            ],
+                        },
+                        vehicle: {
+                            $arrayElemAt: [
+                                {
+                                    $map: {
+                                        input: "$vehicleData",
+                                        as: "vehicle",
+                                        in: {
+                                            _id: "$$vehicle._id",
+                                            vehicleNumber: "$$vehicle.vehicleNumber",
+                                            make: "$$vehicle.make",
+                                            vechicleModel: "$$vehicle.vechicleModel",
+                                        },
+                                    },
+                                },
+                                0,
+                            ],
+                        },
+                        vehicles: {
+                            $map: {
+                                input: "$vehiclesData",
+                                as: "vehicle",
+                                in: {
+                                    _id: "$$vehicle._id",
+                                    vehicleNumber: "$$vehicle.vehicleNumber",
+                                    make: "$$vehicle.make",
+                                    vechicleModel: "$$vehicle.vechicleModel",
+                                },
+                            },
+                        },
+                        createdBy: {
+                            $arrayElemAt: [
+                                {
+                                    $map: {
+                                        input: "$createdByData",
+                                        as: "user",
+                                        in: {
+                                            _id: "$$user._id",
+                                            firstName: "$$user.firstName",
+                                            lastName: "$$user.lastName",
+                                            email: "$$user.email",
+                                        },
+                                    },
+                                },
+                                0,
+                            ],
+                        },
+                    },
+                },
+            ],
+            totalCount: [{ $count: "count" }],
+            totalAmount: [{ $group: { _id: null, total: { $sum: "$amount" } } }],
+        },
+    });
+    const result = await billModel_1.Bill.aggregate(pipeline);
+    const bills = result[0].data;
+    const total = result[0].totalCount[0]?.count || 0;
+    const totalAmount = result[0].totalAmount[0]?.total || 0;
     res.status(200).json(new apiHandlerHelpers_1.ApiResponse(200, {
         bills,
         totalAmount,
@@ -291,18 +496,43 @@ exports.updateBill = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             throw new apiHandlerHelpers_2.ApiError(404, "Category not found");
         }
     }
-    if (updateData.vehicle) {
-        const vehicleExists = await vehicleModel_1.Vehicle.findById(updateData.vehicle);
-        if (!vehicleExists) {
-            throw new apiHandlerHelpers_2.ApiError(404, "Vehicle not found");
+    // Handle vehicle validation based on bill type
+    if (bill.billType === "fuel") {
+        // For fuel bills, check vehicles array
+        if (updateData.vehicles && updateData.vehicles.length > 0) {
+            const vehiclesExist = await vehicleModel_1.Vehicle.find({
+                _id: { $in: updateData.vehicles },
+            });
+            if (vehiclesExist.length !== updateData.vehicles.length) {
+                throw new apiHandlerHelpers_2.ApiError(404, "One or more vehicles not found");
+            }
+        }
+        else if (updateData.vehicle) {
+            // Handle single vehicle for backward compatibility
+            const vehicleExists = await vehicleModel_1.Vehicle.findById(updateData.vehicle);
+            if (!vehicleExists) {
+                throw new apiHandlerHelpers_2.ApiError(404, "Vehicle not found");
+            }
+            // Convert single vehicle to vehicles array
+            updateData.vehicles = [updateData.vehicle];
+            delete updateData.vehicle;
         }
     }
-    if (updateData.vehicles && updateData.vehicles.length > 0) {
-        const vehiclesExist = await vehicleModel_1.Vehicle.find({
-            _id: { $in: updateData.vehicles },
-        });
-        if (vehiclesExist.length !== updateData.vehicles.length) {
-            throw new apiHandlerHelpers_2.ApiError(404, "One or more vehicles not found");
+    else {
+        // For other bill types
+        if (updateData.vehicle) {
+            const vehicleExists = await vehicleModel_1.Vehicle.findById(updateData.vehicle);
+            if (!vehicleExists) {
+                throw new apiHandlerHelpers_2.ApiError(404, "Vehicle not found");
+            }
+        }
+        if (updateData.vehicles && updateData.vehicles.length > 0) {
+            const vehiclesExist = await vehicleModel_1.Vehicle.find({
+                _id: { $in: updateData.vehicles },
+            });
+            if (vehiclesExist.length !== updateData.vehicles.length) {
+                throw new apiHandlerHelpers_2.ApiError(404, "One or more vehicles not found");
+            }
         }
     }
     // Handle file uploads for new attachments
@@ -585,11 +815,54 @@ exports.exportBillsToExcel = (0, asyncHandler_1.asyncHandler)(async (req, res) =
     if (req.query.billType) {
         filter.billType = req.query.billType;
     }
-    // Date range filter
+    // Date range filter - Handle both date range and month/year
     if (req.query.startDate && req.query.endDate) {
+        // Handle startDate and endDate parameters
+        const startDate = new Date(req.query.startDate);
+        const endDate = new Date(req.query.endDate);
+        // Set start date to beginning of day (00:00:00.000)
+        startDate.setHours(0, 0, 0, 0);
+        // Set end date to end of day (23:59:59.999)
+        endDate.setHours(23, 59, 59, 999);
+        console.log('Date Range Filter Applied:');
+        console.log('Start Date:', startDate);
+        console.log('End Date:', endDate);
         filter.billDate = {
-            $gte: new Date(req.query.startDate),
-            $lte: new Date(req.query.endDate),
+            $gte: startDate,
+            $lte: endDate,
+        };
+    }
+    else if (req.query.month && req.query.year) {
+        // Handle month and year parameters (this is what your frontend sends)
+        const month = parseInt(req.query.month) - 1; // JavaScript months are 0-indexed
+        const year = parseInt(req.query.year);
+        const startOfMonth = new Date(year, month, 1);
+        startOfMonth.setHours(0, 0, 0, 0);
+        const endOfMonth = new Date(year, month + 1, 0); // Last day of the month
+        endOfMonth.setHours(23, 59, 59, 999);
+        console.log('Month/Year Filter Applied:');
+        console.log('Month:', req.query.month, 'Year:', req.query.year);
+        console.log('Start of Month:', startOfMonth);
+        console.log('End of Month:', endOfMonth);
+        filter.billDate = {
+            $gte: startOfMonth,
+            $lte: endOfMonth,
+        };
+    }
+    else if (req.query.year && !req.query.month) {
+        // Handle year only filter
+        const year = parseInt(req.query.year);
+        const startOfYear = new Date(year, 0, 1);
+        startOfYear.setHours(0, 0, 0, 0);
+        const endOfYear = new Date(year, 11, 31);
+        endOfYear.setHours(23, 59, 59, 999);
+        console.log('Year Filter Applied:');
+        console.log('Year:', req.query.year);
+        console.log('Start of Year:', startOfYear);
+        console.log('End of Year:', endOfYear);
+        filter.billDate = {
+            $gte: startOfYear,
+            $lte: endOfYear,
         };
     }
     // Shop filter
@@ -621,14 +894,27 @@ exports.exportBillsToExcel = (0, asyncHandler_1.asyncHandler)(async (req, res) =
             filter.amount.$lte = parseFloat(req.query.maxAmount);
         }
     }
-    // Search filter
+    // Search filter - Handle conflict with vehicle filter
     if (req.query.search) {
-        filter.$or = [
+        const searchFilters = [
             { invoiceNo: { $regex: req.query.search, $options: "i" } },
             { description: { $regex: req.query.search, $options: "i" } },
             { purpose: { $regex: req.query.search, $options: "i" } },
         ];
+        // If vehicle filter already exists with $or, merge them
+        if (filter.$or) {
+            filter.$and = [
+                { $or: filter.$or }, // existing vehicle filter
+                { $or: searchFilters } // search filter
+            ];
+            delete filter.$or; // remove the original $or to avoid conflict
+        }
+        else {
+            filter.$or = searchFilters;
+        }
     }
+    // Debug: Log the final filter
+    console.log('Final MongoDB Filter:', JSON.stringify(filter, null, 2));
     // Get all bills matching the filter with proper typing for populated fields
     const bills = await billModel_1.Bill.find(filter)
         .sort({ billDate: -1 })
@@ -639,6 +925,12 @@ exports.exportBillsToExcel = (0, asyncHandler_1.asyncHandler)(async (req, res) =
         { path: 'vehicles', select: 'vehicleNumber' },
         { path: 'createdBy', select: 'firstName lastName' }
     ]);
+    // Debug: Log the number of bills found
+    console.log('Bills found:', bills.length);
+    if (bills.length > 0) {
+        console.log('First bill date:', bills[0].billDate);
+        console.log('Last bill date:', bills[bills.length - 1].billDate);
+    }
     // Create a new workbook
     const workbook = new exceljs_1.default.Workbook();
     const worksheet = workbook.addWorksheet("Bills");
@@ -681,7 +973,7 @@ exports.exportBillsToExcel = (0, asyncHandler_1.asyncHandler)(async (req, res) =
             { header: "SNO", key: "sno", width: 5 },
             { header: "DATE", key: "billDate", width: 12, style: { numFmt: "dd-mm-yyyy" } },
             { header: "DESCRIPTION", key: "description", width: 30 },
-            { header: "VEHICLE NO", key: "vehicle", width: 15 },
+            { header: "VEHICLE NO", key: "vehicles", width: 20 },
             { header: "PAYMENT METHOD", key: "paymentMethod", width: 15 },
             { header: "AMOUNT", key: "amount", width: 12, style: { numFmt: "#,##0.00" } },
             { header: "KILO METERS", key: "kilometer", width: 10 },
@@ -755,8 +1047,9 @@ exports.exportBillsToExcel = (0, asyncHandler_1.asyncHandler)(async (req, res) =
                 break;
             case "fuel":
                 rowData.description = bill.description || "";
-                rowData.vehicle = bill.vehicle && typeof bill.vehicle === 'object'
-                    ? bill.vehicle.vehicleNumber
+                // For fuel bills, use vehicles array (which now stores multiple vehicles)
+                rowData.vehicles = bill.vehicles && Array.isArray(bill.vehicles)
+                    ? bill.vehicles.map(v => typeof v === 'object' ? v.vehicleNumber : "").join(", ")
                     : "";
                 rowData.kilometer = bill.kilometer || "";
                 rowData.liter = bill.liter || "";

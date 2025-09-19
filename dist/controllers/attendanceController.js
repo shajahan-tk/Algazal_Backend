@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getNormalMonthlyAttendance = exports.dailyNormalAttendance = exports.getAttendanceSummary = exports.getTodayProjectAttendance = exports.getProjectAttendance = exports.getAttendance = exports.markAttendance = void 0;
+exports.getUserMonthlyAttendanceByType = exports.getNormalMonthlyAttendance = exports.dailyNormalAttendance = exports.getAttendanceSummary = exports.getTodayProjectAttendance = exports.getProjectAttendance = exports.getAttendance = exports.markAttendance = void 0;
 const asyncHandler_1 = require("../utils/asyncHandler");
 const apiHandlerHelpers_1 = require("../utils/apiHandlerHelpers");
 const apiHandlerHelpers_2 = require("../utils/apiHandlerHelpers");
@@ -15,7 +15,7 @@ const mongoose_1 = require("mongoose");
 // Mark attendance (supports both project and normal types)
 exports.markAttendance = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const { projectId, userId } = req.params;
-    const { present, type = "project", workingHours = 0 } = req.body;
+    let { present, type = "project", workingHours = 0 } = req.body;
     // Ensure markedBy exists and is valid
     if (!req.user?.userId) {
         throw new apiHandlerHelpers_2.ApiError(401, "Unauthorized - User not authenticated");
@@ -31,10 +31,17 @@ exports.markAttendance = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     if (!["project", "normal"].includes(type)) {
         throw new apiHandlerHelpers_2.ApiError(400, "Invalid attendance type");
     }
-    if (typeof workingHours !== "number" ||
-        workingHours < 0 ||
-        workingHours > 24) {
-        throw new apiHandlerHelpers_2.ApiError(400, "Working hours must be between 0 and 24");
+    // FIX: Allow 0 working hours for absent cases
+    if (present) {
+        if (typeof workingHours !== "number" ||
+            workingHours < 0 ||
+            workingHours > 24) {
+            throw new apiHandlerHelpers_2.ApiError(400, "Working hours must be between 0 and 24");
+        }
+    }
+    else {
+        // For absent, force workingHours to 0
+        workingHours = 0;
     }
     let project;
     if (type === "project") {
@@ -90,6 +97,7 @@ exports.markAttendance = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         .status(200)
         .json(new apiHandlerHelpers_1.ApiResponse(200, attendance, "Attendance marked successfully"));
 });
+;
 // Get attendance records (supports both types)
 exports.getAttendance = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const { userId } = req.params;
@@ -296,6 +304,7 @@ exports.dailyNormalAttendance = (0, asyncHandler_1.asyncHandler)(async (req, res
         users: result,
     }, "Daily normal attendance retrieved successfully"));
 });
+// FIXED: Get user's monthly attendance (both project and normal types)
 exports.getNormalMonthlyAttendance = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const { userId } = req.params;
     const { month, year } = req.query;
@@ -313,16 +322,82 @@ exports.getNormalMonthlyAttendance = (0, asyncHandler_1.asyncHandler)(async (req
     const startDate = new Date(yearNum, monthNum - 1, 1);
     const endDate = new Date(yearNum, monthNum, 0);
     endDate.setHours(23, 59, 59, 999);
+    // Get ALL attendance records for the user (both project and normal)
     const attendance = await attendanceModel_1.Attendance.find({
         user: userId,
-        type: "normal",
         date: {
             $gte: startDate,
             $lte: endDate,
         },
     })
-        .sort({ date: 1 })
-        .populate("markedBy", "firstName lastName");
+        .sort({ date: 1, type: 1 }) // Sort by date, then type for consistent ordering
+        .populate("markedBy", "firstName lastName")
+        .populate("project", "projectName");
+    // Separate attendance by type
+    const normalAttendance = attendance.filter(a => a.type === 'normal');
+    const projectAttendance = attendance.filter(a => a.type === 'project');
+    // Calculate totals for each type
+    const normalTotals = {
+        presentDays: normalAttendance.filter((a) => a.present).length,
+        totalWorkingHours: normalAttendance.reduce((sum, a) => sum + a.workingHours, 0),
+        totalOvertimeHours: normalAttendance.reduce((sum, a) => sum + a.overtimeHours, 0),
+    };
+    const projectTotals = {
+        presentDays: projectAttendance.filter((a) => a.present).length,
+        totalWorkingHours: projectAttendance.reduce((sum, a) => sum + a.workingHours, 0),
+        totalOvertimeHours: projectAttendance.reduce((sum, a) => sum + a.overtimeHours, 0),
+    };
+    const overallTotals = {
+        presentDays: attendance.filter((a) => a.present).length,
+        totalWorkingHours: attendance.reduce((sum, a) => sum + a.workingHours, 0),
+        totalOvertimeHours: attendance.reduce((sum, a) => sum + a.overtimeHours, 0),
+    };
+    res.status(200).json(new apiHandlerHelpers_1.ApiResponse(200, {
+        attendance: attendance, // All attendance records
+        normalAttendance,
+        projectAttendance,
+        totals: {
+            normal: normalTotals,
+            project: projectTotals,
+            overall: overallTotals,
+        },
+        month: monthNum,
+        year: yearNum,
+    }, "Monthly attendance retrieved successfully"));
+});
+// NEW: Get user's monthly attendance by type
+exports.getUserMonthlyAttendanceByType = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    const { userId } = req.params;
+    const { month, year, type = 'all' } = req.query;
+    if (!month || !year) {
+        throw new apiHandlerHelpers_2.ApiError(400, "Month and year are required");
+    }
+    const monthNum = parseInt(month);
+    const yearNum = parseInt(year);
+    if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+        throw new apiHandlerHelpers_2.ApiError(400, "Invalid month (must be 1-12)");
+    }
+    if (isNaN(yearNum) || yearNum < 2000 || yearNum > 2100) {
+        throw new apiHandlerHelpers_2.ApiError(400, "Invalid year");
+    }
+    const startDate = new Date(yearNum, monthNum - 1, 1);
+    const endDate = new Date(yearNum, monthNum, 0);
+    endDate.setHours(23, 59, 59, 999);
+    const filter = {
+        user: userId,
+        date: {
+            $gte: startDate,
+            $lte: endDate,
+        },
+    };
+    // Add type filter if specified
+    if (type !== 'all' && ['project', 'normal'].includes(type)) {
+        filter.type = type;
+    }
+    const attendance = await attendanceModel_1.Attendance.find(filter)
+        .sort({ date: 1, type: 1 })
+        .populate("markedBy", "firstName lastName")
+        .populate("project", "projectName");
     // Calculate totals
     const totals = {
         presentDays: attendance.filter((a) => a.present).length,
@@ -332,6 +407,9 @@ exports.getNormalMonthlyAttendance = (0, asyncHandler_1.asyncHandler)(async (req
     res.status(200).json(new apiHandlerHelpers_1.ApiResponse(200, {
         attendance,
         totals,
-    }, "Monthly normal attendance retrieved successfully"));
+        type: type,
+        month: monthNum,
+        year: yearNum,
+    }, `Monthly ${type === 'all' ? '' : type + ' '}attendance retrieved successfully`));
 });
 //# sourceMappingURL=attendanceController.js.map

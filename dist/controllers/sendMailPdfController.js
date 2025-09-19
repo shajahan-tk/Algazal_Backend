@@ -1,194 +1,16 @@
 "use strict";
+// Add this to your quotationController.ts file
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.generateQuotationPdf = exports.deleteQuotation = exports.approveQuotation = exports.updateQuotation = exports.getQuotationByProject = exports.createQuotation = void 0;
-const asyncHandler_1 = require("../utils/asyncHandler");
-const apiHandlerHelpers_1 = require("../utils/apiHandlerHelpers");
-const apiHandlerHelpers_2 = require("../utils/apiHandlerHelpers");
+exports.sendQuotationEmail = void 0;
 const quotationModel_1 = require("../models/quotationModel");
-const projectModel_1 = require("../models/projectModel");
-const estimationModel_1 = require("../models/estimationModel");
-const uploadConf_1 = require("../utils/uploadConf");
+const apiHandlerHelpers_1 = require("../utils/apiHandlerHelpers");
+const asyncHandler_1 = require("../utils/asyncHandler");
+const mailer_1 = require("../utils/mailer");
 const puppeteer_1 = __importDefault(require("puppeteer"));
-const documentNumbers_1 = require("../utils/documentNumbers");
-exports.createQuotation = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
-    // Debugging logs
-    console.log("Request body:", req.body);
-    console.log("Request files:", req.files);
-    if (!req.files || !Array.isArray(req.files)) {
-        throw new apiHandlerHelpers_2.ApiError(400, "No files were uploaded");
-    }
-    // Parse the JSON data from form-data
-    let jsonData;
-    try {
-        jsonData = JSON.parse(req.body.data);
-    }
-    catch (error) {
-        throw new apiHandlerHelpers_2.ApiError(400, "Invalid JSON data format");
-    }
-    const { project: projectId, validUntil, scopeOfWork = [], items = [], termsAndConditions = [], vatPercentage = 5, } = jsonData;
-    // Validate items is an array
-    if (!Array.isArray(items)) {
-        throw new apiHandlerHelpers_2.ApiError(400, "Items must be an array");
-    }
-    // Check for existing quotation
-    const exists = await quotationModel_1.Quotation.findOne({ project: projectId });
-    if (exists)
-        throw new apiHandlerHelpers_2.ApiError(400, "Project already has a quotation");
-    const estimation = await estimationModel_1.Estimation.findOne({ project: projectId });
-    const estimationId = estimation?._id;
-    // Process items with their corresponding files
-    const processedItems = await Promise.all(items.map(async (item, index) => {
-        // Find the image file for this item using the correct fieldname pattern
-        const imageFile = req.files.find((f) => f.fieldname === `items[${index}][image]`);
-        if (imageFile) {
-            console.log(`Processing image for item ${index}:`, imageFile);
-            const uploadResult = await (0, uploadConf_1.uploadItemImage)(imageFile);
-            if (uploadResult.uploadData) {
-                item.image = uploadResult.uploadData;
-            }
-        }
-        else {
-            console.log(`No image found for item ${index}`);
-        }
-        item.totalPrice = item.quantity * item.unitPrice;
-        return item;
-    }));
-    // Calculate financial totals
-    const subtotal = processedItems.reduce((sum, item) => sum + item.totalPrice, 0);
-    const vatAmount = subtotal * (vatPercentage / 100);
-    const total = subtotal + vatAmount;
-    const quotation = await quotationModel_1.Quotation.create({
-        project: projectId,
-        estimation: estimationId,
-        quotationNumber: await (0, documentNumbers_1.generateRelatedDocumentNumber)(projectId, "QTN"),
-        date: new Date(),
-        validUntil: new Date(validUntil),
-        scopeOfWork,
-        items: processedItems,
-        termsAndConditions,
-        vatPercentage,
-        subtotal,
-        vatAmount,
-        netAmount: total,
-        preparedBy: req.user?.userId,
-    });
-    await projectModel_1.Project.findByIdAndUpdate(projectId, { status: "quotation_sent" });
-    res.status(201).json(new apiHandlerHelpers_1.ApiResponse(201, quotation, "Quotation created"));
-});
-exports.getQuotationByProject = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
-    const { projectId } = req.params;
-    const quotation = await quotationModel_1.Quotation.findOne({ project: projectId })
-        .populate("project", "projectName")
-        .populate("preparedBy", "firstName lastName");
-    if (!quotation)
-        throw new apiHandlerHelpers_2.ApiError(404, "Quotation not found");
-    res
-        .status(200)
-        .json(new apiHandlerHelpers_1.ApiResponse(200, quotation, "Quotation retrieved"));
-});
-exports.updateQuotation = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
-    // Debugging logs
-    console.log("Request body:", req.body);
-    console.log("Request files:", req.files);
-    if (!req.files || !Array.isArray(req.files)) {
-        throw new apiHandlerHelpers_2.ApiError(400, "No files were uploaded");
-    }
-    // Parse the JSON data from form-data
-    let jsonData;
-    try {
-        jsonData = JSON.parse(req.body.data);
-    }
-    catch (error) {
-        throw new apiHandlerHelpers_2.ApiError(400, "Invalid JSON data format");
-    }
-    const { id } = req.params;
-    const { items = [], validUntil, scopeOfWork, termsAndConditions, vatPercentage, } = jsonData;
-    // Validate items is an array
-    if (!Array.isArray(items)) {
-        throw new apiHandlerHelpers_2.ApiError(400, "Items must be an array");
-    }
-    const quotation = await quotationModel_1.Quotation.findById(id);
-    if (!quotation)
-        throw new apiHandlerHelpers_2.ApiError(404, "Quotation not found");
-    // Process items with their corresponding files
-    const processedItems = await Promise.all(items.map(async (item, index) => {
-        // Find the image file for this item using the correct fieldname pattern
-        const imageFile = req.files.find((f) => f.fieldname === `items[${index}][image]`);
-        // If new image is uploaded
-        if (imageFile) {
-            console.log(`Processing image for item ${index}:`, imageFile);
-            // Delete old image if it exists
-            if (item.image?.key) {
-                await (0, uploadConf_1.deleteFileFromS3)(item.image.key);
-            }
-            // Upload new image
-            const uploadResult = await (0, uploadConf_1.uploadItemImage)(imageFile);
-            if (uploadResult.uploadData) {
-                item.image = uploadResult.uploadData;
-            }
-        }
-        else if (item.image && typeof item.image === 'object') {
-            // Keep existing image if no new one was uploaded
-            item.image = item.image;
-        }
-        else {
-            // No image for this item
-            item.image = undefined;
-        }
-        // Calculate total price
-        item.totalPrice = item.quantity * item.unitPrice;
-        return item;
-    }));
-    // Calculate financial totals
-    const subtotal = processedItems.reduce((sum, item) => sum + item.totalPrice, 0);
-    const vatAmount = subtotal * ((vatPercentage || quotation.vatPercentage) / 100);
-    const total = subtotal + vatAmount;
-    // Update quotation fields
-    quotation.items = processedItems;
-    if (validUntil)
-        quotation.validUntil = new Date(validUntil);
-    if (scopeOfWork)
-        quotation.scopeOfWork = scopeOfWork;
-    if (termsAndConditions)
-        quotation.termsAndConditions = termsAndConditions;
-    if (vatPercentage)
-        quotation.vatPercentage = vatPercentage;
-    quotation.subtotal = subtotal;
-    quotation.vatAmount = vatAmount;
-    quotation.netAmount = total;
-    await quotation.save();
-    res.status(200).json(new apiHandlerHelpers_1.ApiResponse(200, quotation, "Quotation updated"));
-});
-exports.approveQuotation = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
-    const { isApproved, comment } = req.body;
-    const quotation = await quotationModel_1.Quotation.findByIdAndUpdate(id, {
-        isApproved,
-        approvalComment: comment,
-        approvedBy: req.user?.userId,
-    }, { new: true });
-    await projectModel_1.Project.findByIdAndUpdate(quotation?.project, {
-        status: isApproved ? "quotation_approved" : "quotation_rejected",
-    });
-    res
-        .status(200)
-        .json(new apiHandlerHelpers_1.ApiResponse(200, quotation, `Quotation ${isApproved ? "approved" : "rejected"}`));
-});
-exports.deleteQuotation = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
-    const quotation = await quotationModel_1.Quotation.findByIdAndDelete(id);
-    if (!quotation)
-        throw new apiHandlerHelpers_2.ApiError(404, "Quotation not found");
-    await Promise.all(quotation.items.map((item) => item.image?.key ? (0, uploadConf_1.deleteFileFromS3)(item.image.key) : Promise.resolve()));
-    await projectModel_1.Project.findByIdAndUpdate(quotation.project, {
-        status: "estimation_prepared",
-    });
-    res.status(200).json(new apiHandlerHelpers_1.ApiResponse(200, null, "Quotation deleted"));
-});
-exports.generateQuotationPdf = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+exports.sendQuotationEmail = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const { id } = req.params;
     const quotation = await quotationModel_1.Quotation.findById(id)
         .populate({
@@ -201,13 +23,45 @@ exports.generateQuotationPdf = (0, asyncHandler_1.asyncHandler)(async (req, res)
     })
         .populate("preparedBy", "firstName lastName phoneNumbers");
     if (!quotation)
-        throw new apiHandlerHelpers_2.ApiError(404, "Quotation not found");
+        throw new apiHandlerHelpers_1.ApiError(404, "Quotation not found");
     if (!quotation.project || typeof quotation.project !== "object" || !("client" in quotation.project)) {
-        throw new apiHandlerHelpers_2.ApiError(400, "Client information not found");
+        throw new apiHandlerHelpers_1.ApiError(400, "Client information not found");
     }
     const client = quotation.project.client;
     const preparedBy = quotation.preparedBy;
     const project = quotation.project;
+    // Check if client has email
+    if (!client.email) {
+        throw new apiHandlerHelpers_1.ApiError(400, "Client email not found");
+    }
+    // Generate PDF first
+    const pdfBuffer = await generateQuotationPdfBuffer(quotation, client, preparedBy, project);
+    // Create email HTML content using the template
+    const emailHtmlContent = createQuotationEmailTemplate(quotation.quotationNumber, client.clientName, `${preparedBy.firstName} ${preparedBy.lastName}`);
+    try {
+        // Send email with PDF attachment
+        await mailer_1.mailer.sendEmail({
+            to: client.email,
+            subject: `Quotation ${quotation.quotationNumber} - ${project.projectName}`,
+            html: emailHtmlContent,
+            attachments: [
+                {
+                    filename: `Quotation-${quotation.quotationNumber}.pdf`,
+                    content: pdfBuffer,
+                    contentType: 'application/pdf'
+                }
+            ]
+        });
+        // Update project status to quotation_sent if not already
+        res.status(200).json(new apiHandlerHelpers_1.ApiResponse(200, null, "Quotation email sent successfully"));
+    }
+    catch (error) {
+        console.error("Error sending quotation email:", error);
+        throw new apiHandlerHelpers_1.ApiError(500, "Failed to send quotation email");
+    }
+});
+// Helper function to generate PDF buffer (extracted from existing PDF generation code)
+const generateQuotationPdfBuffer = async (quotation, client, preparedBy, project) => {
     const site = `${project.location} ${project.building} ${project.apartmentNumber}`;
     // Calculate totals
     const subtotal = quotation.items.reduce((sum, item) => sum + item.totalPrice, 0);
@@ -229,6 +83,7 @@ exports.generateQuotationPdf = (0, asyncHandler_1.asyncHandler)(async (req, res)
         const daysRemaining = Math.ceil(timeDiff / (1000 * 3600 * 24));
         return daysRemaining > 0 ? `${daysRemaining} days` : "Expired";
     };
+    // Use the same HTML content from your existing PDF generation
     let htmlContent = `<!DOCTYPE html>
 <html>
 <head>
@@ -247,15 +102,12 @@ body {
   padding: 0;
 }
 
-/* Remove problematic flexbox layout */
 .container {
-  /* Remove min-height: 100vh and flex properties */
-  display: block; /* Changed from flex */
+  display: block;
 }
 
 .content {
-  /* Remove flex: 1 */
-  margin-bottom: 20px; /* Add some space before tagline */
+  margin-bottom: 20px;
 }
 
 .header {
@@ -451,16 +303,15 @@ td {
   margin-top: 5px;
 }
 
-/* Improved tagline and footer positioning */
 .tagline {
   text-align: center;
   font-weight: bold;
   font-size: 12pt;
-  margin: 20px 0 10px 0; /* Reduced top margin */
+  margin: 20px 0 10px 0;
   color: #333;
   border-top: 2px solid #ddd;
-  padding-top: 15px; /* Reduced padding */
-  page-break-before: avoid; /* Prevent page break before tagline */
+  padding-top: 15px;
+  page-break-before: avoid;
 }
 
 .footer {
@@ -469,7 +320,7 @@ td {
   text-align: center;
   margin-top: 10px;
   page-break-inside: avoid;
-  page-break-before: avoid; /* Keep footer with tagline */
+  page-break-before: avoid;
 }
 
 .text-center {
@@ -580,7 +431,7 @@ p {
           <div class="terms-content">
             <div class="terms-box">
               <ol>
-                ${quotation.termsAndConditions.map(term => `<li>${term}</li>`).join("")}
+                ${quotation.termsAndConditions.map((term) => `<li>${term}</li>`).join("")}
               </ol>
             </div>
           </div>
@@ -634,16 +485,108 @@ p {
                 left: "1cm",
             },
         });
-        res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `attachment; filename=quotation-${quotation.quotationNumber}.pdf`);
-        res.send(pdfBuffer);
-    }
-    catch (error) {
-        console.error("PDF generation error:", error);
-        throw new apiHandlerHelpers_2.ApiError(500, "Failed to generate PDF");
+        return pdfBuffer;
     }
     finally {
         await browser.close();
     }
-});
-//# sourceMappingURL=quotationController.js.map
+};
+// Helper function to create email HTML template
+const createQuotationEmailTemplate = (quotationNumber, clientName, senderName) => {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quote Template</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        
+        .quote-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .quote-header {
+            background: linear-gradient(135deg, #4a90e2, #357abd);
+            color: white;
+            text-align: center;
+            padding: 15px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        
+        .quote-body {
+            padding: 30px;
+            line-height: 1.6;
+            color: #333;
+        }
+        
+        .greeting {
+            margin-bottom: 20px;
+        }
+        
+        .client-name {
+            background-color: #ffeb3b;
+            padding: 2px 4px;
+            font-weight: bold;
+        }
+        
+        .content-line {
+            margin-bottom: 15px;
+        }
+        
+        .signature {
+            margin-top: 30px;
+        }
+        
+        .sender-name {
+            background-color: #ffeb3b;
+            padding: 2px 4px;
+            font-weight: bold;
+        }
+        
+        .company-name {
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="quote-container">
+        <div class="quote-header">
+            Quote #${quotationNumber}
+        </div>
+        
+        <div class="quote-body">
+            <div class="greeting">
+                Dear <span class="client-name">${clientName}</span>
+            </div>
+            
+            <div class="content-line">
+                Please Find the Attached Proposal for your reference.
+            </div>
+            
+            <div class="content-line">
+                We are waiting for your positive response.
+            </div>
+            
+            <div class="signature">
+                <div>Regards,</div>
+                <div><span class="sender-name">${senderName}</span></div>
+                <div class="company-name">AL GHAZAL AL ABYAD TECHNICAL SERVICES</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>`;
+};
+//# sourceMappingURL=sendMailPdfController.js.map

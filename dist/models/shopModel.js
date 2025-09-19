@@ -15,9 +15,10 @@ const shopSchema = new mongoose_1.Schema({
     },
     shopNo: {
         type: String,
-        required: true,
+        required: false, // Made optional
         trim: true,
         unique: true,
+        sparse: true, // Allow multiple null/undefined values
     },
     address: {
         type: String,
@@ -26,17 +27,17 @@ const shopSchema = new mongoose_1.Schema({
     },
     vat: {
         type: String,
-        required: true,
+        required: false,
         trim: true,
-        unique: true,
     },
     ownerName: {
         type: String,
-        required: true,
+        required: false,
         trim: true,
     },
     ownerEmail: {
         type: String,
+        required: false,
         trim: true,
         validate: {
             validator: function (v) {
@@ -47,11 +48,11 @@ const shopSchema = new mongoose_1.Schema({
     },
     contact: {
         type: String,
-        required: true,
+        required: false, // Made optional
         trim: true,
         validate: {
             validator: function (v) {
-                return /^\+?[\d\s-]{6,}$/.test(v);
+                return !v || /^\+?[\d\s-]{6,}$/.test(v);
             },
             message: (props) => `${props.value} is not a valid phone number!`,
         },
@@ -65,9 +66,6 @@ const shopSchema = new mongoose_1.Schema({
 }, { timestamps: true });
 // Indexes
 shopSchema.index({ shopName: 1 });
-shopSchema.index({ vat: 1 });
-shopSchema.index({ shopNo: 1 });
-shopSchema.index({ ownerName: 1 });
-shopSchema.index({ address: "text" }); // Text index for address search
+shopSchema.index({ address: "text" });
 exports.Shop = (0, mongoose_1.model)("Shop", shopSchema);
 //# sourceMappingURL=shopModel.js.map

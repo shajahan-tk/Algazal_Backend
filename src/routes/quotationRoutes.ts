@@ -9,7 +9,7 @@ import {
 } from "../controllers/quotationController";
 import { authenticate, authorize } from "../middlewares/authMiddleware";
 import { upload } from "../config/multer";
-import { sendQuotationEmail } from "@/controllers/sendMailPdfController";
+import { sendQuotationEmail } from "../controllers/sendMailPdfController";
 
 const router = express.Router();
 

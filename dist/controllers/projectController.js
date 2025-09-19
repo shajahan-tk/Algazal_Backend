@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.addGrnNumber = exports.generateInvoicePdf = exports.getDriverProjects = exports.updateWorkersAndDriver = exports.getAssignedTeam = exports.assignTeamAndDriver = exports.generateInvoiceData = exports.deleteProject = exports.getProjectProgressUpdates = exports.updateProjectProgress = exports.assignProject = exports.updateProjectStatus = exports.updateProject = exports.getProject = exports.getEngineerProjects = exports.getProjects = exports.createProject = void 0;
+exports.getWorkDuration = exports.setWorkEndDate = exports.setWorkStartDate = exports.addGrnNumber = exports.generateInvoicePdf = exports.getDriverProjects = exports.updateWorkersAndDriver = exports.getAssignedTeam = exports.assignTeamAndDriver = exports.generateInvoiceData = exports.deleteProject = exports.getProjectProgressUpdates = exports.updateProjectProgress = exports.assignProject = exports.updateProjectStatus = exports.updateProject = exports.getProject = exports.getEngineerProjects = exports.getProjects = exports.createProject = void 0;
 const asyncHandler_1 = require("../utils/asyncHandler");
 const apiHandlerHelpers_1 = require("../utils/apiHandlerHelpers");
 const apiHandlerHelpers_2 = require("../utils/apiHandlerHelpers");
@@ -497,7 +497,7 @@ exports.generateInvoiceData = (0, asyncHandler_1.asyncHandler)(async (req, res) 
     }
     // Get project data with proper type annotations for populated fields
     const project = await projectModel_1.Project.findById(projectId)
-        .populate("client", "clientName clientAddress mobileNumber contactPerson trnNumber pincode")
+        .populate("client", "clientName clientAddress mobileNumber contactPerson trnNumber pincode workStartDate workEndDate")
         .populate("createdBy", "firstName lastName")
         .populate("assignedTo", "firstName lastName")
         .lean();
@@ -519,7 +519,7 @@ exports.generateInvoiceData = (0, asyncHandler_1.asyncHandler)(async (req, res) 
         throw new apiHandlerHelpers_2.ApiError(400, "Quotation items are required");
     }
     // Generate invoice number with better format
-    const invoiceNumber = `INV-${(0, dayjs_1.default)().year()}${String((0, dayjs_1.default)().month() + 1).padStart(2, "0")}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const invoiceNumber = `INV${project.projectNumber.slice(3, 10)}`;
     // Type-safe client data extraction
     const clientData = typeof project.client === "object" ? project.client : null;
     const assignedToData = typeof project.assignedTo === "object" ? project.assignedTo : null;
@@ -556,6 +556,20 @@ exports.generateInvoiceData = (0, asyncHandler_1.asyncHandler)(async (req, res) 
         unitPrice: item.unitPrice || 0,
         total: item.totalPrice || 0,
     }));
+    function getDaysLeft(validUntil) {
+        if (!validUntil)
+            return "N/A";
+        const today = new Date();
+        // Calculate difference in ms
+        const diffTime = validUntil.getTime() - today.getTime();
+        // Convert ms → days
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        if (diffDays < 0)
+            return "Expired";
+        if (diffDays === 0)
+            return "Today";
+        return `${diffDays} days left`;
+    }
     // Enhanced response structure with type-safe checks
     const response = {
         _id: project._id.toString(),
@@ -565,7 +579,7 @@ exports.generateInvoiceData = (0, asyncHandler_1.asyncHandler)(async (req, res) 
         vendor: vendorInfo,
         vendee: vendeeInfo,
         subject: quotation.scopeOfWork?.join(", ") || "N/A",
-        paymentTerms: "90 DAYS",
+        paymentTerms: getDaysLeft(quotation.validUntil) || "N/A",
         amountInWords: convertToWords(quotation.netAmount || 0),
         products,
         summary: {
@@ -919,7 +933,7 @@ exports.generateInvoicePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
     const client = project.client;
     const createdBy = project.createdBy;
     // Generate invoice number
-    const invoiceNumber = `INV-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const invoiceNumber = `INV${project.projectNumber.slice(3, 10)}`;
     // Format dates
     const formatDate = (date) => {
         if (!date)
@@ -1011,42 +1025,53 @@ exports.generateInvoicePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
     }
     .header {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       margin-bottom: 15px;
+      gap: 15px;
     }
     .logo {
       height: 50px;
       width: auto;
-      margin-right: 20px;
     }
     .header-content {
       flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
     }
     .document-title {
       font-size: 14pt;
       font-weight: bold;
-      margin: 5px 0;
-      text-align: center;
+      margin: 0;
+      text-align: right;
       color: #000;
+      padding-top: 8px;
     }
     .invoice-header {
       display: flex;
       justify-content: space-between;
-      margin-bottom: 20px;
+      margin-bottom: 15px;
       padding-bottom: 10px;
       border-bottom: 2px solid #94d7f4;
+      align-items: flex-start;
     }
     .invoice-info {
       text-align: right;
     }
+    .service-period {
+      margin: 0 0 20px 0;
+      padding: 8px 0;
+      font-weight: bold;
+      border-bottom: 1px solid #eee;
+    }
     .client-info-container {
       display: flex;
       margin-bottom: 20px;
+      gap: 20px;
     }
     .client-info {
       flex: 1;
       padding: 10px;
-      margin-right: 20px;
       border: 1px solid #ddd;
       border-radius: 5px;
     }
@@ -1150,24 +1175,25 @@ exports.generateInvoicePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
       padding-top: 10px;
       margin-top: 30px;
     }
-      .tagline {
+    .tagline {
       text-align: center;
       font-weight: bold;
       font-size: 12pt;
       margin: 20px 0 10px 0;
       color: #333;
     }
-    .service-period {
-      margin-top: 8px;
-      padding-top: 8px;
-      border-top: 1px solid #eee;
-      font-weight: bold;
+    p {
+      margin: 5px 0;
+    }
+    h3 {
+      margin: 0 0 8px 0;
+      color: #333;
     }
   </style>
 </head>
 <body>
   <div class="header">
-    <img class="logo" src="https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/sample-spmc/logo+(1).png" alt="Company Logo">
+    <img class="logo" src="https://agats.s3.ap-south-1.amazonaws.com/logo/logo.jpeg" alt="Company Logo">
     <div class="header-content">
       <div class="document-title">TAX INVOICE</div>
     </div>
@@ -1182,16 +1208,20 @@ exports.generateInvoicePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
     </div>
     <div class="invoice-info">
       <p><strong>Project:</strong> ${project.projectName || "N/A"}</p>
+      <!-- Service Period moved to top below project name -->
+      <div class="service-period">
+        <strong>Service Period:</strong> ${formatDate(project.workStartDate)} - ${formatDate(project.workEndDate || new Date())}
+      </div>
     </div>
   </div>
 
   <div class="client-info-container">
     <div class="client-info">
       <h3>BILL TO:</h3>
-      <p><strong>Client:</strong> ${client.clientName || "N/A"}</p>
-      <p><strong>Address:</strong> ${client.clientAddress || "N/A"}</p>
-      <p><strong>Contact:</strong> ${client.mobileNumber || client.telephoneNumber || "N/A"}</p>
-      <p><strong>Email:</strong> ${client.email || "N/A"}</p>
+      <p><strong>CLIENT:</strong> ${client.clientName || "N/A"}</p>
+      <p><strong>ADDRESS:</strong> ${client.clientAddress || "N/A"}</p>
+      <p><strong>CONTACT:</strong> ${client.mobileNumber || client.telephoneNumber || "N/A"}</p>
+      <p><strong>EMAIL:</strong> ${client.email || "N/A"}</p>
       <p><strong>TRN:</strong> ${client.trnNumber || "N/A"}</p>
     </div>
 
@@ -1202,10 +1232,6 @@ exports.generateInvoicePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
       <p>P.O.Box:262760, Dubai-U.A.E</p>
       <p>Tel: 044102555</p>
       <p>TRN: 104037793700003</p>
-      <p class="service-period">
-        <strong>SERVICE PERIOD:</strong> 
-${formatDate(project.completionDate)} - ${formatDate(project.handoverDate || new Date())}
-      </p>
     </div>
   </div>
 
@@ -1266,10 +1292,8 @@ ${formatDate(project.completionDate)} - ${formatDate(project.handoverDate || new
     <p><strong>Payment Terms:</strong> ${"30 days from invoice date"}</p>
   </div>
     
-  
-
   <div class="footer">
-  <div class="tagline">We work U Relax</div>
+    <div class="tagline">We work U Relax</div>
     <p><strong>AL GHAZAL AL ABYAD TECHNICAL SERVICES</strong></p>
     <p>Office No:04, R09-France Cluster, International City-Dubai | P.O.Box:262760, Dubai-U.A.E</p>
     <p>Tel: 044102555 | <a href="http://www.alghazalgroup.com/">www.alghazalgroup.com</a></p>
@@ -1449,5 +1473,79 @@ exports.addGrnNumber = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     res
         .status(200)
         .json({ message: "grn Number update successfully", success: true });
+});
+// Set work start date
+exports.setWorkStartDate = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    const { id } = req.params;
+    const { workStartDate } = req.body;
+    if (!workStartDate) {
+        throw new apiHandlerHelpers_2.ApiError(400, "workStartDate is required");
+    }
+    const project = await projectModel_1.Project.findById(id);
+    if (!project) {
+        throw new apiHandlerHelpers_2.ApiError(404, "Project not found");
+    }
+    const parsedDate = new Date(workStartDate);
+    if (isNaN(parsedDate.getTime())) {
+        throw new apiHandlerHelpers_2.ApiError(400, "Invalid date format");
+    }
+    const updatedProject = await projectModel_1.Project.findByIdAndUpdate(id, {
+        workStartDate: parsedDate,
+        updatedBy: req.user?.userId,
+    }, { new: true, runValidators: true });
+    console.log(updatedProject);
+    res.status(200).json(new apiHandlerHelpers_1.ApiResponse(200, updatedProject, "Work start date set successfully"));
+});
+// Set work end date
+exports.setWorkEndDate = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    const { id } = req.params;
+    const { workEndDate } = req.body;
+    if (!workEndDate) {
+        throw new apiHandlerHelpers_2.ApiError(400, "workEndDate is required");
+    }
+    const project = await projectModel_1.Project.findById(id);
+    if (!project) {
+        throw new apiHandlerHelpers_2.ApiError(404, "Project not found");
+    }
+    const parsedDate = new Date(workEndDate);
+    if (isNaN(parsedDate.getTime())) {
+        throw new apiHandlerHelpers_2.ApiError(400, "Invalid date format");
+    }
+    const updatedProject = await projectModel_1.Project.findByIdAndUpdate(id, {
+        workEndDate: parsedDate,
+        updatedBy: req.user?.userId,
+    }, { new: true, runValidators: true });
+    res.status(200).json(new apiHandlerHelpers_1.ApiResponse(200, updatedProject, "Work end date set successfully"));
+});
+// Get work duration information
+exports.getWorkDuration = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    const { id } = req.params;
+    const project = await projectModel_1.Project.findById(id);
+    if (!project) {
+        throw new apiHandlerHelpers_2.ApiError(404, "Project not found");
+    }
+    let durationInDays = null;
+    let isCompleted = false;
+    let isInProgress = false;
+    if (project.workStartDate) {
+        const start = new Date(project.workStartDate);
+        const now = new Date();
+        if (project.workEndDate) {
+            const end = new Date(project.workEndDate);
+            durationInDays = Math.floor((end.getTime() - start.getTime()) / (1000 * 3600 * 24));
+            isCompleted = true;
+        }
+        else {
+            durationInDays = Math.floor((now.getTime() - start.getTime()) / (1000 * 3600 * 24));
+            isInProgress = true;
+        }
+    }
+    res.status(200).json(new apiHandlerHelpers_1.ApiResponse(200, {
+        workStartDate: project.workStartDate,
+        workEndDate: project.workEndDate,
+        durationInDays,
+        isCompleted,
+        isInProgress,
+    }, "Work duration information retrieved successfully"));
 });
 //# sourceMappingURL=projectController.js.map

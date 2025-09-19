@@ -1,12 +1,12 @@
 // Add this to your quotationController.ts file
 
-import { IClient } from "@/models/clientModel";
-import { IProject, Project } from "@/models/projectModel";
-import { Quotation } from "@/models/quotationModel";
-import { IUser } from "@/models/userModel";
-import { ApiError, ApiResponse } from "@/utils/apiHandlerHelpers";
-import { asyncHandler } from "@/utils/asyncHandler";
-import { mailer } from "@/utils/mailer";
+import { IClient } from "../models/clientModel";
+import { IProject, Project } from "../models/projectModel";
+import { Quotation } from "../models/quotationModel";
+import { IUser } from "../models/userModel";
+import { ApiError, ApiResponse } from "../utils/apiHandlerHelpers";
+import { asyncHandler } from "../utils/asyncHandler";
+import { mailer } from "../utils/mailer";
 import { Request, Response } from "express";
 import puppeteer from "puppeteer";
 

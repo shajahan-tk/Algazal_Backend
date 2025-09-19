@@ -35,5 +35,8 @@ router.patch("/:id/progress", (0, authMiddleware_1.authorize)(["admin", "super_a
 router.delete("/:id", (0, authMiddleware_1.authorize)(["admin", "super_admin"]), projectController_1.deleteProject);
 router.post("/:projectId/assign-team", (0, authMiddleware_1.authorize)(["admin", "super_admin"]), // Only admins can assign teams
 projectController_1.assignTeamAndDriver);
+router.patch("/:id/work-start-date", (0, authMiddleware_1.authorize)(["admin", "super_admin", "engineer"]), projectController_1.setWorkStartDate);
+router.patch("/:id/work-end-date", (0, authMiddleware_1.authorize)(["admin", "super_admin", "engineer"]), projectController_1.setWorkEndDate);
+router.get("/:id/work-duration", (0, authMiddleware_1.authorize)(["admin", "super_admin", "engineer", "finance"]), projectController_1.getWorkDuration);
 exports.default = router;
 //# sourceMappingURL=projectRoutes.js.map

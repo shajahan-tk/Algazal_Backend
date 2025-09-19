@@ -51,18 +51,15 @@ class Mailer {
 }
 exports.Mailer = Mailer;
 exports.mailerConfig = {
-    host: "host",
+    host: "smtp.office365.com",
     port: 587,
-    secure: false, // STARTTLS
+    secure: false, // use STARTTLS
     auth: {
-        user: "mail", // full email
-        pass: "passs", // same password as in Outlook
+        user: "info@alghazalgroup.com", // your Office365 email
+        pass: "ftftxxppxyjppggf", // 🔑 your Office365 App Password
     },
-    from: `"ALGHAZAL ALABYAD TECHNICAL SERVICES" <info@alghazalgroup.com>`,
-    tls: {
-        ciphers: "SSLv3",
-    },
+    from: '"Ajmal Shahan" <info@alghazalgroup.com>', // must match user
 };
-// Singletonghazalgroup.com instance (optional)
+// ✅ Singleton instance
 exports.mailer = new Mailer(exports.mailerConfig);
 //# sourceMappingURL=mailer.js.map

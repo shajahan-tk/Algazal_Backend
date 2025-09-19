@@ -97,8 +97,10 @@ const projectSchema = new mongoose_1.Schema({
         ref: "User",
     },
     grnNumber: {
-        typw: String,
+        type: String,
     },
+    workStartDate: { type: Date },
+    workEndDate: { type: Date },
 }, { timestamps: true });
 projectSchema.index({ projectName: 1 });
 projectSchema.index({ client: 1 });

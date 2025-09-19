@@ -292,7 +292,7 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
     const workCompletion = await workCompletionModel_1.WorkCompletion.findOne({ project: projectId })
         .populate("createdBy", "firstName lastName signatureImage")
         .sort({ createdAt: -1 });
-    const engineer = workCompletion?.createdBy || project.assignedTo;
+    const engineer = project.assignedTo;
     // Format dates - updated to use project dates
     const formatDate = (date) => {
         if (!date)
@@ -331,25 +331,26 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
                 padding: 10px;
                 padding-bottom: 80px; /* Reduced space for footer */
             }
-            .logo-container {
-                width: 100%;
+            .header {
                 display: flex;
-                text-align: center;
+                align-items: center;
                 margin-bottom: 10px;
             }
             .logo {
-                max-height: 80px;
-                width: 100%;
+                max-height: 60px; /* Smaller logo */
+                margin-right: 20px;
+            }
+            .title-container {
+                flex-grow: 1;
+                text-align: end;
             }
             h1 {
-                text-align: center;
                 color: purple;
                 font-size: 24px;
                 font-weight: bold;
-                margin: 15px 0;
+                margin: 0;
             }
             .highlight {
-                background-color: yellow;
                 padding: 1px 3px;
             }
             table {
@@ -384,9 +385,11 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
                 color: green;
                 font-weight: bold;
             }
-            .blue-text {
-                color: #0074cc;
+            .blue-bg {
+                background-color: #0074cc;
+                color: white;
                 font-weight: bold;
+                padding: 3px 6px;
             }
             .image-container {
                 display: flex;
@@ -395,12 +398,29 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
                 margin: 10px 0 5px 0;
                 justify-content: center;
             }
-            .image-container img {
-                height: 100px;
-                border: 1px solid #000;
-                object-fit: cover;
+            .image-item {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
                 flex-grow: 1;
                 max-width: 180px;
+                margin-bottom: 10px;
+            }
+            .image-item img {
+                height: 100px;
+                width: 100%;
+                border: 1px solid #000;
+                object-fit: cover;
+                margin-bottom: 5px;
+            }
+            .image-title {
+                font-size: 10px;
+                font-weight: bold;
+                text-align: center;
+                color: #333;
+                word-wrap: break-word;
+                width: 100%;
+                padding: 2px 4px;
             }
             .footer-container {
                 margin-top: 20px;
@@ -433,14 +453,17 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
     </head>
     <body>
         <div class="container">
-            <div class="logo-container">
-                <img src="https://agats.s3.ap-south-1.amazonaws.com/logo/logo.jpeg" alt="Company Logo" class="logo">
+            <div class="header">
+                <img src="https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg" alt="Company Logo" class="logo">
+                <div class="title-container">
+                    <h1>Completion Certificate</h1>
+                </div>
             </div>
 
             <table>
                 <tr>
                     <td class="bold" style="width: 30%">Reference</td>
-                    <td>: <span class="highlight">${project.projectNumber}</span></td>
+                    <td>: <span class="highlight">${`QTN${project.projectNumber.slice(3, 10)}`}</span></td>
                 </tr>
                 <tr>
                     <td class="bold">FM CONTRACTOR</td>
@@ -482,8 +505,8 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
 
             <table class="bordered" style="margin-top: 15px;">
                 <tr>
-                    <td colspan="2" class="bold">Hand over by:</td>
-                    <td colspan="2">AL GHAZAL AL ABYAD TECHNICAL SERVICES</td>
+                    <td colspan="2" class="blue-bg">Hand over by:</td>
+                    <td colspan="2" class="blue-bg">AL GHAZAL AL ABYAD TECHNICAL SERVICES</td>
                 </tr>
                 <tr>
                     <td class="bold" style="width: 25%">Name:</td>
@@ -505,8 +528,8 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
 
             <table class="bordered" style="margin-top: 15px;">
                 <tr>
-                    <td colspan="2" class="bold">Accepted by:</td>
-                    <td colspan="2" class="blue-text">Client side</td>
+                    <td colspan="2" class="blue-bg">Accepted by:</td>
+                    <td colspan="2" class="blue-bg">Client side</td>
                 </tr>
                 <tr>
                     <td class="bold" style="width: 25%">Name:</td>
@@ -522,11 +545,37 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
                 </tr>
             </table>
 
+            <table class="bordered" style="margin-top: 15px;">
+                <tr>
+                    <td colspan="2" class="blue-bg">Prepared by:</td>
+                    <td colspan="2" class="blue-bg">AL GHAZAL AL ABYAD TECHNICAL SERVICES</td>
+                </tr>
+                <tr>
+                    <td class="bold" style="width: 25%">Name:</td>
+                    <td style="width: 25%">${engineer?.firstName} ${engineer?.lastName || ""}</td>
+                    <td class="bold" style="width: 25%">Signature:</td>
+                    <td style="width: 25%">
+                        ${engineer?.signatureImage
+        ? `<img src="${engineer.signatureImage}" class="signature-img" />`
+        : "(signature)"}
+                    </td>
+                </tr>
+                <tr>
+                    <td class="bold">Date:</td>
+                    <td><span class="green-text">${formatDate(project.handoverDate)}</span></td>
+                    <td></td>
+                    <td></td>
+                </tr>
+            </table>
+
             <p class="section-title">Site Pictures:</p>
             <div class="image-container">
                 ${workCompletion?.images && workCompletion.images.length > 0
         ? workCompletion.images
-            .map((image) => `<img src="${image.imageUrl}" alt="${image.title || "Site picture"}">`)
+            .map((image) => `<div class="image-item">
+                               <img src="${image.imageUrl}" alt="${image.title || "Site picture"}" />
+                               <div class="image-title">${image.title || "Untitled"}</div>
+                             </div>`)
             .join("")
         : '<p style="text-align: center; width: 100%;">No site pictures available</p>'}
             </div>
@@ -535,7 +584,6 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
         <div class="footer-container">
             <div class="tagline">We work U Relax</div>
             <div class="footer">
-                <h1>Completion Certificate</h1>
                 <p><strong>AL GHAZAL AL ABYAD TECHNICAL SERVICES</strong></p>
                 <p>Office No:04, R09-France Cluster, International City-Dubai | P.O.Box:262760, Dubai-U.A.E</p>
                 <p>Tel: 044102555 | <a href="http://www.alghazalgroup.com/">www.alghazalgroup.com</a></p>
@@ -574,4 +622,5 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
         await browser.close();
     }
 });
+///ads
 //# sourceMappingURL=workCompletionController.js.map
