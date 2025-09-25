@@ -28,12 +28,12 @@ router.get(
 );
 router.get(
   "/drivers",
-  authorize(["admin", "super_admin", "finance"]),
+  authorize(["admin", "super_admin", "finance","engineer"]),
   getActiveDrivers
 );
 router.get(
   "/workers",
-  authorize(["admin", "super_admin", "finance"]),
+  authorize(["admin", "super_admin", "finance","engineer"]),
   getActiveWorkers
 );
 

@@ -27,8 +27,7 @@ router.post(
   "/project/:projectId",
   authorize(["admin", "super_admin", "engineer", "finance"]),
   upload.fields([
-    { name: "materials", maxCount: 1 },
-    { name: "files", maxCount: 100 },
+    { name: "files", maxCount: 100 }, // Changed from "materials" to "files"
   ]),
   createExpense
 );
@@ -54,6 +53,9 @@ router.get(
 router.put(
   "/:expenseId",
   authorize(["admin", "super_admin", "engineer", "finance"]),
+  upload.fields([
+    { name: "files", maxCount: 100 }, // Changed from "materialFiles" to "files"
+  ]),
   updateExpense
 );
 

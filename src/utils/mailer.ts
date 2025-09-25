@@ -81,7 +81,7 @@ export const mailerConfig: MailerConfig = {
     user: "info@alghazalgroup.com", // your Office365 email
     pass: "ftftxxppxyjppggf", // 🔑 your Office365 App Password
   },
-  from: '"Ajmal Shahan" <info@alghazalgroup.com>', // must match user
+  from: '"Alghazal" <info@alghazalgroup.com>', // must match user
 };
 
 // ✅ Singleton instance

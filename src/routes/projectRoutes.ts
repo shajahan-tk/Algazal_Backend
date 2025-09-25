@@ -73,7 +73,7 @@ router.post(
 );
 router.get(
   "/:projectId/team",
-  authorize(["admin", "super_admin", "finance"]),
+  authorize(["admin", "super_admin", "finance","engineer"]),
   getAssignedTeam
 );
 router.put(
@@ -84,7 +84,7 @@ router.put(
 
 router.get(
   "/:projectId/progress",
-  authorize(["admin", "super_admin", "finance"]),
+  authorize(["admin", "super_admin", "finance","engineer"]),
   getProjectProgressUpdates
 );
 // Update project status
@@ -106,7 +106,7 @@ router.delete("/:id", authorize(["admin", "super_admin"]), deleteProject);
 
 router.post(
   "/:projectId/assign-team",
-  authorize(["admin", "super_admin"]), // Only admins can assign teams
+  authorize(["admin", "super_admin","engineer"]), // Only admins can assign teams
   assignTeamAndDriver
 );
 router.patch(

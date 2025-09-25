@@ -465,6 +465,8 @@ export const generateCompletionCertificatePdf = asyncHandler(
       .sort({ createdAt: -1 });
 
     const engineer: any = project.assignedTo;
+    // Add type assertion or safe access for workCompletion.createdBy
+    const preparedBy: any = workCompletion?.createdBy;
 
     // Format dates - updated to use project dates
     const formatDate = (date: Date | string | undefined) => {
@@ -739,14 +741,14 @@ export const generateCompletionCertificatePdf = asyncHandler(
                 </tr>
                 <tr>
                     <td class="bold" style="width: 25%">Name:</td>
-                    <td style="width: 25%">${engineer?.firstName} ${
-      engineer?.lastName || ""
+                    <td style="width: 25%">${preparedBy?.firstName || ""} ${
+      preparedBy?.lastName || ""
     }</td>
                     <td class="bold" style="width: 25%">Signature:</td>
                     <td style="width: 25%">
                         ${
-                          engineer?.signatureImage
-                            ? `<img src="${engineer.signatureImage}" class="signature-img" />`
+                          preparedBy?.signatureImage
+                            ? `<img src="${preparedBy.signatureImage}" class="signature-img" />`
                             : "(signature)"
                         }
                     </td>
