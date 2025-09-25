@@ -1,3 +1,4 @@
+
 import { Request, Response } from "express";
 import { asyncHandler } from "../utils/asyncHandler";
 import { ApiResponse } from "../utils/apiHandlerHelpers";
@@ -89,7 +90,7 @@ export const createBill = asyncHandler(async (req: Request, res: Response) => {
       }
       break;
     case "commission":
-      // No additional fields required for commission bills
+      // Commission bills can have remarks but no additional required fields
       break;
     default:
       throw new ApiError(400, "Invalid bill type");
@@ -182,7 +183,7 @@ export const createBill = asyncHandler(async (req: Request, res: Response) => {
     category,
     shop,
     invoiceNo,
-    remarks,
+    remarks, // Now available for all bill types including commission
     // Fuel fields
     description,
     kilometer,
@@ -1044,6 +1045,7 @@ export const exportBillsToExcel = asyncHandler(
         { invoiceNo: { $regex: req.query.search, $options: "i" } },
         { description: { $regex: req.query.search, $options: "i" } },
         { purpose: { $regex: req.query.search, $options: "i" } },
+        { remarks: { $regex: req.query.search, $options: "i" } },
       ];
       
       // If vehicle filter already exists with $or, merge them
@@ -1089,7 +1091,7 @@ export const exportBillsToExcel = asyncHandler(
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("Bills");
 
-    // Define columns for each bill type
+    // Define columns for each bill type - Updated to include remarks for commission
     const billTypeColumns: Record<BillType, any[]> = {
       general: [
         { header: "SNO", key: "sno", width: 5 },
@@ -1150,7 +1152,9 @@ export const exportBillsToExcel = asyncHandler(
       commission: [
         { header: "SNO", key: "sno", width: 5 },
         { header: "DATE", key: "billDate", width: 12, style: { numFmt: "dd-mm-yyyy" } },
-        { header: "AMOUNT", key: "amount", width: 12, style: { numFmt: "#,##0.00" } }
+        { header: "PAYMENT METHOD", key: "paymentMethod", width: 15 },
+        { header: "AMOUNT", key: "amount", width: 12, style: { numFmt: "#,##0.00" } },
+        { header: "REMARKS", key: "remarks", width: 30 }
       ]
     };
 
@@ -1178,7 +1182,7 @@ export const exportBillsToExcel = asyncHandler(
         billDate: bill.billDate,
         amount: bill.amount,
         paymentMethod: bill.paymentMethod,
-        remarks: bill.remarks || "",
+        remarks: bill.remarks || "", // Now available for all bill types including commission
       };
 
       // Common fields
@@ -1224,7 +1228,8 @@ export const exportBillsToExcel = asyncHandler(
           rowData.liter = bill.liter || "";
           break;
         case "commission":
-          // Only basic fields needed
+          // Commission bills now include remarks field - no additional processing needed
+          // since remarks is already set in the common fields above
           break;
       }
 
