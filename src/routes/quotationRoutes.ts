@@ -59,5 +59,5 @@ router.post(
   sendQuotationEmail
 );
 
-router.get("/:id/generate-pdf", authorize(["admin", "super_admin"]),generateQuotationPdf);
+router.get("/:id/generate-pdf", authorize(["admin", "super_admin","engineer"]),generateQuotationPdf);
 export default router;
