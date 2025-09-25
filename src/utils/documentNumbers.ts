@@ -5,7 +5,7 @@ import { Types } from "mongoose";
 export const generateProjectNumber = async (): Promise<string> => {
   const year = new Date().getFullYear().toString().slice(-2);
   const count = await Project.countDocuments();
-  return `PRJ${year}${(count + 1).toString().padStart(4, "0")}`;
+  return `PRJAGA${year}${(count + 1).toString().padStart(4, "0")}`;
 };
 
 export const generateRelatedDocumentNumber = async (
@@ -16,5 +16,5 @@ export const generateRelatedDocumentNumber = async (
   if (!project || !project.projectNumber) {
     throw new Error("Project not found or missing project number");
   }
-  return project.projectNumber.replace("PRJ", prefix);
+  return project.projectNumber.replace("PRJAGA", prefix);
 };

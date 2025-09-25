@@ -112,7 +112,7 @@ export const createEstimation = asyncHandler(
 
     const estimation = await Estimation.create({
       project,
-      estimationNumber: await generateRelatedDocumentNumber(project, "EST"),
+      estimationNumber: await generateRelatedDocumentNumber(project, "ESTAGA"),
       workStartDate: new Date(workStartDate),
       workEndDate: new Date(workEndDate),
       validUntil: new Date(validUntil),

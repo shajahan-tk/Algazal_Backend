@@ -119,7 +119,7 @@ export const createWorkCompletion = asyncHandler(
 
     const workCompletion = await WorkCompletion.create({
       project: projectId,
-      completionNumber: await generateRelatedDocumentNumber(projectId, "WCP"),
+      completionNumber: await generateRelatedDocumentNumber(projectId, "WCPAGA"),
       createdBy: req.user?.userId,
     });
 

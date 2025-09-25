@@ -84,7 +84,7 @@ export const createQuotation = asyncHandler(
     const quotation = await Quotation.create({
       project: projectId,
       estimation: estimationId,
-      quotationNumber: await generateRelatedDocumentNumber(projectId, "QTN"),
+      quotationNumber: await generateRelatedDocumentNumber(projectId, "QTNAGA"),
       date: new Date(),
       validUntil: new Date(validUntil),
       scopeOfWork,
