@@ -701,7 +701,7 @@ export const generateCompletionCertificatePdf = asyncHandler(
                         ${
                           engineer?.signatureImage
                             ? `<img src="${engineer.signatureImage}" class="signature-img" />`
-                            : "(signature)"
+                            : ""
                         }
                     </td>
                 </tr>
@@ -724,7 +724,7 @@ export const generateCompletionCertificatePdf = asyncHandler(
                     <td class="bold" style="width: 25%">Name:</td>
                     <td style="width: 25%">${client.clientName}</td>
                     <td class="bold" style="width: 25%">Signature:</td>
-                    <td style="width: 25%">(signature)</td>
+                    <td style="width: 25%"></td>
                 </tr>
                 <tr>
                     <td class="bold">Date:</td>
@@ -749,7 +749,7 @@ export const generateCompletionCertificatePdf = asyncHandler(
                         ${
                           preparedBy?.signatureImage
                             ? `<img src="${preparedBy.signatureImage}" class="signature-img" />`
-                            : "(signature)"
+                            : ""
                         }
                     </td>
                 </tr>
