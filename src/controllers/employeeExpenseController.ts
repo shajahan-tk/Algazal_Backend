@@ -262,21 +262,144 @@ export const deleteEmployeeExpense = asyncHandler(
 export const exportEmployeeExpensesToExcel = asyncHandler(
   async (req: Request, res: Response) => {
     try {
-      // Fetch all expenses with populated employee data
-      const expenses = await EmployeeExpense.find({})
+      const { search, employee, designation, country, month, year, minSalary, maxSalary, startDate, endDate } = req.query;
+      
+      const filter: any = {};
+
+      // Search filter
+      if (search) {
+        const searchRegex = new RegExp(search as string, "i");
+        filter.$or = [
+          { designation: searchRegex },
+          { country: searchRegex },
+        ];
+      }
+
+      // Employee filter (if filtering by specific employee ID)
+      if (employee) {
+        filter.employee = employee;
+      }
+
+      // Designation filter
+      if (designation) {
+        filter.designation = new RegExp(designation as string, "i");
+      }
+
+      // Country filter
+      if (country) {
+        filter.country = new RegExp(country as string, "i");
+      }
+
+      // Date range filter - Handle both startDate/endDate and month/year
+      if (startDate && endDate) {
+        // Use startDate and endDate if provided
+        filter.createdAt = {
+          $gte: new Date(startDate as string),
+          $lte: new Date(endDate as string)
+        };
+      } else if (month && year) {
+        // Use month/year filtering
+        const monthNum = parseInt(month as string);
+        const yearNum = parseInt(year as string);
+        
+        if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+          throw new ApiError(400, "Invalid month value (1-12)");
+        }
+        if (isNaN(yearNum)) {
+          throw new ApiError(400, "Invalid year value");
+        }
+
+        const startDateCalc = new Date(yearNum, monthNum - 1, 1);
+        const endDateCalc = new Date(yearNum, monthNum, 0);
+        
+        // Add time to make sure we capture the full day
+        startDateCalc.setHours(0, 0, 0, 0);
+        endDateCalc.setHours(23, 59, 59, 999);
+        
+        filter.createdAt = {
+          $gte: startDateCalc,
+          $lte: endDateCalc
+        };
+
+        // Debug logging
+        console.log("Date Filter Applied:");
+        console.log("Month:", monthNum, "Year:", yearNum);
+        console.log("Start Date:", startDateCalc);
+        console.log("End Date:", endDateCalc);
+        console.log("Filter:", JSON.stringify(filter.createdAt));
+      } else if (year && !month) {
+        const yearNum = parseInt(year as string);
+        if (isNaN(yearNum)) {
+          throw new ApiError(400, "Invalid year value");
+        }
+
+        const startDateCalc = new Date(yearNum, 0, 1, 0, 0, 0, 0);
+        const endDateCalc = new Date(yearNum, 11, 31, 23, 59, 59, 999);
+        
+        filter.createdAt = {
+          $gte: startDateCalc,
+          $lte: endDateCalc
+        };
+      } else if (month && !year) {
+        const monthNum = parseInt(month as string);
+        const currentYear = new Date().getFullYear();
+        
+        if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+          throw new ApiError(400, "Invalid month value (1-12)");
+        }
+
+        const startDateCalc = new Date(currentYear, monthNum - 1, 1, 0, 0, 0, 0);
+        const endDateCalc = new Date(currentYear, monthNum, 0, 23, 59, 59, 999);
+        
+        filter.createdAt = {
+          $gte: startDateCalc,
+          $lte: endDateCalc
+        };
+      }
+
+      // Salary range filter (using basicSalary)
+      if (minSalary || maxSalary) {
+        filter.basicSalary = {};
+        if (minSalary) {
+          const min = parseFloat(minSalary as string);
+          if (!isNaN(min)) filter.basicSalary.$gte = min;
+        }
+        if (maxSalary) {
+          const max = parseFloat(maxSalary as string);
+          if (!isNaN(max)) filter.basicSalary.$lte = max;
+        }
+      }
+
+      // Debug: Log the final filter
+      console.log("Final MongoDB Filter:", JSON.stringify(filter, null, 2));
+
+      // Fetch filtered expenses with populated employee data
+      const expenses = await EmployeeExpense.find(filter)
         .sort({ createdAt: -1 })
         .populate<{ employee: IUser }>("employee", "firstName lastName")
         .lean();
+      console.log('====================================');
+      console.log(expenses);
+      console.log('====================================');
+      // Debug: Log results count and sample dates
+      console.log(`Found ${expenses.length} expenses`);
+      if (expenses.length > 0) {
+        console.log("Sample expense dates:");
+        expenses.slice(0, 3).forEach((expense, i) => {
+          console.log(`${i + 1}. Created: ${expense.createdAt}, Updated: ${expense.updatedAt}`);
+        });
+      }
 
       if (expenses.length === 0) {
-        throw new ApiError(404, "No employee expenses found");
+        // Instead of throwing an error, return an empty Excel file with headers
+        console.log("No expenses found - creating empty Excel file");
       }
 
       // Create workbook and worksheet
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet("Employee Expenses");
 
-      // Define all columns except excluded fields
+      // Define all columns
       worksheet.columns = [
         { header: "SNO", key: "sno", width: 5 },
         { header: "Employee", key: "employee", width: 25 },
@@ -308,8 +431,9 @@ export const exportEmployeeExpensesToExcel = asyncHandler(
           header: "Custom Expenses", 
           key: "customExpenses", 
           width: 30,
-          style: { alignment: { wrapText: true } } // Allow text wrapping
-        }
+          style: { alignment: { wrapText: true } }
+        },
+        { header: "Created Date", key: "createdAt", width: 15, style: { numFmt: "dd-mm-yyyy" }}
       ];
 
       // Add data rows
@@ -345,7 +469,8 @@ export const exportEmployeeExpensesToExcel = asyncHandler(
           gratuity: expense.gratuity,
           customExpenses: expense.customExpenses
             ? expense.customExpenses.map(ce => `${ce.name}: ${ce.amount}`).join('\n')
-            : 'None'
+            : 'None',
+          createdAt: expense.createdAt || expense.updatedAt
         };
 
         worksheet.addRow(rowData);
@@ -367,13 +492,35 @@ export const exportEmployeeExpensesToExcel = asyncHandler(
         };
       });
 
-      // Auto-size columns for better visibility
-      worksheet.columns.forEach(column => {
-        if (column.width) {
-          const headerLength = column.header ? column.header.length : 0;
-          column.width = Math.max(column.width, headerLength + 2);
-        }
-      });
+      // Freeze the header row
+      worksheet.views = [{ state: "frozen", ySplit: 1 }];
+
+      // Add summary/totals section if there are expenses
+      if (expenses.length > 0) {
+        const totalExpenses = expenses.reduce((sum, expense) => sum + (expense.totalExpensesPerPerson || 0), 0);
+        const totalBasicSalary = expenses.reduce((sum, expense) => sum + (expense.basicSalary || 0), 0);
+        const totalAllowance = expenses.reduce((sum, expense) => sum + (expense.allowance || 0), 0);
+
+        worksheet.addRow([]); // Empty row
+        const summaryRow = worksheet.addRow({
+          sno: "",
+          employee: "TOTALS",
+          designation: `${expenses.length} employees`,
+          basicSalary: totalBasicSalary,
+          allowance: totalAllowance,
+          totalExpensesPerPerson: totalExpenses
+        });
+
+        // Style summary row
+        summaryRow.eachCell((cell) => {
+          cell.font = { bold: true };
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFF2F2F2" },
+          };
+        });
+      }
 
       // Set response headers
       res.setHeader(

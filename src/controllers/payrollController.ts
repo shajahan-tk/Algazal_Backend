@@ -404,19 +404,78 @@ export const deletePayroll = asyncHandler(async (req: Request, res: Response) =>
 
 // Export payrolls to Excel
 export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Response) => {
+  const { month, year, search, employee, period, labourCard, startDate, endDate } = req.query;
+  
+  // Build filter query based on parameters
   const filter: Record<string, unknown> = {};
 
-  // Apply filters with type safety
-  if (req.query.period) filter.period = req.query.period as string;
-  if (req.query.employee) filter.employee = req.query.employee as string;
-  if (req.query.labourCard) filter.labourCard = req.query.labourCard as string;
+  // Handle month and year filtering
+  if (month && year) {
+    const startOfMonth = new Date(Number(year), Number(month) - 1, 1);
+    const endOfMonth = new Date(Number(year), Number(month), 0, 23, 59, 59, 999);
+    
+    filter.createdAt = {
+      $gte: startOfMonth,
+      $lte: endOfMonth
+    };
+  } else if (year) {
+    const startOfYear = new Date(Number(year), 0, 1);
+    const endOfYear = new Date(Number(year), 11, 31, 23, 59, 59, 999);
+    
+    filter.createdAt = {
+      $gte: startOfYear,
+      $lte: endOfYear
+    };
+  }
 
-  const payrolls = await Payroll.find(filter)
+  // Handle date range filtering (takes precedence over month/year)
+  if (startDate && endDate) {
+    filter.createdAt = {
+      $gte: new Date(startDate as string),
+      $lte: new Date(endDate as string)
+    };
+  } else if (startDate) {
+    filter.createdAt = { $gte: new Date(startDate as string) };
+  } else if (endDate) {
+    filter.createdAt = { $lte: new Date(endDate as string) };
+  }
+
+  // Apply other filters
+  if (period) filter.period = period as string;
+  if (employee) filter.employee = employee as string;
+  if (labourCard) filter.labourCard = labourCard as string;
+
+  // Build search filter for text fields
+  let searchFilter = {};
+  if (search && search.toString().trim()) {
+    searchFilter = {
+      $or: [
+        { period: { $regex: search, $options: 'i' } },
+        { labourCard: { $regex: search, $options: 'i' } },
+        { labourCardPersonalNo: { $regex: search, $options: 'i' } },
+        { remark: { $regex: search, $options: 'i' } }
+      ]
+    };
+  }
+
+  // Combine filters
+  const finalFilter = Object.keys(searchFilter).length > 0 
+    ? { ...filter, ...searchFilter }
+    : filter;
+
+  const payrolls = await Payroll.find(finalFilter)
     .sort({ period: -1, createdAt: -1 })
     .populate<{ employee: IUser }>({
       path: 'employee',
       select: 'firstName lastName role emiratesId'
     });
+
+  if (payrolls.length === 0) {
+    return res.status(404).json({ 
+      success: false, 
+      message: "No payroll records found for the specified criteria" 
+    });
+  }
 
   // Create workbook and worksheet
   const workbook = new ExcelJS.Workbook();
@@ -496,6 +555,18 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     };
   });
 
+  // Generate filename with date filter info
+  let filename = 'payroll_report';
+  if (month && year) {
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    filename += `_${monthNames[Number(month) - 1]}_${year}`;
+  } else if (year) {
+    filename += `_${year}`;
+  } else {
+    filename += `_${new Date().toISOString().split('T')[0]}`;
+  }
+
   // Set response headers
   res.setHeader(
     'Content-Type',
@@ -503,7 +574,7 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   );
   res.setHeader(
     'Content-Disposition',
-    `attachment; filename=payroll_report_${new Date().toISOString().split('T')[0]}.xlsx`
+    `attachment; filename=${filename}.xlsx`
   );
 
   // Send the workbook
