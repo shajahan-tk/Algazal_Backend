@@ -319,255 +319,301 @@ export const generateQuotationPdf = asyncHandler(
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
   <style type="text/css">
-   @page {
-  size: A4;
-  margin: 1cm;
-}
-body {
-  font-family: 'Arial', sans-serif;
-  font-size: 10pt;
-  line-height: 1.4;
-  color: #333;
-  margin: 0;
-  padding: 0;
-}
+    @page {
+      size: A4;
+      margin: 1cm;
+    }
+    
+    body {
+      font-family: 'Arial', sans-serif;
+      font-size: 10pt;
+      line-height: 1.4;
+      color: #333;
+      margin: 0;
+      padding: 0;
+    }
 
-/* Remove problematic flexbox layout */
-.container {
-  /* Remove min-height: 100vh and flex properties */
-  display: block; /* Changed from flex */
-}
+    .container {
+      display: block;
+    }
 
-.content {
-  /* Remove flex: 1 */
-  margin-bottom: 20px; /* Add some space before tagline */
-}
+    .content {
+      margin-bottom: 20px;
+    }
 
-.header {
-  display: flex;
-  align-items: flex-start;
-  margin-bottom: 15px;
-  gap: 15px;
-}
+    .header {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 15px;
+      gap: 15px;
+      page-break-after: avoid;
+    }
 
-.logo {
-  height: 50px;
-  width: auto;
-}
+    .logo {
+      height: 50px;
+      width: auto;
+    }
 
-.header-content {
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-end;
-}
+    .header-content {
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-end;
+    }
 
-.document-title {
-  font-size: 14pt;
-  font-weight: bold;
-  margin: 0;
-  color: #000;
-  padding-top: 8px;
-}
+    .document-title {
+      font-size: 14pt;
+      font-weight: bold;
+      margin: 0;
+      color: #000;
+      padding-top: 8px;
+    }
 
-.client-info-container {
-  display: flex;
-  margin-bottom: 10px;
-  gap: 20px;
-}
+    .client-info-container {
+      display: flex;
+      margin-bottom: 10px;
+      gap: 20px;
+      page-break-after: avoid;
+    }
 
-.client-info {
-  flex: 1;
-  padding: 10px;
-  border: 1px solid #eee;
-  border-radius: 4px;
-}
+    .client-info {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #eee;
+      border-radius: 4px;
+    }
 
-.quotation-info {
-  width: 250px;
-}
+    .quotation-info {
+      width: 250px;
+    }
 
-.quotation-details {
-  width: 100%;
-  border-collapse: collapse;
-}
+    .quotation-details {
+      width: 100%;
+      border-collapse: collapse;
+    }
 
-.quotation-details tr:not(:last-child) {
-  border-bottom: 1px solid #eee;
-}
+    .quotation-details tr:not(:last-child) {
+      border-bottom: 1px solid #eee;
+    }
 
-.quotation-details td {
-  padding: 8px 10px;
-  vertical-align: top;
-}
+    .quotation-details td {
+      padding: 8px 10px;
+      vertical-align: top;
+    }
 
-.quotation-details td:first-child {
-  font-weight: bold;
-  width: 40%;
-  color: #555;
-}
+    .quotation-details td:first-child {
+      font-weight: bold;
+      width: 40%;
+      color: #555;
+    }
 
-.section {
-  margin-bottom: 15px;
-  page-break-inside: avoid;
-}
+    .section {
+      margin-bottom: 15px;
+      page-break-inside: avoid;
+    }
 
-.section-title {
-  font-size: 11pt;
-  font-weight: bold;
-  padding: 5px 0;
-  margin: 10px 0 5px 0;
-  border-bottom: 1px solid #ddd;
-}
+    .section-title {
+      font-size: 11pt;
+      font-weight: bold;
+      padding: 5px 0;
+      margin: 10px 0 5px 0;
+      border-bottom: 1px solid #ddd;
+      page-break-after: avoid;
+    }
 
-.terms-prepared-section {
-  margin-top: 15px;
-  page-break-inside: avoid;
-}
+    /* Critical fixes for table page breaks */
+    .table-container {
+      page-break-inside: avoid;
+      overflow: hidden;
+    }
 
-.terms-prepared-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-bottom: 5px;
-  border-bottom: 1px solid #ddd;
-  margin-bottom: 10px;
-}
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 15px;
+      page-break-inside: auto;
+    }
 
-.terms-title, .prepared-title {
-  font-size: 11pt;
-  font-weight: bold;
-  margin: 0;
-  color: #333;
-}
+    tr {
+      page-break-inside: avoid;
+      page-break-after: auto;
+    }
 
-.terms-prepared-content {
-  display: flex;
-  gap: 20px;
-  align-items: flex-start;
-}
+    thead {
+      display: table-header-group;
+    }
 
-.terms-content {
-  flex: 1;
-}
+    tbody {
+      display: table-row-group;
+    }
 
-.prepared-content {
-  width: 250px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-}
+    th, td {
+      page-break-inside: avoid;
+      page-break-before: auto;
+    }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: 15px;
-  page-break-inside: avoid;
-}
+    th {
+      background-color: #94d7f4;
+      color: #000;
+      font-weight: bold;
+      padding: 6px 8px;
+      text-align: left;
+      border: 1px solid #ddd;
+    }
 
-th {
-  background-color: #94d7f4;
-  color: #000;
-  font-weight: bold;
-  padding: 6px 8px;
-  text-align: left;
-  border: 1px solid #ddd;
-}
+    td {
+      padding: 6px 8px;
+      border: 1px solid #ddd;
+      vertical-align: top;
+    }
 
-td {
-  padding: 6px 8px;
-  border: 1px solid #ddd;
-  vertical-align: top;
-}
+    /* Ensure images don't cause page breaks */
+    td img {
+      max-height: 80px;
+      object-fit: contain;
+      page-break-inside: avoid;
+    }
 
-.amount-summary {
-  margin-top: 10px;
-  width: 100%;
-  text-align: right;
-}
+    .amount-summary {
+      margin-top: 10px;
+      width: 100%;
+      text-align: right;
+      page-break-before: avoid;
+    }
 
-.amount-summary-row {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 5px;
-}
+    .amount-summary-row {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 5px;
+    }
 
-.amount-label {
-  width: 150px;
-  font-weight: bold;
-  text-align: right;
-  padding-right: 10px;
-}
+    .amount-label {
+      width: 150px;
+      font-weight: bold;
+      text-align: right;
+      padding-right: 10px;
+    }
 
-.amount-value {
-  width: 100px;
-  text-align: right;
-}
+    .amount-value {
+      width: 100px;
+      text-align: right;
+    }
 
-.net-amount-row {
-  display: flex;
-  justify-content: flex-end;
-  background-color: #94d7f4;
-  color: #000;
-  font-weight: bold;
-  font-size: 11pt;
-  margin-top: 5px;
-  padding: 5px 0;
-  border-top: 1px solid #333;
-}
+    .net-amount-row {
+      display: flex;
+      justify-content: flex-end;
+      background-color: #94d7f4;
+      color: #000;
+      font-weight: bold;
+      font-size: 11pt;
+      margin-top: 5px;
+      padding: 5px 0;
+      border-top: 1px solid #333;
+    }
 
-.terms-box {
-  border: 1px solid #000;
-  padding: 10px;
-  width: 100%;
-  box-sizing: border-box;
-}
+    .terms-prepared-section {
+      margin-top: 15px;
+      page-break-inside: avoid;
+    }
 
-.prepared-by-name {
-  font-weight: bold;
-  margin-top: 5px;
-}
+    .terms-prepared-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 5px;
+      border-bottom: 1px solid #ddd;
+      margin-bottom: 10px;
+      page-break-after: avoid;
+    }
 
-.prepared-by-title {
-  font-size: 9pt;
-  color: #777;
-  margin-top: 5px;
-}
+    .terms-title, .prepared-title {
+      font-size: 11pt;
+      font-weight: bold;
+      margin: 0;
+      color: #333;
+    }
 
-/* Improved tagline and footer positioning */
-.tagline {
-  text-align: center;
-  font-weight: bold;
-  font-size: 12pt;
-  margin: 20px 0 10px 0; /* Reduced top margin */
-  color: #333;
-  border-top: 2px solid #ddd;
-  padding-top: 15px; /* Reduced padding */
-  page-break-before: avoid; /* Prevent page break before tagline */
-}
+    .terms-prepared-content {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+    }
 
-.footer {
-  font-size: 9pt;
-  color: #777;
-  text-align: center;
-  margin-top: 10px;
-  page-break-inside: avoid;
-  page-break-before: avoid; /* Keep footer with tagline */
-}
+    .terms-content {
+      flex: 1;
+    }
 
-.text-center {
-  text-align: center;
-}
+    .prepared-content {
+      width: 250px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+    }
 
-.text-right {
-  text-align: right;
-}
+    .terms-box {
+      border: 1px solid #000;
+      padding: 10px;
+      width: 100%;
+      box-sizing: border-box;
+    }
 
-p {
-  margin: 5px 0;
-}
+    .prepared-by-name {
+      font-weight: bold;
+      margin-top: 5px;
+    }
+
+    .prepared-by-title {
+      font-size: 9pt;
+      color: #777;
+      margin-top: 5px;
+    }
+
+    .tagline {
+      text-align: center;
+      font-weight: bold;
+      font-size: 12pt;
+      margin: 20px 0 10px 0;
+      color: #333;
+      border-top: 2px solid #ddd;
+      padding-top: 15px;
+      page-break-before: avoid;
+    }
+
+    .footer {
+      font-size: 9pt;
+      color: #777;
+      text-align: center;
+      margin-top: 10px;
+      page-break-inside: avoid;
+    }
+
+    .text-center {
+      text-align: center;
+    }
+
+    .text-right {
+      text-align: right;
+    }
+
+    p {
+      margin: 5px 0;
+    }
+
+    /* Force table headers to repeat on each page */
+    @media print {
+      thead { 
+        display: table-header-group; 
+      }
+      tfoot { 
+        display: table-footer-group; 
+      }
+      
+      tr {
+        break-inside: avoid;
+      }
+    }
   </style>
 </head>
 <body>
@@ -610,34 +656,36 @@ p {
 
       <div class="section">
         <div class="section-title">ITEMS</div>
-        <table>
-          <thead>
-            <tr>
-              <th width="5%">No.</th>
-              <th width="35%">Description</th>
-              <th width="10%">UOM</th>
-              <th width="15%">Image</th>
-              <th width="10%">Qty</th>
-              <th width="15%">Unit Price (AED)</th>
-              <th width="10%" class="text-right">Total (AED)</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${quotation.items.map((item, index) => `
+        <div class="table-container">
+          <table>
+            <thead>
               <tr>
-                <td class="text-center">${index + 1}</td>
-                <td>${item.description}</td>
-                <td class="text-center">${item.uom || "NOS"}</td>
-                <td class="text-center" style="padding: 5px;">
-                  ${item.image?.url ? `<img src="${item.image.url}" style="width: 100%; height: auto; max-height: 80px; object-fit: contain;"/>` : ""}
-                </td>
-                <td class="text-center">${item.quantity.toFixed(2)}</td>
-                <td class="text-right">${item.unitPrice.toFixed(2)}</td>
-                <td class="text-right">${item.totalPrice.toFixed(2)}</td>
+                <th width="5%">No.</th>
+                <th width="35%">Description</th>
+                <th width="10%">UOM</th>
+                <th width="15%">Image</th>
+                <th width="10%">Qty</th>
+                <th width="15%">Unit Price (AED)</th>
+                <th width="10%" class="text-right">Total (AED)</th>
               </tr>
-            `).join("")}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              ${quotation.items.map((item, index) => `
+                <tr>
+                  <td class="text-center">${index + 1}</td>
+                  <td>${item.description}</td>
+                  <td class="text-center">${item.uom || "NOS"}</td>
+                  <td class="text-center" style="padding: 5px;">
+                    ${item.image?.url ? `<img src="${item.image.url}" style="width: 100%; height: auto; max-height: 80px; object-fit: contain;"/>` : ""}
+                  </td>
+                  <td class="text-center">${item.quantity.toFixed(2)}</td>
+                  <td class="text-right">${item.unitPrice.toFixed(2)}</td>
+                  <td class="text-right">${item.totalPrice.toFixed(2)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
 
         <div class="amount-summary">
           <div class="amount-summary-row">
