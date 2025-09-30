@@ -47,6 +47,7 @@ export interface IProject extends Document {
   grnNumber?: string;
   createdAt?: Date;
   updatedAt?: Date;
+  attention?: string;
 }
 
 const projectSchema = new Schema<IProject>(
@@ -149,6 +150,7 @@ const projectSchema = new Schema<IProject>(
     },
     workStartDate: { type: Date },
     workEndDate: { type: Date },
+    attention:{ type: String  },
   },
   { timestamps: true }
 );

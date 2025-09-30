@@ -271,7 +271,7 @@ export const generateQuotationPdf = asyncHandler(
     const quotation = await Quotation.findById(id)
       .populate<{ project: IProject & { client: IClient } }>({
         path: "project",
-        select: "projectName client siteAddress location building apartmentNumber",
+        select: "projectName client siteAddress location building apartmentNumber attention",
         populate: {
           path: "client",
           select: "clientName clientAddress mobileNumber telephoneNumber email",
@@ -405,6 +405,46 @@ export const generateQuotationPdf = asyncHandler(
     .quotation-details td:first-child {
       font-weight: bold;
       width: 40%;
+      color: #555;
+    }
+
+    .attention-section {
+      margin: 10px 0;
+      padding: 10px;
+      background-color: #fff3cd;
+      border-left: 4px solid #ffc107;
+      page-break-after: avoid;
+    }
+
+    .attention-title {
+      font-weight: bold;
+      font-size: 11pt;
+      margin-bottom: 5px;
+      color: #856404;
+    }
+
+    .attention-content {
+      font-size: 10pt;
+      color: #856404;
+    }
+
+    .subject-section {
+      margin: 10px 0;
+      padding: 10px;
+      background-color: #f8f9fa;
+      border-left: 4px solid #94d7f4;
+      page-break-after: avoid;
+    }
+
+    .subject-title {
+      font-weight: bold;
+      font-size: 11pt;
+      margin-bottom: 5px;
+      color: #333;
+    }
+
+    .subject-content {
+      font-size: 10pt;
       color: #555;
     }
 
@@ -633,7 +673,7 @@ export const generateQuotationPdf = asyncHandler(
           <p><strong>CONTACT:</strong> ${client.mobileNumber || client.telephoneNumber || "N/A"}</p>
           <p><strong>EMAIL:</strong> ${client.email || "N/A"}</p>
           <p><strong>SITE:</strong> ${site}</p>
-          <p><strong>SUBJECT:</strong> ${project.projectName || "N/A"}</p>
+          <!-- Removed SUBJECT from here -->
         </div>
 
         <div class="quotation-info">
@@ -652,6 +692,20 @@ export const generateQuotationPdf = asyncHandler(
             </tr>
           </table>
         </div>
+      </div>
+
+      <!-- Attention Section - only show if project.attention exists -->
+      ${project.attention ? `
+      <div class="attention-section">
+        <div class="attention-title">ATTENTION</div>
+        <div class="attention-content">${project.attention}</div>
+      </div>
+      ` : ''}
+
+      <!-- Subject Section -->
+      <div class="subject-section">
+        <div class="subject-title">SUBJECT</div>
+        <div class="subject-content">${project.projectName || "N/A"}</div>
       </div>
 
       <div class="section">

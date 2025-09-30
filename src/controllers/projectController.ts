@@ -52,6 +52,7 @@ export const createProject = asyncHandler(
       location,
       building,
       apartmentNumber,
+      attention
     } = req.body;
     console.log(req.body);
 
@@ -75,6 +76,7 @@ export const createProject = asyncHandler(
       status: "draft",
       progress: 0,
       createdBy: req.user?.userId,
+      attention
     });
 
     res
