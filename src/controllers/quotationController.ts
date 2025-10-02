@@ -426,7 +426,6 @@ export const generateQuotationPdf = asyncHandler(
       margin: 15px 0;
       padding: 12px 15px;
       background-color: #f8f9fa;
-      border-left: 4px solid #94d7f4;
       border-radius: 4px;
       page-break-after: avoid;
     }
