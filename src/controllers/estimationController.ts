@@ -727,7 +727,7 @@ export const generateEstimationPdf = asyncHandler(
     // Calculate profit/loss percentage based on actual profit
     const calculateProfitPercentage = () => {
       if (estimatedAmount === 0) return 0;
-      const percentage = (actualProfit / estimatedAmount) * 100;
+      const percentage = (actualProfit/netAmount) * 100;
       return parseFloat(percentage.toFixed(2));
     };
 

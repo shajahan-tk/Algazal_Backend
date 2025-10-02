@@ -855,10 +855,10 @@ export const generateQuotationPdf = asyncHandler(
         format: "A4",
         printBackground: true,
         margin: {
-          top: "0.5cm",   // or "5mm"
-          right: "0.5cm",
-          bottom: "0.5cm",
-          left: "0.5cm",
+          top: "0.1cm",   // or "5mm"
+          right: "0.1cm",
+          bottom: "0.1cm",
+          left: "0.1cm",
         },
 
         displayHeaderFooter: false,
