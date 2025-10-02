@@ -321,7 +321,7 @@ export const generateQuotationPdf = asyncHandler(
   <style type="text/css">
     @page {
       size: A4;
-      margin: 0; /* Remove all page margins */
+      margin: 0.5cm; /* Safe margin that works across all printers */
     }
     
     body {
@@ -329,33 +329,32 @@ export const generateQuotationPdf = asyncHandler(
       font-size: 11pt;
       line-height: 1.5;
       color: #333;
-      margin: 0; /* Remove body margin */
-      padding: 0; /* Remove body padding */
+      margin: 0;
+      padding: 0;
     }
 
     .container {
       display: block;
-      width: 100%; /* Full width */
-      height: 100%; /* Full height */
+      width: 100%;
+      max-width: 100%;
     }
 
     .content {
-      margin-bottom: 25px;
-      padding: 0; /* Remove padding */
+      margin-bottom: 20px;
     }
 
     .header {
       display: flex;
       align-items: flex-start;
-      margin-bottom: 20px;
-      gap: 20px;
+      margin-bottom: 15px;
+      gap: 15px;
       page-break-after: avoid;
     }
 
     .logo {
-      height: 60px;
+      height: 55px;
       width: auto;
-      max-width: 200px;
+      max-width: 180px;
     }
 
     .header-content {
@@ -367,31 +366,30 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .document-title {
-      font-size: 18pt;
+      font-size: 16pt;
       font-weight: bold;
       margin: 0;
       color: #000;
-      padding-top: 5px;
     }
 
     .client-info-container {
       display: flex;
-      margin-bottom: 15px;
-      gap: 25px;
+      margin-bottom: 12px;
+      gap: 20px;
       page-break-after: avoid;
     }
 
     .client-info {
       flex: 1;
-      padding: 12px 15px;
+      padding: 10px 12px;
       border: 1px solid #ddd;
-      border-radius: 5px;
-      font-size: 10.5pt;
+      border-radius: 4px;
+      font-size: 10pt;
       background-color: #f8f9fa;
     }
 
     .client-info p {
-      margin: 8px 0;
+      margin: 6px 0;
       line-height: 1.4;
     }
 
@@ -401,13 +399,13 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .quotation-info {
-      width: 280px;
+      width: 250px;
     }
 
     .quotation-details {
       width: 100%;
       border-collapse: collapse;
-      font-size: 10.5pt;
+      font-size: 10pt;
     }
 
     .quotation-details tr:not(:last-child) {
@@ -415,7 +413,7 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .quotation-details td {
-      padding: 10px 12px;
+      padding: 8px 10px;
       vertical-align: top;
     }
 
@@ -426,8 +424,8 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .subject-section {
-      margin: 15px 0;
-      padding: 12px 15px;
+      margin: 12px 0;
+      padding: 10px 12px;
       background-color: #f8f9fa;
       border-radius: 4px;
       page-break-after: avoid;
@@ -435,32 +433,33 @@ export const generateQuotationPdf = asyncHandler(
 
     .subject-title {
       font-weight: bold;
-      font-size: 12pt;
-      margin-bottom: 8px;
+      font-size: 11pt;
+      margin-bottom: 6px;
       color: #2c3e50;
     }
 
     .subject-content {
-      font-size: 11pt;
+      font-size: 10.5pt;
       color: #333;
       font-weight: 500;
     }
 
     .section {
-      margin-bottom: 20px;
+      margin-bottom: 15px;
       page-break-inside: avoid;
     }
 
     .section-title {
-      font-size: 13pt;
+      font-size: 12pt;
       font-weight: bold;
-      padding: 8px 0;
-      margin: 15px 0 10px 0;
+      padding: 6px 0;
+      margin: 12px 0 8px 0;
       border-bottom: 2px solid #94d7f4;
       page-break-after: avoid;
       color: #2c3e50;
     }
 
+    /* Improved table handling for page breaks */
     .table-container {
       page-break-inside: avoid;
       overflow: hidden;
@@ -469,9 +468,10 @@ export const generateQuotationPdf = asyncHandler(
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 20px;
+      margin-bottom: 15px;
       page-break-inside: auto;
-      font-size: 10.5pt;
+      font-size: 10pt;
+      table-layout: fixed;
     }
 
     tr {
@@ -496,51 +496,62 @@ export const generateQuotationPdf = asyncHandler(
       background-color: #94d7f4;
       color: #000;
       font-weight: bold;
-      padding: 8px 10px;
+      padding: 6px 8px;
       text-align: left;
       border: 1px solid #ddd;
-      font-size: 10.5pt;
+      font-size: 10pt;
+      word-wrap: break-word;
     }
 
     td {
-      padding: 8px 10px;
+      padding: 6px 8px;
       border: 1px solid #ddd;
       vertical-align: top;
-      font-size: 10.5pt;
+      font-size: 10pt;
+      word-wrap: break-word;
     }
 
+    /* Optimized column widths for better fit */
+    .col-no { width: 5%; }
+    .col-desc { width: 30%; }
+    .col-uom { width: 8%; }
+    .col-image { width: 12%; }
+    .col-qty { width: 8%; }
+    .col-unit { width: 12%; }
+    .col-total { width: 10%; }
+
     td img {
-      max-height: 80px;
+      max-height: 60px;
       object-fit: contain;
       page-break-inside: avoid;
     }
 
     .amount-summary {
-      margin-top: 15px;
+      margin-top: 12px;
       width: 100%;
       text-align: right;
       page-break-before: avoid;
-      font-size: 11pt;
+      font-size: 10.5pt;
     }
 
     .amount-summary-row {
       display: flex;
       justify-content: flex-end;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
 
     .amount-label {
-      width: 180px;
+      width: 150px;
       font-weight: bold;
       text-align: right;
-      padding-right: 15px;
-      font-size: 10.5pt;
+      padding-right: 12px;
+      font-size: 10pt;
     }
 
     .amount-value {
-      width: 120px;
+      width: 100px;
       text-align: right;
-      font-size: 10.5pt;
+      font-size: 10pt;
     }
 
     .net-amount-row {
@@ -549,14 +560,14 @@ export const generateQuotationPdf = asyncHandler(
       background-color: #94d7f4;
       color: #000;
       font-weight: bold;
-      font-size: 12pt;
-      margin-top: 8px;
-      padding: 8px 0;
+      font-size: 11pt;
+      margin-top: 6px;
+      padding: 6px 0;
       border-top: 2px solid #333;
     }
 
     .terms-prepared-section {
-      margin-top: 20px;
+      margin-top: 15px;
       page-break-inside: avoid;
     }
 
@@ -564,14 +575,14 @@ export const generateQuotationPdf = asyncHandler(
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding-bottom: 8px;
+      padding-bottom: 6px;
       border-bottom: 2px solid #94d7f4;
-      margin-bottom: 15px;
+      margin-bottom: 12px;
       page-break-after: avoid;
     }
 
     .terms-title, .prepared-title {
-      font-size: 12pt;
+      font-size: 11pt;
       font-weight: bold;
       margin: 0;
       color: #2c3e50;
@@ -579,7 +590,7 @@ export const generateQuotationPdf = asyncHandler(
 
     .terms-prepared-content {
       display: flex;
-      gap: 25px;
+      gap: 20px;
       align-items: flex-start;
     }
 
@@ -588,67 +599,67 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .prepared-content {
-      width: 280px;
+      width: 250px;
       flex-shrink: 0;
       display: flex;
       flex-direction: column;
       align-items: flex-end;
-      font-size: 10.5pt;
+      font-size: 10pt;
     }
 
     .terms-box {
       border: 1px solid #000;
-      padding: 12px 15px;
+      padding: 10px 12px;
       width: 100%;
       box-sizing: border-box;
-      font-size: 10.5pt;
-      line-height: 1.6;
+      font-size: 10pt;
+      line-height: 1.5;
     }
 
     .terms-box ol {
       margin: 0;
-      padding-left: 20px;
+      padding-left: 18px;
     }
 
     .terms-box li {
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
 
     .prepared-by-name {
       font-weight: bold;
-      margin-top: 8px;
-      font-size: 11pt;
+      margin-top: 6px;
+      font-size: 10.5pt;
       color: #2c3e50;
     }
 
     .prepared-by-title {
-      font-size: 10pt;
+      font-size: 9.5pt;
       color: #555;
-      margin-top: 5px;
+      margin-top: 4px;
     }
 
     .tagline {
       text-align: center;
       font-weight: bold;
-      font-size: 13pt;
-      margin: 25px 0 15px 0;
+      font-size: 12pt;
+      margin: 20px 0 12px 0;
       color: #2c3e50;
       border-top: 2px solid #ddd;
-      padding-top: 15px;
+      padding-top: 12px;
       page-break-before: avoid;
     }
 
     .footer {
-      font-size: 9.5pt;
+      font-size: 9pt;
       color: #555;
       text-align: center;
-      margin-top: 15px;
+      margin-top: 12px;
       page-break-inside: avoid;
-      line-height: 1.6;
+      line-height: 1.5;
     }
 
     .footer p {
-      margin: 8px 0;
+      margin: 6px 0;
     }
 
     .footer strong {
@@ -664,14 +675,15 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     p {
-      margin: 8px 0;
-      line-height: 1.5;
+      margin: 6px 0;
+      line-height: 1.4;
     }
 
     strong {
       font-weight: 600;
     }
 
+    /* Print-specific optimizations */
     @media print {
       thead { 
         display: table-header-group; 
@@ -685,19 +697,34 @@ export const generateQuotationPdf = asyncHandler(
       }
 
       body {
-        font-size: 11pt;
-        margin: 0 !important;
-        padding: 0 !important;
+        font-size: 10pt;
+        margin: 0;
+        padding: 0;
       }
 
       .container {
-        margin: 0 !important;
-        padding: 0 !important;
+        margin: 0;
+        padding: 0;
+      }
+
+      /* Ensure tables break properly */
+      table {
+        page-break-inside: auto;
+      }
+      
+      tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
       }
     }
 
+    /* Force page break if content is too long */
+    .page-break {
+      page-break-before: always;
+    }
+
     .no-small-text {
-      font-size: 10pt !important;
+      font-size: 9pt !important;
     }
   </style>
 </head>
@@ -751,27 +778,27 @@ export const generateQuotationPdf = asyncHandler(
           <table>
             <thead>
               <tr>
-                <th width="5%">No.</th>
-                <th width="35%">Description</th>
-                <th width="10%">UOM</th>
-                <th width="15%">Image</th>
-                <th width="10%">Qty</th>
-                <th width="15%">Unit Price (AED)</th>
-                <th width="10%" class="text-right">Total (AED)</th>
+                <th class="col-no">No.</th>
+                <th class="col-desc">Description</th>
+                <th class="col-uom">UOM</th>
+                <th class="col-image">Image</th>
+                <th class="col-qty">Qty</th>
+                <th class="col-unit">Unit Price (AED)</th>
+                <th class="col-total text-right">Total (AED)</th>
               </tr>
             </thead>
             <tbody>
               ${quotation.items.map((item, index) => `
                 <tr>
-                  <td class="text-center">${index + 1}</td>
-                  <td>${item.description}</td>
-                  <td class="text-center">${item.uom || "NOS"}</td>
-                  <td class="text-center" style="padding: 8px;">
-                    ${item.image?.url ? `<img src="${item.image.url}" style="width: 100%; height: auto; max-height: 80px; object-fit: contain;"/>` : ""}
+                  <td class="text-center col-no">${index + 1}</td>
+                  <td class="col-desc">${item.description}</td>
+                  <td class="text-center col-uom">${item.uom || "NOS"}</td>
+                  <td class="text-center col-image" style="padding: 6px;">
+                    ${item.image?.url ? `<img src="${item.image.url}" style="width: 100%; height: auto; max-height: 60px; object-fit: contain;"/>` : ""}
                   </td>
-                  <td class="text-center">${item.quantity.toFixed(2)}</td>
-                  <td class="text-right">${item.unitPrice.toFixed(2)}</td>
-                  <td class="text-right">${item.totalPrice.toFixed(2)}</td>
+                  <td class="text-center col-qty">${item.quantity.toFixed(2)}</td>
+                  <td class="text-right col-unit">${item.unitPrice.toFixed(2)}</td>
+                  <td class="text-right col-total">${item.totalPrice.toFixed(2)}</td>
                 </tr>
               `).join("")}
             </tbody>
@@ -861,10 +888,10 @@ export const generateQuotationPdf = asyncHandler(
         format: "A4",
         printBackground: true,
         margin: {
-          top: "0",    // Remove all margins
-          right: "0",
-          bottom: "0",
-          left: "0",
+          top: "0.5cm",    // Safe margin that works across all printers
+          right: "0.5cm",
+          bottom: "0.5cm",
+          left: "0.5cm",
         },
         displayHeaderFooter: false,
         preferCSSPageSize: true,
