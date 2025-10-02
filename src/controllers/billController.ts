@@ -233,9 +233,13 @@ export const getBills = asyncHandler(async (req: Request, res: Response) => {
 
   // Date range filter (takes precedence over year/month)
   if (req.query.startDate && req.query.endDate) {
+    const startDate = new Date(req.query.startDate as string);
+    const endDate = new Date(req.query.endDate as string);
+    endDate.setHours(23, 59, 59, 999); // Include the entire end date
+    
     matchConditions.billDate = {
-      $gte: new Date(req.query.startDate as string),
-      $lte: new Date(req.query.endDate as string),
+      $gte: startDate,
+      $lte: endDate,
     };
   } else {
     // Year filter
@@ -245,8 +249,8 @@ export const getBills = asyncHandler(async (req: Request, res: Response) => {
         throw new ApiError(400, "Invalid year value");
       }
       matchConditions.billDate = {
-        $gte: new Date(year, 0, 1),
-        $lte: new Date(year + 1, 0, 1),
+        $gte: new Date(year, 0, 1), // Jan 1 of the year
+        $lt: new Date(year + 1, 0, 1), // Jan 1 of next year
       };
     }
 
@@ -257,22 +261,48 @@ export const getBills = asyncHandler(async (req: Request, res: Response) => {
         throw new ApiError(400, "Invalid month value (1-12)");
       }
 
+      // Determine the year to use
+      let year: number;
+      if (req.query.year) {
+        year = parseInt(req.query.year as string);
+      } else {
+        year = new Date().getFullYear();
+      }
+
+      // Create proper date range for the month
+      const startDate = new Date(year, month - 1, 1); // First day of month
+      const endDate = new Date(year, month, 0); // Last day of month
+      endDate.setHours(23, 59, 59, 999); // Include entire last day
+
       if (!matchConditions.billDate) {
-        const currentYear = new Date().getFullYear();
+        // If no date filter exists, create new one
         matchConditions.billDate = {
-          $gte: new Date(currentYear, month - 1, 1),
-          $lt: new Date(currentYear, month, 1),
+          $gte: startDate,
+          $lte: endDate,
         };
       } else {
-        const startDate = new Date(matchConditions.billDate.$gte);
-        startDate.setMonth(month - 1);
-        startDate.setDate(1);
+        // If year filter exists, combine with month
+        const yearStart = new Date(matchConditions.billDate.$gte);
+        const yearEnd = new Date(matchConditions.billDate.$lt);
+        
+        // Set the specific month within the year range
+        const monthStart = new Date(year, month - 1, 1);
+        const monthEnd = new Date(year, month, 0);
+        monthEnd.setHours(23, 59, 59, 999);
 
-        const endDate = new Date(startDate);
-        endDate.setMonth(month);
-
-        matchConditions.billDate.$gte = startDate;
-        matchConditions.billDate.$lte = endDate;
+        // Ensure the month is within the selected year
+        if (monthStart >= yearStart && monthEnd < yearEnd) {
+          matchConditions.billDate = {
+            $gte: monthStart,
+            $lte: monthEnd,
+          };
+        } else {
+          // If month is outside year range, return empty results
+          matchConditions.billDate = {
+            $gte: new Date(3000, 0, 1), // Far future date
+            $lt: new Date(3000, 0, 1),   // Same date = no results
+          };
+        }
       }
     }
   }
@@ -302,8 +332,15 @@ export const getBills = asyncHandler(async (req: Request, res: Response) => {
   }
 
   // Build aggregation pipeline
-  const pipeline: any[] = [
-    // Lookup related collections
+  const pipeline: any[] = [];
+
+  // Add match conditions first for better performance
+  if (Object.keys(matchConditions).length > 0) {
+    pipeline.push({ $match: matchConditions });
+  }
+
+  // Lookup related collections
+  pipeline.push(
     {
       $lookup: {
         from: "shops",
@@ -343,8 +380,8 @@ export const getBills = asyncHandler(async (req: Request, res: Response) => {
         foreignField: "_id",
         as: "createdByData",
       },
-    },
-  ];
+    }
+  );
 
   // Add search filter if provided
   if (req.query.search) {
@@ -378,11 +415,6 @@ export const getBills = asyncHandler(async (req: Request, res: Response) => {
         ],
       },
     });
-  }
-
-  // Add other match conditions
-  if (Object.keys(matchConditions).length > 0) {
-    pipeline.unshift({ $match: matchConditions });
   }
 
   // Add facet stage for pagination and total count
@@ -522,7 +554,6 @@ export const getBills = asyncHandler(async (req: Request, res: Response) => {
     )
   );
 });
-
 // Get a single bill by ID
 export const getBill = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
