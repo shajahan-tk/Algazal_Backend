@@ -321,7 +321,7 @@ export const generateQuotationPdf = asyncHandler(
   <style type="text/css">
     @page {
       size: A4;
-      margin: 0.5cm; /* Safe margin that works across all printers */
+      margin: 0.5cm;
     }
     
     body {
@@ -459,10 +459,10 @@ export const generateQuotationPdf = asyncHandler(
       color: #2c3e50;
     }
 
-    /* Improved table handling for page breaks */
+    /* Critical fix for table page breaks */
     .table-container {
-      page-break-inside: avoid;
-      overflow: hidden;
+      page-break-inside: auto;
+      overflow: visible;
     }
 
     table {
@@ -474,17 +474,18 @@ export const generateQuotationPdf = asyncHandler(
       table-layout: fixed;
     }
 
-    tr {
-      page-break-inside: avoid;
-      page-break-after: auto;
-    }
-
     thead {
       display: table-header-group;
     }
 
     tbody {
       display: table-row-group;
+    }
+
+    /* Allow rows to break across pages but keep cells intact */
+    tr {
+      page-break-inside: avoid;
+      page-break-after: auto;
     }
 
     th, td {
@@ -692,8 +693,25 @@ export const generateQuotationPdf = asyncHandler(
         display: table-footer-group; 
       }
       
+      /* Critical fix: Allow tables to break naturally across pages */
+      table {
+        page-break-inside: auto;
+      }
+      
       tr {
         break-inside: avoid;
+        break-after: auto;
+      }
+
+      /* Prevent the subject section from breaking awkwardly */
+      .subject-section {
+        page-break-after: avoid;
+        page-break-inside: avoid;
+      }
+
+      /* Ensure items section starts on new page if it doesn't fit */
+      .items-section {
+        page-break-before: auto;
       }
 
       body {
@@ -706,21 +724,17 @@ export const generateQuotationPdf = asyncHandler(
         margin: 0;
         padding: 0;
       }
-
-      /* Ensure tables break properly */
-      table {
-        page-break-inside: auto;
-      }
-      
-      tr {
-        page-break-inside: avoid;
-        page-break-after: auto;
-      }
     }
 
-    /* Force page break if content is too long */
+    /* Force page break if needed */
     .page-break {
       page-break-before: always;
+    }
+
+    /* Prevent header sections from breaking across pages */
+    .header-section {
+      page-break-after: avoid;
+      page-break-inside: avoid;
     }
 
     .no-small-text {
@@ -731,48 +745,52 @@ export const generateQuotationPdf = asyncHandler(
 <body>
   <div class="container">
     <div class="content">
-      <div class="header">
-        <img class="logo" src="https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/sample-spmc/logo+(1).png" alt="Company Logo">
-        <div class="header-content">
-          <div class="document-title">QUOTE</div>
+      <!-- Header Section - Keep together -->
+      <div class="header-section">
+        <div class="header">
+          <img class="logo" src="https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/sample-spmc/logo+(1).png" alt="Company Logo">
+          <div class="header-content">
+            <div class="document-title">QUOTE</div>
+          </div>
+        </div>
+
+        <div class="client-info-container">
+          <div class="client-info">
+            <p><strong>CLIENT:</strong> ${client.clientName || "N/A"}</p>
+            <p><strong>ADDRESS:</strong> ${client.clientAddress || "N/A"}</p>
+            <p><strong>CONTACT:</strong> ${client.mobileNumber || client.telephoneNumber || "N/A"}</p>
+            <p><strong>EMAIL:</strong> ${client.email || "N/A"}</p>
+            <p><strong>SITE:</strong> ${site}</p>
+            <p><strong>ATTENTION:</strong> ${project.attention || "N/A"}</p>
+          </div>
+
+          <div class="quotation-info">
+            <table class="quotation-details">
+              <tr>
+                <td>Quotation #:</td>
+                <td>${quotation.quotationNumber}</td>
+              </tr>
+              <tr>
+                <td>Date:</td>
+                <td>${formatDate(quotation.date)}</td>
+              </tr>
+              <tr>
+                <td>Valid Until:</td>
+                <td>${formatDate(quotation.validUntil)} (${getDaysRemaining(quotation.validUntil)})</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+
+        <!-- Subject Section - Keep with header -->
+        <div class="subject-section">
+          <div class="subject-title">SUBJECT</div>
+          <div class="subject-content">${project.projectName || "N/A"}</div>
         </div>
       </div>
 
-      <div class="client-info-container">
-        <div class="client-info">
-          <p><strong>CLIENT:</strong> ${client.clientName || "N/A"}</p>
-          <p><strong>ADDRESS:</strong> ${client.clientAddress || "N/A"}</p>
-          <p><strong>CONTACT:</strong> ${client.mobileNumber || client.telephoneNumber || "N/A"}</p>
-          <p><strong>EMAIL:</strong> ${client.email || "N/A"}</p>
-          <p><strong>SITE:</strong> ${site}</p>
-          <p><strong>ATTENTION:</strong> ${project.attention || "N/A"}</p>
-        </div>
-
-        <div class="quotation-info">
-          <table class="quotation-details">
-            <tr>
-              <td>Quotation #:</td>
-              <td>${quotation.quotationNumber}</td>
-            </tr>
-            <tr>
-              <td>Date:</td>
-              <td>${formatDate(quotation.date)}</td>
-            </tr>
-            <tr>
-              <td>Valid Until:</td>
-              <td>${formatDate(quotation.validUntil)} (${getDaysRemaining(quotation.validUntil)})</td>
-            </tr>
-          </table>
-        </div>
-      </div>
-
-      <!-- Subject Section -->
-      <div class="subject-section">
-        <div class="subject-title">SUBJECT</div>
-        <div class="subject-content">${project.projectName || "N/A"}</div>
-      </div>
-
-      <div class="section">
+      <!-- Items Section - Allow to break naturally across pages -->
+      <div class="section items-section">
         <div class="section-title">ITEMS</div>
         <div class="table-container">
           <table>
@@ -888,7 +906,7 @@ export const generateQuotationPdf = asyncHandler(
         format: "A4",
         printBackground: true,
         margin: {
-          top: "0.5cm",    // Safe margin that works across all printers
+          top: "0.5cm",
           right: "0.5cm",
           bottom: "0.5cm",
           left: "0.5cm",
