@@ -13,8 +13,8 @@ export const getWorkProgressTemplate = ({
   projectName = "your project",
   progress = 0,
   progressDetails = "",
-  contactEmail = "propertymanagement@alhamra.ae",
-  logoUrl = "https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/alghazal/logo+alghazal.png",
+  contactEmail = "info@alghazalgroup.com",
+  logoUrl = "https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg",
   actionUrl = "#"
 }: WorkProgressTemplateParams = {}): string => {
   return `

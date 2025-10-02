@@ -9,8 +9,8 @@ export interface EmailTemplateParams {
 export const getEmailTemplate = ({
   userName = "Valued Customer",
   actionUrl = "#",
-  contactEmail = "propertymanagement@alhamra.ae",
-  logoUrl = "https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/alghazal/logo+alghazal.png",
+  contactEmail = "info@alghazalgroup.com",
+  logoUrl = "https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg",
   projectName = "the project",
 }: EmailTemplateParams = {}): string => {
   return `

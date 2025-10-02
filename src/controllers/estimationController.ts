@@ -15,6 +15,8 @@ import { EstimationTemplateParams } from "../template/estimationCheckedEmailTemp
 import { FRONTEND_URL } from "../config/constant";
 import { Quotation } from "../models/quotationModel";
 
+
+
 export const createEstimation = asyncHandler(
   async (req: Request, res: Response) => {
     const {
@@ -27,6 +29,7 @@ export const createEstimation = asyncHandler(
       labour,
       termsAndConditions,
       commissionAmount,
+      quotationAmount,
       subject,
     } = req.body;
 
@@ -121,6 +124,7 @@ export const createEstimation = asyncHandler(
       labour: labour || [],
       termsAndConditions: termsAndConditions || [],
       commissionAmount,
+      quotationAmount,
       preparedBy: req.user?.userId,
       subject: subject,
     });
@@ -247,9 +251,9 @@ export const approveEstimation = asyncHandler(
       const templateParams: EstimationTemplateParams = {
         userName: "Team",
         actionUrl: `${FRONTEND_URL}/app/project-view/${estimation.project._id}`,
-        contactEmail: "info@alghzal.ae",
+        contactEmail: "info@alghazalgroup.com",
         logoUrl:
-          "https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/alghazal/logo+alghazal.png",
+          "https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg",
         estimationNumber: estimation.estimationNumber,
         checkerName: approver
           ? `${approver.firstName} ${approver.lastName}`
@@ -260,7 +264,7 @@ export const approveEstimation = asyncHandler(
 
       // Send email to all recipients
       await mailer.sendEmail({
-        to: process.env.NOTIFICATION_INBOX || "notifications@company.com",
+        to: process.env.NOTIFICATION_INBOX || "info@alghazalgroup.com",
         bcc: uniqueRecipients.map((r) => r.email).join(","),
         subject: `Estimation ${isApproved ? "Approved" : "Rejected"}: ${
           estimation.estimationNumber
@@ -359,9 +363,9 @@ export const markAsChecked = asyncHandler(
         const templateParams: EstimationTemplateParams = {
           userName: "Team",
           actionUrl: `${FRONTEND_URL}/app/project-view/${estimation.project._id}`,
-          contactEmail: "info@alghazal.ae",
+          contactEmail: "info@alghazalgroup.com",
           logoUrl:
-            "https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/alghazal/logo+alghazal.png",
+            "https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg",
           estimationNumber: estimation.estimationNumber,
           checkerName: checkedByUser
             ? `${checkedByUser.firstName} ${checkedByUser.lastName}`
@@ -372,7 +376,7 @@ export const markAsChecked = asyncHandler(
 
         // Send single email to all admins (BCC to hide recipient list)
         await mailer.sendEmail({
-          to: process.env.NOTIFICATION_INBOX || "notifications@company.com",
+          to: process.env.NOTIFICATION_INBOX || "info@alghazalgroup.com",
           bcc: admins.map((admin) => admin.email).join(","),
           subject: `Estimation Checked: ${estimation.estimationNumber}`,
           templateParams,
@@ -498,6 +502,7 @@ export const getEstimationDetails = asyncHandler(
       .json(new ApiResponse(200, estimation, "Estimation details retrieved"));
   }
 );
+
 
 export const updateEstimation = asyncHandler(
   async (req: Request, res: Response) => {
@@ -664,7 +669,6 @@ export const generateEstimationPdf = asyncHandler(
     if (!estimation) {
       throw new ApiError(404, "Estimation not found");
     }
-    const quotation = await Quotation.findOne({ estimation: estimation._id });
 
     // Safe data access functions
     const safeGet = (value: any, defaultValue = "N/A") => {
@@ -714,13 +718,24 @@ export const generateEstimationPdf = asyncHandler(
     ) || 0;
     
     const estimatedAmount = materialsTotal + labourTotal + termsTotal;
-    const netAmount = safeGetNumber(quotation?.netAmount);
+    const netAmount = safeGetNumber(estimation?.quotationAmount);
     const commissionAmount = safeGetNumber(estimation?.commissionAmount);
 
-    let profit = netAmount - estimatedAmount - commissionAmount;
+    let profit = estimation.profit || 0;
     if (profit < 0) {
       profit = 0;
     }
+
+    // Calculate profit/loss percentage
+    const calculateProfitPercentage = () => {
+      if (estimatedAmount === 0) return 0;
+      const percentage = (profit / estimatedAmount) * 100;
+      return parseFloat(percentage.toFixed(2));
+    };
+
+    const profitPercentage = calculateProfitPercentage();
+    const isProfit = profit > 0;
+    const isLoss = profit < 0;
 
     // Safe access to nested properties
     const clientName = estimation.project?.client?.clientName || "N/A";
@@ -736,7 +751,7 @@ export const generateEstimationPdf = asyncHandler(
       ? `${clientMobile}${clientMobile && clientTelephone ? ' / ' : ''}${clientTelephone}`
       : "N/A";
 
-    // Prepare HTML content
+    // Prepare HTML content - keeping the original UI structure
     let htmlContent = `
     <!DOCTYPE html>
     <html>
@@ -755,8 +770,9 @@ export const generateEstimationPdf = asyncHandler(
           font-family: 'Inter', sans-serif;
           color: #333;
           background-color: #fff;
-          line-height: 1.5;
-          padding: 20px;
+          line-height: 1.6;
+          padding: 15px;
+          font-size: 11pt;
         }
         
         .container {
@@ -782,7 +798,7 @@ export const generateEstimationPdf = asyncHandler(
         }
         
         .logo {
-          max-width: 180px;
+          max-width: 200px;
           height: auto;
         }
         
@@ -791,13 +807,14 @@ export const generateEstimationPdf = asyncHandler(
         }
         
         .document-title {
-          font-size: 28px;
+          font-size: 32px;
           font-weight: 700;
-          margin-bottom: 5px;
+          margin-bottom: 8px;
+          letter-spacing: 0.5px;
         }
         
         .document-number {
-          font-size: 16px;
+          font-size: 18px;
           font-weight: 500;
           opacity: 0.9;
         }
@@ -807,15 +824,15 @@ export const generateEstimationPdf = asyncHandler(
         }
         
         .section {
-          margin-bottom: 30px;
+          margin-bottom: 35px;
         }
         
         .section-title {
-          font-size: 18px;
+          font-size: 20px;
           font-weight: 600;
           color: #0a3041;
-          padding-bottom: 10px;
-          border-bottom: 2px solid #0a3041;
+          padding-bottom: 12px;
+          border-bottom: 2px solid #94d7f4;
           margin-bottom: 20px;
         }
         
@@ -823,32 +840,33 @@ export const generateEstimationPdf = asyncHandler(
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 30px;
-          margin-bottom: 30px;
+          margin-bottom: 35px;
         }
         
         .info-card {
           background-color: #f9fafb;
           border-radius: 6px;
           padding: 20px;
-          border-left: 4px solid #0a3041;
+          border-left: 4px solid #94d7f4;
         }
         
         .info-card h3 {
-          font-size: 16px;
+          font-size: 17px;
           font-weight: 600;
           color: #0a3041;
           margin-bottom: 15px;
         }
         
         .info-item {
-          margin-bottom: 8px;
+          margin-bottom: 10px;
           display: flex;
+          font-size: 11pt;
         }
         
         .info-label {
           font-weight: 500;
           min-width: 120px;
-          color: #666;
+          color: #555;
         }
         
         .info-value {
@@ -859,21 +877,24 @@ export const generateEstimationPdf = asyncHandler(
         table {
           width: 100%;
           border-collapse: collapse;
-          margin-bottom: 20px;
+          margin-bottom: 25px;
+          font-size: 10.5pt;
         }
         
         th {
-          background-color: #f3f4f6;
+          background-color: #94d7f4;
           text-align: left;
-          padding: 12px 15px;
+          padding: 14px 15px;
           font-weight: 600;
-          color: #0a3041;
+          color: #000;
           border-bottom: 2px solid #e5e7eb;
+          font-size: 11pt;
         }
         
         td {
           padding: 12px 15px;
           border-bottom: 1px solid #e5e7eb;
+          font-size: 10.5pt;
         }
         
         tr:last-child td {
@@ -891,10 +912,11 @@ export const generateEstimationPdf = asyncHandler(
         .summary-table {
           width: 60%;
           margin-left: auto;
+          font-size: 11pt;
         }
         
         .summary-table td {
-          padding: 10px 15px;
+          padding: 12px 15px;
         }
         
         .summary-table tr:last-child td {
@@ -904,21 +926,41 @@ export const generateEstimationPdf = asyncHandler(
         .total-row {
           font-weight: 600;
           background-color: #f8f9fa;
+          font-size: 11pt;
         }
         
         .profit-row {
           font-weight: 700;
           background-color: #e8f5e9;
           color: #2e7d32;
+          font-size: 12pt;
+        }
+        
+        .profit-percentage-row {
+          font-weight: 700;
+          background-color: ${isProfit ? '#e8f5e9' : '#ffebee'};
+          color: ${isProfit ? '#2e7d32' : '#c62828'};
+          font-size: 12pt;
+        }
+        
+        .profit-percentage-badge {
+          display: inline-block;
+          padding: 2px 8px;
+          border-radius: 12px;
+          font-size: 10px;
+          font-weight: 600;
+          margin-left: 8px;
+          background: ${isProfit ? '#4caf50' : '#f44336'};
+          color: white;
         }
         
         .signatures {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
-          gap: 20px;
+          gap: 25px;
           margin-top: 40px;
           padding-top: 30px;
-          border-top: 1px dashed #ccc;
+          border-top: 2px dashed #ccc;
         }
         
         .signature-box {
@@ -927,46 +969,95 @@ export const generateEstimationPdf = asyncHandler(
         
         .signature-line {
           height: 1px;
-          background-color: #ccc;
-          margin: 40px 0 10px;
+          background-color: #666;
+          margin: 40px 0 12px;
         }
         
         .signature-name {
           font-weight: 600;
           color: #0a3041;
+          font-size: 12pt;
+          margin-top: 5px;
         }
         
         .signature-role {
-          font-size: 14px;
+          font-size: 11pt;
+          color: #555;
+          font-weight: 500;
+        }
+        
+        .signature-date {
+          font-size: 10px;
           color: #666;
+          margin-top: 5px;
+          font-weight: 400;
         }
         
         .footer {
           margin-top: 40px;
           text-align: center;
-          font-size: 14px;
-          color: #666;
+          font-size: 11pt;
+          color: #555;
           padding: 20px;
-          border-top: 1px solid #e5e7eb;
+          border-top: 2px solid #e5e7eb;
+          background-color: #f8f9fa;
         }
         
         .company-info {
           margin-top: 10px;
-          font-size: 13px;
+          font-size: 11pt;
+          font-weight: 600;
+          color: #0a3041;
         }
         
         .notes {
           background-color: #f9fafb;
-          padding: 15px;
+          padding: 18px;
           border-radius: 6px;
           margin-top: 30px;
-          font-size: 14px;
+          font-size: 10.5pt;
+          border-left: 4px solid #94d7f4;
         }
         
         .notes-title {
           font-weight: 600;
           margin-bottom: 10px;
           color: #0a3041;
+          font-size: 11pt;
+        }
+
+        @media (max-width: 768px) {
+          .client-info {
+            grid-template-columns: 1fr;
+            gap: 20px;
+          }
+          
+          .signatures {
+            grid-template-columns: 1fr;
+            gap: 20px;
+          }
+          
+          .summary-table {
+            width: 100%;
+          }
+        }
+
+        tbody tr:hover {
+          background-color: #f5f5f5;
+        }
+
+        .empty-state {
+          text-align: center;
+          color: #666;
+          font-style: italic;
+          padding: 20px;
+          background-color: #f9f9f9;
+          border-radius: 4px;
+        }
+
+        .amount {
+          font-family: 'Courier New', monospace;
+          font-weight: 500;
         }
       </style>
     </head>
@@ -1048,16 +1139,16 @@ export const generateEstimationPdf = asyncHandler(
                   <tr>
                     <td>${safeGet(material.description)}</td>
                     <td>${safeGet(material.uom)}</td>
-                    <td class="text-right">${safeGetNumber(material.quantity).toFixed(2)}</td>
-                    <td class="text-right">${safeGetNumber(material.unitPrice).toFixed(2)}</td>
-                    <td class="text-right">${safeGetNumber(material.total).toFixed(2)}</td>
+                    <td class="text-right amount">${safeGetNumber(material.quantity).toFixed(2)}</td>
+                    <td class="text-right amount">${safeGetNumber(material.unitPrice).toFixed(2)}</td>
+                    <td class="text-right amount">${safeGetNumber(material.total).toFixed(2)}</td>
                   </tr>
                 `).join("")
-                  : `<tr><td colspan="5" class="text-center">No materials listed</td></tr>`
+                  : `<tr><td colspan="5" class="empty-state">No materials listed</td></tr>`
                 }
                 <tr class="total-row">
-                  <td colspan="4" class="text-right">TOTAL MATERIALS</td>
-                  <td class="text-right">${materialsTotal.toFixed(2)}</td>
+                  <td colspan="4" class="text-right"><strong>TOTAL MATERIALS</strong></td>
+                  <td class="text-right amount"><strong>${materialsTotal.toFixed(2)}</strong></td>
                 </tr>
               </tbody>
             </table>
@@ -1080,16 +1171,16 @@ export const generateEstimationPdf = asyncHandler(
                     (labour) => `
                   <tr>
                     <td>${safeGet(labour.designation)}</td>
-                    <td class="text-right">${safeGetNumber(labour.days).toFixed(2)}</td>
-                    <td class="text-right">${safeGetNumber(labour.price).toFixed(2)}</td>
-                    <td class="text-right">${safeGetNumber(labour.total).toFixed(2)}</td>
+                    <td class="text-right amount">${safeGetNumber(labour.days).toFixed(2)}</td>
+                    <td class="text-right amount">${safeGetNumber(labour.price).toFixed(2)}</td>
+                    <td class="text-right amount">${safeGetNumber(labour.total).toFixed(2)}</td>
                   </tr>
                 `).join("")
-                  : `<tr><td colspan="4" class="text-center">No labor charges listed</td></tr>`
+                  : `<tr><td colspan="4" class="empty-state">No labor charges listed</td></tr>`
                 }
                 <tr class="total-row">
-                  <td colspan="3" class="text-right">TOTAL LABOR</td>
-                  <td class="text-right">${labourTotal.toFixed(2)}</td>
+                  <td colspan="3" class="text-right"><strong>TOTAL LABOR</strong></td>
+                  <td class="text-right amount"><strong>${labourTotal.toFixed(2)}</strong></td>
                 </tr>
               </tbody>
             </table>
@@ -1112,39 +1203,46 @@ export const generateEstimationPdf = asyncHandler(
                     (term) => `
                   <tr>
                     <td>${safeGet(term.description)}</td>
-                    <td class="text-right">${safeGetNumber(term.quantity).toFixed(2)}</td>
-                    <td class="text-right">${safeGetNumber(term.unitPrice).toFixed(2)}</td>
-                    <td class="text-right">${safeGetNumber(term.total).toFixed(2)}</td>
+                    <td class="text-right amount">${safeGetNumber(term.quantity).toFixed(2)}</td>
+                    <td class="text-right amount">${safeGetNumber(term.unitPrice).toFixed(2)}</td>
+                    <td class="text-right amount">${safeGetNumber(term.total).toFixed(2)}</td>
                   </tr>
                 `).join("")
-                  : `<tr><td colspan="4" class="text-center">No miscellaneous charges listed</td></tr>`
+                  : `<tr><td colspan="4" class="empty-state">No miscellaneous charges listed</td></tr>`
                 }
                 <tr class="total-row">
-                  <td colspan="3" class="text-right">TOTAL MISCELLANEOUS</td>
-                  <td class="text-right">${termsTotal.toFixed(2)}</td>
+                  <td colspan="3" class="text-right"><strong>TOTAL MISCELLANEOUS</strong></td>
+                  <td class="text-right amount"><strong>${termsTotal.toFixed(2)}</strong></td>
                 </tr>
               </tbody>
             </table>
           </div>
           
           <div class="section">
-            <h2 class="section-title">SUMMARY</h2>
+            <h2 class="section-title">FINANCIAL SUMMARY</h2>
             <table class="summary-table">
               <tr class="total-row">
-                <td>Estimated Amount</td>
-                <td class="text-right">${estimatedAmount.toFixed(2)}</td>
+                <td><strong>Estimated Amount</strong></td>
+                <td class="text-right amount"><strong>${estimatedAmount.toFixed(2)}</strong></td>
               </tr>
               <tr>
                 <td>Quotation Amount</td>
-                <td class="text-right">${netAmount.toFixed(2)}</td>
+                <td class="text-right amount">${netAmount.toFixed(2)}</td>
               </tr>
               <tr>
                 <td>Commission Amount</td>
-                <td class="text-right">${commissionAmount.toFixed(2)}</td>
+                <td class="text-right amount">${commissionAmount.toFixed(2)}</td>
               </tr>
               <tr class="profit-row">
-                <td>PROFIT</td>
-                <td class="text-right">${profit.toFixed(2)}</td>
+                <td><strong>PROFIT</strong></td>
+                <td class="text-right amount"><strong>${profit.toFixed(2)}</strong></td>
+              </tr>
+              <tr class="profit-percentage-row">
+                <td><strong>${isProfit ? 'PROFIT' : 'LOSS'} PERCENTAGE</strong></td>
+                <td class="text-right amount">
+                  <strong>${profitPercentage}%</strong>
+                  <span class="profit-percentage-badge">${isProfit ? 'PROFIT' : 'LOSS'}</span>
+                </td>
               </tr>
             </table>
           </div>
@@ -1154,16 +1252,19 @@ export const generateEstimationPdf = asyncHandler(
               <div class="signature-role">Prepared By</div>
               <div class="signature-line"></div>
               <div class="signature-name">${preparedBy?.firstName || "N/A"}</div>
+              <div class="signature-date">${safeGetDate(new Date())}</div>
             </div>
             <div class="signature-box">
               <div class="signature-role">Checked By</div>
               <div class="signature-line"></div>
               <div class="signature-name">${checkedBy?.firstName || "N/A"}</div>
+              <div class="signature-date">${safeGetDate(new Date())}</div>
             </div>
             <div class="signature-box">
               <div class="signature-role">Approved By</div>
               <div class="signature-line"></div>
               <div class="signature-name">${approvedBy?.firstName || "N/A"}</div>
+              <div class="signature-date">${safeGetDate(new Date())}</div>
             </div>
           </div>
           
@@ -1187,7 +1288,7 @@ export const generateEstimationPdf = asyncHandler(
     // Generate PDF
     const browser = await puppeteer.launch({
       headless: "shell",
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--font-render-hinting=none"],
     });
 
     try {
@@ -1210,12 +1311,12 @@ export const generateEstimationPdf = asyncHandler(
       const pdfBuffer = await page.pdf({
         format: "A4",
         printBackground: true,
-        margin: {
-          top: "0.1in",
-          right: "0.1in",
-          bottom: "0.1in",
-          left: "0.1in",
-        },
+        // margin: {
+        //   top: "0.1in",
+        //   right: "0.1in",
+        //   bottom: "0.1in",
+        //   left: "0.1in",
+        // },
         preferCSSPageSize: true,
       });
 

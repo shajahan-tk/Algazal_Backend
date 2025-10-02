@@ -10,8 +10,8 @@ export interface EstimationTemplateParams extends EmailTemplateParams {
 export const getEstimationCheckedTemplate = ({
   userName = "Valued Team Member",
   actionUrl = "#",
-  contactEmail = "propertymanagement@alhamra.ae",
-  logoUrl = "https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/alghazal/logo+alghazal.png",
+  contactEmail = "info@alghazalgroup.com",
+  logoUrl = "https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg",
   estimationNumber = "",
   checkerName = "a team member",
   projectName = "the project",

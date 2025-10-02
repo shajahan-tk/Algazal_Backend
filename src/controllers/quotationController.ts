@@ -326,8 +326,8 @@ export const generateQuotationPdf = asyncHandler(
     
     body {
       font-family: 'Arial', sans-serif;
-      font-size: 10pt;
-      line-height: 1.4;
+      font-size: 11pt; /* Increased from 10pt */
+      line-height: 1.5; /* Improved line height */
       color: #333;
       margin: 0;
       padding: 0;
@@ -338,20 +338,21 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .content {
-      margin-bottom: 20px;
+      margin-bottom: 25px;
     }
 
     .header {
       display: flex;
       align-items: flex-start;
-      margin-bottom: 15px;
-      gap: 15px;
+      margin-bottom: 20px; /* Increased spacing */
+      gap: 20px;
       page-break-after: avoid;
     }
 
     .logo {
-      height: 50px;
+      height: 60px; /* Slightly larger logo */
       width: auto;
+      max-width: 200px;
     }
 
     .header-content {
@@ -363,34 +364,47 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .document-title {
-      font-size: 14pt;
+      font-size: 18pt; /* Larger and more prominent */
       font-weight: bold;
       margin: 0;
       color: #000;
-      padding-top: 8px;
+      padding-top: 5px;
     }
 
     .client-info-container {
       display: flex;
-      margin-bottom: 10px;
-      gap: 20px;
+      margin-bottom: 15px;
+      gap: 25px;
       page-break-after: avoid;
     }
 
     .client-info {
       flex: 1;
-      padding: 10px;
-      border: 1px solid #eee;
-      border-radius: 4px;
+      padding: 12px 15px; /* More padding */
+      border: 1px solid #ddd; /* Darker border */
+      border-radius: 5px;
+      font-size: 10.5pt; /* Slightly larger */
+      background-color: #f8f9fa; /* Light background */
+    }
+
+    .client-info p {
+      margin: 8px 0; /* Better spacing */
+      line-height: 1.4;
+    }
+
+    .client-info strong {
+      font-weight: 600;
+      color: #2c3e50;
     }
 
     .quotation-info {
-      width: 250px;
+      width: 280px; /* Slightly wider */
     }
 
     .quotation-details {
       width: 100%;
       border-collapse: collapse;
+      font-size: 10.5pt; /* Consistent font size */
     }
 
     .quotation-details tr:not(:last-child) {
@@ -398,68 +412,51 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .quotation-details td {
-      padding: 8px 10px;
+      padding: 10px 12px; /* More padding */
       vertical-align: top;
     }
 
     .quotation-details td:first-child {
       font-weight: bold;
       width: 40%;
-      color: #555;
-    }
-
-    .attention-section {
-      margin: 10px 0;
-      padding: 10px;
-      background-color: #fff3cd;
-      border-left: 4px solid #ffc107;
-      page-break-after: avoid;
-    }
-
-    .attention-title {
-      font-weight: bold;
-      font-size: 11pt;
-      margin-bottom: 5px;
-      color: #856404;
-    }
-
-    .attention-content {
-      font-size: 10pt;
-      color: #856404;
+      color: #2c3e50; /* Darker color */
     }
 
     .subject-section {
-      margin: 10px 0;
-      padding: 10px;
+      margin: 15px 0;
+      padding: 12px 15px;
       background-color: #f8f9fa;
       border-left: 4px solid #94d7f4;
+      border-radius: 4px;
       page-break-after: avoid;
     }
 
     .subject-title {
       font-weight: bold;
-      font-size: 11pt;
-      margin-bottom: 5px;
-      color: #333;
+      font-size: 12pt; /* Larger */
+      margin-bottom: 8px;
+      color: #2c3e50;
     }
 
     .subject-content {
-      font-size: 10pt;
-      color: #555;
+      font-size: 11pt; /* Larger */
+      color: #333;
+      font-weight: 500;
     }
 
     .section {
-      margin-bottom: 15px;
+      margin-bottom: 20px;
       page-break-inside: avoid;
     }
 
     .section-title {
-      font-size: 11pt;
+      font-size: 13pt; /* Larger section titles */
       font-weight: bold;
-      padding: 5px 0;
-      margin: 10px 0 5px 0;
-      border-bottom: 1px solid #ddd;
+      padding: 8px 0;
+      margin: 15px 0 10px 0;
+      border-bottom: 2px solid #94d7f4; /* More prominent border */
       page-break-after: avoid;
+      color: #2c3e50;
     }
 
     /* Critical fixes for table page breaks */
@@ -471,8 +468,9 @@ export const generateQuotationPdf = asyncHandler(
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 15px;
+      margin-bottom: 20px;
       page-break-inside: auto;
+      font-size: 10.5pt; /* Better table font size */
     }
 
     tr {
@@ -497,15 +495,17 @@ export const generateQuotationPdf = asyncHandler(
       background-color: #94d7f4;
       color: #000;
       font-weight: bold;
-      padding: 6px 8px;
+      padding: 8px 10px; /* More padding */
       text-align: left;
       border: 1px solid #ddd;
+      font-size: 10.5pt;
     }
 
     td {
-      padding: 6px 8px;
+      padding: 8px 10px; /* More padding */
       border: 1px solid #ddd;
       vertical-align: top;
+      font-size: 10.5pt;
     }
 
     /* Ensure images don't cause page breaks */
@@ -516,28 +516,31 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .amount-summary {
-      margin-top: 10px;
+      margin-top: 15px;
       width: 100%;
       text-align: right;
       page-break-before: avoid;
+      font-size: 11pt;
     }
 
     .amount-summary-row {
       display: flex;
       justify-content: flex-end;
-      margin-bottom: 5px;
+      margin-bottom: 8px;
     }
 
     .amount-label {
-      width: 150px;
+      width: 180px; /* Slightly wider */
       font-weight: bold;
       text-align: right;
-      padding-right: 10px;
+      padding-right: 15px;
+      font-size: 10.5pt;
     }
 
     .amount-value {
-      width: 100px;
+      width: 120px; /* Slightly wider */
       text-align: right;
+      font-size: 10.5pt;
     }
 
     .net-amount-row {
@@ -546,14 +549,14 @@ export const generateQuotationPdf = asyncHandler(
       background-color: #94d7f4;
       color: #000;
       font-weight: bold;
-      font-size: 11pt;
-      margin-top: 5px;
-      padding: 5px 0;
-      border-top: 1px solid #333;
+      font-size: 12pt; /* Larger for emphasis */
+      margin-top: 8px;
+      padding: 8px 0;
+      border-top: 2px solid #333;
     }
 
     .terms-prepared-section {
-      margin-top: 15px;
+      margin-top: 20px;
       page-break-inside: avoid;
     }
 
@@ -561,22 +564,22 @@ export const generateQuotationPdf = asyncHandler(
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding-bottom: 5px;
-      border-bottom: 1px solid #ddd;
-      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #94d7f4; /* More prominent */
+      margin-bottom: 15px;
       page-break-after: avoid;
     }
 
     .terms-title, .prepared-title {
-      font-size: 11pt;
+      font-size: 12pt; /* Larger */
       font-weight: bold;
       margin: 0;
-      color: #333;
+      color: #2c3e50;
     }
 
     .terms-prepared-content {
       display: flex;
-      gap: 20px;
+      gap: 25px;
       align-items: flex-start;
     }
 
@@ -585,48 +588,71 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .prepared-content {
-      width: 250px;
+      width: 280px; /* Slightly wider */
       flex-shrink: 0;
       display: flex;
       flex-direction: column;
       align-items: flex-end;
+      font-size: 10.5pt;
     }
 
     .terms-box {
       border: 1px solid #000;
-      padding: 10px;
+      padding: 12px 15px;
       width: 100%;
       box-sizing: border-box;
+      font-size: 10.5pt;
+      line-height: 1.6;
+    }
+
+    .terms-box ol {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    .terms-box li {
+      margin-bottom: 8px;
     }
 
     .prepared-by-name {
       font-weight: bold;
-      margin-top: 5px;
+      margin-top: 8px;
+      font-size: 11pt;
+      color: #2c3e50;
     }
 
     .prepared-by-title {
-      font-size: 9pt;
-      color: #777;
+      font-size: 10pt; /* Slightly larger */
+      color: #555;
       margin-top: 5px;
     }
 
     .tagline {
       text-align: center;
       font-weight: bold;
-      font-size: 12pt;
-      margin: 20px 0 10px 0;
-      color: #333;
+      font-size: 13pt; /* More prominent */
+      margin: 25px 0 15px 0;
+      color: #2c3e50;
       border-top: 2px solid #ddd;
       padding-top: 15px;
       page-break-before: avoid;
     }
 
     .footer {
-      font-size: 9pt;
-      color: #777;
+      font-size: 9.5pt; /* Slightly larger */
+      color: #555;
       text-align: center;
-      margin-top: 10px;
+      margin-top: 15px;
       page-break-inside: avoid;
+      line-height: 1.6;
+    }
+
+    .footer p {
+      margin: 8px 0;
+    }
+
+    .footer strong {
+      color: #2c3e50;
     }
 
     .text-center {
@@ -638,7 +664,12 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     p {
-      margin: 5px 0;
+      margin: 8px 0; /* Better spacing */
+      line-height: 1.5;
+    }
+
+    strong {
+      font-weight: 600; /* Slightly bolder */
     }
 
     /* Force table headers to repeat on each page */
@@ -653,6 +684,15 @@ export const generateQuotationPdf = asyncHandler(
       tr {
         break-inside: avoid;
       }
+
+      body {
+        font-size: 11pt;
+      }
+    }
+
+    /* Ensure no text is too small */
+    .no-small-text {
+      font-size: 10pt !important;
     }
   </style>
 </head>
@@ -669,11 +709,11 @@ export const generateQuotationPdf = asyncHandler(
       <div class="client-info-container">
         <div class="client-info">
           <p><strong>CLIENT:</strong> ${client.clientName || "N/A"}</p>
-          <p><strong>ADRESS:</strong> ${client.clientAddress || "N/A"}</p>
+          <p><strong>ADDRESS:</strong> ${client.clientAddress || "N/A"}</p>
           <p><strong>CONTACT:</strong> ${client.mobileNumber || client.telephoneNumber || "N/A"}</p>
           <p><strong>EMAIL:</strong> ${client.email || "N/A"}</p>
           <p><strong>SITE:</strong> ${site}</p>
-          <!-- Removed SUBJECT from here -->
+          <p><strong>ATTENTION:</strong> ${project.attention || "N/A"}</p>
         </div>
 
         <div class="quotation-info">
@@ -688,19 +728,11 @@ export const generateQuotationPdf = asyncHandler(
             </tr>
             <tr>
               <td>Valid Until:</td>
-              <td>${getDaysRemaining(quotation.validUntil)}</td>
+              <td>${formatDate(quotation.validUntil)} (${getDaysRemaining(quotation.validUntil)})</td>
             </tr>
           </table>
         </div>
       </div>
-
-      <!-- Attention Section - only show if project.attention exists -->
-      ${project.attention ? `
-      <div class="attention-section">
-        <div class="attention-title">ATTENTION</div>
-        <div class="attention-content">${project.attention}</div>
-      </div>
-      ` : ''}
 
       <!-- Subject Section -->
       <div class="subject-section">
@@ -729,7 +761,7 @@ export const generateQuotationPdf = asyncHandler(
                   <td class="text-center">${index + 1}</td>
                   <td>${item.description}</td>
                   <td class="text-center">${item.uom || "NOS"}</td>
-                  <td class="text-center" style="padding: 5px;">
+                  <td class="text-center" style="padding: 8px;">
                     ${item.image?.url ? `<img src="${item.image.url}" style="width: 100%; height: auto; max-height: 80px; object-fit: contain;"/>` : ""}
                   </td>
                   <td class="text-center">${item.quantity.toFixed(2)}</td>
@@ -782,10 +814,12 @@ export const generateQuotationPdf = asyncHandler(
       ` : `
       <div class="section">
         <div class="section-title">PREPARED BY</div>
-        <div class="prepared-by-name" >${preparedBy?.firstName || "N/A"} ${preparedBy?.lastName || ""}</div>
-        ${preparedBy?.phoneNumbers?.length ? `
-        <div class="prepared-by-title">Phone: ${preparedBy.phoneNumbers.join(", ")}</div>
-        ` : ''}
+        <div class="prepared-content">
+          <div class="prepared-by-name">${preparedBy?.firstName || "N/A"} ${preparedBy?.lastName || ""}</div>
+          ${preparedBy?.phoneNumbers?.length ? `
+          <div class="prepared-by-title">Phone: ${preparedBy.phoneNumbers.join(", ")}</div>
+          ` : ''}
+        </div>
       </div>
       `}
     </div>
@@ -804,11 +838,15 @@ export const generateQuotationPdf = asyncHandler(
 
     const browser = await puppeteer.launch({
       headless: "shell",
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--font-render-hinting=none"],
     });
 
     try {
       const page = await browser.newPage();
+      
+      // Set viewport for consistent rendering
+      await page.setViewport({ width: 1200, height: 1600 });
+      
       await page.setContent(htmlContent, {
         waitUntil: ["load", "networkidle0", "domcontentloaded"],
         timeout: 30000,
@@ -823,6 +861,8 @@ export const generateQuotationPdf = asyncHandler(
           bottom: "1cm",
           left: "1cm",
         },
+        displayHeaderFooter: false,
+        preferCSSPageSize: true,
       });
 
       res.setHeader("Content-Type", "application/pdf");
