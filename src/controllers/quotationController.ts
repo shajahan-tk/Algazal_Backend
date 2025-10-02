@@ -321,36 +321,39 @@ export const generateQuotationPdf = asyncHandler(
   <style type="text/css">
     @page {
       size: A4;
-      margin: 1cm;
+      margin: 0; /* Remove all page margins */
     }
     
     body {
       font-family: 'Arial', sans-serif;
-      font-size: 11pt; /* Increased from 10pt */
-      line-height: 1.5; /* Improved line height */
+      font-size: 11pt;
+      line-height: 1.5;
       color: #333;
-      margin: 0;
-      padding: 0;
+      margin: 0; /* Remove body margin */
+      padding: 0; /* Remove body padding */
     }
 
     .container {
       display: block;
+      width: 100%; /* Full width */
+      height: 100%; /* Full height */
     }
 
     .content {
       margin-bottom: 25px;
+      padding: 0; /* Remove padding */
     }
 
     .header {
       display: flex;
       align-items: flex-start;
-      margin-bottom: 20px; /* Increased spacing */
+      margin-bottom: 20px;
       gap: 20px;
       page-break-after: avoid;
     }
 
     .logo {
-      height: 60px; /* Slightly larger logo */
+      height: 60px;
       width: auto;
       max-width: 200px;
     }
@@ -364,7 +367,7 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .document-title {
-      font-size: 18pt; /* Larger and more prominent */
+      font-size: 18pt;
       font-weight: bold;
       margin: 0;
       color: #000;
@@ -380,15 +383,15 @@ export const generateQuotationPdf = asyncHandler(
 
     .client-info {
       flex: 1;
-      padding: 12px 15px; /* More padding */
-      border: 1px solid #ddd; /* Darker border */
+      padding: 12px 15px;
+      border: 1px solid #ddd;
       border-radius: 5px;
-      font-size: 10.5pt; /* Slightly larger */
-      background-color: #f8f9fa; /* Light background */
+      font-size: 10.5pt;
+      background-color: #f8f9fa;
     }
 
     .client-info p {
-      margin: 8px 0; /* Better spacing */
+      margin: 8px 0;
       line-height: 1.4;
     }
 
@@ -398,13 +401,13 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .quotation-info {
-      width: 280px; /* Slightly wider */
+      width: 280px;
     }
 
     .quotation-details {
       width: 100%;
       border-collapse: collapse;
-      font-size: 10.5pt; /* Consistent font size */
+      font-size: 10.5pt;
     }
 
     .quotation-details tr:not(:last-child) {
@@ -412,14 +415,14 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .quotation-details td {
-      padding: 10px 12px; /* More padding */
+      padding: 10px 12px;
       vertical-align: top;
     }
 
     .quotation-details td:first-child {
       font-weight: bold;
       width: 40%;
-      color: #2c3e50; /* Darker color */
+      color: #2c3e50;
     }
 
     .subject-section {
@@ -432,13 +435,13 @@ export const generateQuotationPdf = asyncHandler(
 
     .subject-title {
       font-weight: bold;
-      font-size: 12pt; /* Larger */
+      font-size: 12pt;
       margin-bottom: 8px;
       color: #2c3e50;
     }
 
     .subject-content {
-      font-size: 11pt; /* Larger */
+      font-size: 11pt;
       color: #333;
       font-weight: 500;
     }
@@ -449,16 +452,15 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .section-title {
-      font-size: 13pt; /* Larger section titles */
+      font-size: 13pt;
       font-weight: bold;
       padding: 8px 0;
       margin: 15px 0 10px 0;
-      border-bottom: 2px solid #94d7f4; /* More prominent border */
+      border-bottom: 2px solid #94d7f4;
       page-break-after: avoid;
       color: #2c3e50;
     }
 
-    /* Critical fixes for table page breaks */
     .table-container {
       page-break-inside: avoid;
       overflow: hidden;
@@ -469,7 +471,7 @@ export const generateQuotationPdf = asyncHandler(
       border-collapse: collapse;
       margin-bottom: 20px;
       page-break-inside: auto;
-      font-size: 10.5pt; /* Better table font size */
+      font-size: 10.5pt;
     }
 
     tr {
@@ -494,20 +496,19 @@ export const generateQuotationPdf = asyncHandler(
       background-color: #94d7f4;
       color: #000;
       font-weight: bold;
-      padding: 8px 10px; /* More padding */
+      padding: 8px 10px;
       text-align: left;
       border: 1px solid #ddd;
       font-size: 10.5pt;
     }
 
     td {
-      padding: 8px 10px; /* More padding */
+      padding: 8px 10px;
       border: 1px solid #ddd;
       vertical-align: top;
       font-size: 10.5pt;
     }
 
-    /* Ensure images don't cause page breaks */
     td img {
       max-height: 80px;
       object-fit: contain;
@@ -529,7 +530,7 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .amount-label {
-      width: 180px; /* Slightly wider */
+      width: 180px;
       font-weight: bold;
       text-align: right;
       padding-right: 15px;
@@ -537,7 +538,7 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .amount-value {
-      width: 120px; /* Slightly wider */
+      width: 120px;
       text-align: right;
       font-size: 10.5pt;
     }
@@ -548,7 +549,7 @@ export const generateQuotationPdf = asyncHandler(
       background-color: #94d7f4;
       color: #000;
       font-weight: bold;
-      font-size: 12pt; /* Larger for emphasis */
+      font-size: 12pt;
       margin-top: 8px;
       padding: 8px 0;
       border-top: 2px solid #333;
@@ -564,13 +565,13 @@ export const generateQuotationPdf = asyncHandler(
       justify-content: space-between;
       align-items: center;
       padding-bottom: 8px;
-      border-bottom: 2px solid #94d7f4; /* More prominent */
+      border-bottom: 2px solid #94d7f4;
       margin-bottom: 15px;
       page-break-after: avoid;
     }
 
     .terms-title, .prepared-title {
-      font-size: 12pt; /* Larger */
+      font-size: 12pt;
       font-weight: bold;
       margin: 0;
       color: #2c3e50;
@@ -587,7 +588,7 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .prepared-content {
-      width: 280px; /* Slightly wider */
+      width: 280px;
       flex-shrink: 0;
       display: flex;
       flex-direction: column;
@@ -621,7 +622,7 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .prepared-by-title {
-      font-size: 10pt; /* Slightly larger */
+      font-size: 10pt;
       color: #555;
       margin-top: 5px;
     }
@@ -629,7 +630,7 @@ export const generateQuotationPdf = asyncHandler(
     .tagline {
       text-align: center;
       font-weight: bold;
-      font-size: 13pt; /* More prominent */
+      font-size: 13pt;
       margin: 25px 0 15px 0;
       color: #2c3e50;
       border-top: 2px solid #ddd;
@@ -638,7 +639,7 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .footer {
-      font-size: 9.5pt; /* Slightly larger */
+      font-size: 9.5pt;
       color: #555;
       text-align: center;
       margin-top: 15px;
@@ -663,15 +664,14 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     p {
-      margin: 8px 0; /* Better spacing */
+      margin: 8px 0;
       line-height: 1.5;
     }
 
     strong {
-      font-weight: 600; /* Slightly bolder */
+      font-weight: 600;
     }
 
-    /* Force table headers to repeat on each page */
     @media print {
       thead { 
         display: table-header-group; 
@@ -686,10 +686,16 @@ export const generateQuotationPdf = asyncHandler(
 
       body {
         font-size: 11pt;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+
+      .container {
+        margin: 0 !important;
+        padding: 0 !important;
       }
     }
 
-    /* Ensure no text is too small */
     .no-small-text {
       font-size: 10pt !important;
     }
@@ -855,12 +861,11 @@ export const generateQuotationPdf = asyncHandler(
         format: "A4",
         printBackground: true,
         margin: {
-          top: "0.1cm",   // or "5mm"
-          right: "0.1cm",
-          bottom: "0.1cm",
-          left: "0.1cm",
+          top: "0",    // Remove all margins
+          right: "0",
+          bottom: "0",
+          left: "0",
         },
-
         displayHeaderFooter: false,
         preferCSSPageSize: true,
       });
