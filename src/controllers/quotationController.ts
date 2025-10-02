@@ -163,7 +163,7 @@ export const updateQuotation = asyncHandler(
         // If new image is uploaded
         if (imageFile) {
           console.log(`Processing image for item ${index}:`, imageFile);
-          
+
           // Delete old image if it exists
           if (item.image?.key) {
             await deleteFileFromS3(item.image.key);
@@ -314,7 +314,7 @@ export const generateQuotationPdf = asyncHandler(
       return daysRemaining > 0 ? `${daysRemaining} days` : "Expired";
     };
 
-  let htmlContent = `<!DOCTYPE html>
+    let htmlContent = `<!DOCTYPE html>
 <html>
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
@@ -843,10 +843,10 @@ export const generateQuotationPdf = asyncHandler(
 
     try {
       const page = await browser.newPage();
-      
+
       // Set viewport for consistent rendering
       await page.setViewport({ width: 1200, height: 1600 });
-      
+
       await page.setContent(htmlContent, {
         waitUntil: ["load", "networkidle0", "domcontentloaded"],
         timeout: 30000,
@@ -856,11 +856,12 @@ export const generateQuotationPdf = asyncHandler(
         format: "A4",
         printBackground: true,
         margin: {
-          top: ".5m",
-          right: ".5cm",
-          bottom: ".5cm",
-          left: ".5cm",
+          top: "0.5cm",   // or "5mm"
+          right: "0.5cm",
+          bottom: "0.5cm",
+          left: "0.5cm",
         },
+
         displayHeaderFooter: false,
         preferCSSPageSize: true,
       });
