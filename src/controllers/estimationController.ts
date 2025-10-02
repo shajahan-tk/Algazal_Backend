@@ -721,21 +721,19 @@ export const generateEstimationPdf = asyncHandler(
     const netAmount = safeGetNumber(estimation?.quotationAmount);
     const commissionAmount = safeGetNumber(estimation?.commissionAmount);
 
-    let profit = estimation.profit || 0;
-    if (profit < 0) {
-      profit = 0;
-    }
+    // Get the actual profit value (can be negative)
+    const actualProfit = estimation.profit || 0;
 
-    // Calculate profit/loss percentage
+    // Calculate profit/loss percentage based on actual profit
     const calculateProfitPercentage = () => {
       if (estimatedAmount === 0) return 0;
-      const percentage = (profit / estimatedAmount) * 100;
+      const percentage = (actualProfit / estimatedAmount) * 100;
       return parseFloat(percentage.toFixed(2));
     };
 
     const profitPercentage = calculateProfitPercentage();
-    const isProfit = profit > 0;
-    const isLoss = profit < 0;
+    const isProfit = actualProfit > 0;
+    const isLoss = actualProfit < 0;
 
     // Safe access to nested properties
     const clientName = estimation.project?.client?.clientName || "N/A";
@@ -931,8 +929,8 @@ export const generateEstimationPdf = asyncHandler(
         
         .profit-row {
           font-weight: 700;
-          background-color: #e8f5e9;
-          color: #2e7d32;
+          background-color: ${actualProfit >= 0 ? '#e8f5e9' : '#ffebee'};
+          color: ${actualProfit >= 0 ? '#2e7d32' : '#c62828'};
           font-size: 12pt;
         }
         
@@ -1234,8 +1232,8 @@ export const generateEstimationPdf = asyncHandler(
                 <td class="text-right amount">${commissionAmount.toFixed(2)}</td>
               </tr>
               <tr class="profit-row">
-                <td><strong>PROFIT</strong></td>
-                <td class="text-right amount"><strong>${profit.toFixed(2)}</strong></td>
+                <td><strong>${actualProfit >= 0 ? 'PROFIT' : 'LOSS'}</strong></td>
+                <td class="text-right amount"><strong>${actualProfit.toFixed(2)}</strong></td>
               </tr>
               <tr class="profit-percentage-row">
                 <td><strong>${isProfit ? 'PROFIT' : 'LOSS'} PERCENTAGE</strong></td>
