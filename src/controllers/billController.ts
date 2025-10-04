@@ -219,340 +219,305 @@ export const createBill = asyncHandler(async (req: Request, res: Response) => {
 
 // Get all bills with filters
 export const getBills = asyncHandler(async (req: Request, res: Response) => {
-  const page = parseInt(req.query.page as string) || 1;
-  const limit = parseInt(req.query.limit as string) || 10;
-  const skip = (page - 1) * limit;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const skip = (page - 1) * limit;
 
-  // Build base match conditions
-  const matchConditions: any = {};
+    // Build base match conditions
+    const matchConditions: any = {};
 
-  // Bill type filter
-  if (req.query.billType) {
-    matchConditions.billType = req.query.billType;
-  }
-
-  // Date range filter (takes precedence over year/month)
-  if (req.query.startDate && req.query.endDate) {
-    const startDate = new Date(req.query.startDate as string);
-    const endDate = new Date(req.query.endDate as string);
-    endDate.setHours(23, 59, 59, 999); // Include the entire end date
-    
-    matchConditions.billDate = {
-      $gte: startDate,
-      $lte: endDate,
-    };
-  } else {
-    // Year filter
-    if (req.query.year) {
-      const year = parseInt(req.query.year as string);
-      if (isNaN(year)) {
-        throw new ApiError(400, "Invalid year value");
-      }
-      matchConditions.billDate = {
-        $gte: new Date(year, 0, 1), // Jan 1 of the year
-        $lt: new Date(year + 1, 0, 1), // Jan 1 of next year
-      };
+    // Bill type filter
+    if (req.query.billType) {
+        matchConditions.billType = req.query.billType;
     }
 
-    // Month filter
-    if (req.query.month) {
-      const month = parseInt(req.query.month as string);
-      if (isNaN(month) || month < 1 || month > 12) {
-        throw new ApiError(400, "Invalid month value (1-12)");
-      }
-
-      // Determine the year to use
-      let year: number;
-      if (req.query.year) {
-        year = parseInt(req.query.year as string);
-      } else {
-        year = new Date().getFullYear();
-      }
-
-      // Create proper date range for the month
-      const startDate = new Date(year, month - 1, 1); // First day of month
-      const endDate = new Date(year, month, 0); // Last day of month
-      endDate.setHours(23, 59, 59, 999); // Include entire last day
-
-      if (!matchConditions.billDate) {
-        // If no date filter exists, create new one
-        matchConditions.billDate = {
-          $gte: startDate,
-          $lte: endDate,
-        };
-      } else {
-        // If year filter exists, combine with month
-        const yearStart = new Date(matchConditions.billDate.$gte);
-        const yearEnd = new Date(matchConditions.billDate.$lt);
+    // Handle date filters - FIXED: Don't combine date range with month/year
+    if (req.query.startDate && req.query.endDate) {
+        // Handle startDate and endDate parameters
+        const startDate = new Date(req.query.startDate as string);
+        const endDate = new Date(req.query.endDate as string);
+        endDate.setHours(23, 59, 59, 999);
         
-        // Set the specific month within the year range
-        const monthStart = new Date(year, month - 1, 1);
-        const monthEnd = new Date(year, month, 0);
-        monthEnd.setHours(23, 59, 59, 999);
-
-        // Ensure the month is within the selected year
-        if (monthStart >= yearStart && monthEnd < yearEnd) {
-          matchConditions.billDate = {
-            $gte: monthStart,
-            $lte: monthEnd,
-          };
-        } else {
-          // If month is outside year range, return empty results
-          matchConditions.billDate = {
-            $gte: new Date(3000, 0, 1), // Far future date
-            $lt: new Date(3000, 0, 1),   // Same date = no results
-          };
-        }
-      }
+        matchConditions.billDate = {
+            $gte: startDate,
+            $lte: endDate,
+        };
+    } else if (req.query.month && req.query.year) {
+        // Handle month and year parameters
+        const month = parseInt(req.query.month as string) - 1;
+        const year = parseInt(req.query.year as string);
+        
+        const startOfMonth = new Date(year, month, 1);
+        startOfMonth.setHours(0, 0, 0, 0);
+        
+        const endOfMonth = new Date(year, month + 1, 0);
+        endOfMonth.setHours(23, 59, 59, 999);
+        
+        matchConditions.billDate = {
+            $gte: startOfMonth,
+            $lte: endOfMonth,
+        };
+    } else if (req.query.year && !req.query.month) {
+        // Handle year only filter
+        const year = parseInt(req.query.year as string);
+        
+        const startOfYear = new Date(year, 0, 1);
+        startOfYear.setHours(0, 0, 0, 0);
+        
+        const endOfYear = new Date(year, 11, 31);
+        endOfYear.setHours(23, 59, 59, 999);
+        
+        matchConditions.billDate = {
+            $gte: startOfYear,
+            $lte: endOfYear,
+        };
     }
-  }
+    // If no date filters provided, don't apply any date filtering
 
-  // Other filters
-  if (req.query.shop) matchConditions.shop = req.query.shop;
-  if (req.query.category) matchConditions.category = req.query.category;
-  if (req.query.paymentMethod) matchConditions.paymentMethod = req.query.paymentMethod;
-  
-  if (req.query.vehicle) {
-    matchConditions.$or = [
-      { vehicle: req.query.vehicle },
-      { vehicles: req.query.vehicle },
-    ];
-  }
-
-  // Amount range filter
-  if (req.query.minAmount || req.query.maxAmount) {
-    const amountFilter: any = {};
-    if (req.query.minAmount) {
-      amountFilter.$gte = parseFloat(req.query.minAmount as string);
+    // Other filters - THESE SHOULD WORK INDEPENDENTLY OF DATE FILTERS
+    if (req.query.shop) matchConditions.shop = req.query.shop;
+    if (req.query.category) matchConditions.category = req.query.category;
+    if (req.query.paymentMethod) matchConditions.paymentMethod = req.query.paymentMethod;
+    
+    if (req.query.vehicle) {
+        matchConditions.$or = [
+            { vehicle: req.query.vehicle },
+            { vehicles: req.query.vehicle },
+        ];
     }
-    if (req.query.maxAmount) {
-      amountFilter.$lte = parseFloat(req.query.maxAmount as string);
+
+    // Debug: Log the final match conditions
+    console.log('Final Match Conditions:', JSON.stringify(matchConditions, null, 2));
+
+    // Build aggregation pipeline
+    const pipeline: any[] = [];
+
+    // Add match conditions first for better performance
+    if (Object.keys(matchConditions).length > 0) {
+        pipeline.push({ $match: matchConditions });
     }
-    matchConditions.amount = amountFilter;
-  }
 
-  // Build aggregation pipeline
-  const pipeline: any[] = [];
-
-  // Add match conditions first for better performance
-  if (Object.keys(matchConditions).length > 0) {
-    pipeline.push({ $match: matchConditions });
-  }
-
-  // Lookup related collections
-  pipeline.push(
-    {
-      $lookup: {
-        from: "shops",
-        localField: "shop",
-        foreignField: "_id",
-        as: "shopData",
-      },
-    },
-    {
-      $lookup: {
-        from: "vehicles",
-        localField: "vehicle",
-        foreignField: "_id",
-        as: "vehicleData",
-      },
-    },
-    {
-      $lookup: {
-        from: "vehicles",
-        localField: "vehicles",
-        foreignField: "_id",
-        as: "vehiclesData",
-      },
-    },
-    {
-      $lookup: {
-        from: "categories",
-        localField: "category",
-        foreignField: "_id",
-        as: "categoryData",
-      },
-    },
-    {
-      $lookup: {
-        from: "users",
-        localField: "createdBy",
-        foreignField: "_id",
-        as: "createdByData",
-      },
-    }
-  );
-
-  // Add search filter if provided
-  if (req.query.search) {
-    const searchTerm = req.query.search as string;
-    const searchRegex = { $regex: searchTerm, $options: "i" };
-
-    pipeline.push({
-      $match: {
-        $or: [
-          // Bill fields
-          { invoiceNo: searchRegex },
-          { description: searchRegex },
-          { purpose: searchRegex },
-          { remarks: searchRegex },
-          { roomNo: searchRegex },
-          { note: searchRegex },
-          // Shop fields
-          { "shopData.shopName": searchRegex },
-          { "shopData.shopNo": searchRegex },
-          { "shopData.ownerName": searchRegex },
-          // Vehicle fields
-          { "vehicleData.vehicleNumber": searchRegex },
-          { "vehicleData.make": searchRegex },
-          { "vehicleData.vechicleModel": searchRegex },
-          { "vehiclesData.vehicleNumber": searchRegex },
-          { "vehiclesData.make": searchRegex },
-          { "vehiclesData.vechicleModel": searchRegex },
-          // Category fields
-          { "categoryData.name": searchRegex },
-          { "categoryData.description": searchRegex },
-        ],
-      },
-    });
-  }
-
-  // Add facet stage for pagination and total count
-  pipeline.push({
-    $facet: {
-      data: [
-        { $sort: { billDate: -1 } },
-        { $skip: skip },
-        { $limit: limit },
+    // Rest of your aggregation pipeline remains the same...
+    pipeline.push(
         {
-          $project: {
-            _id: 1,
-            billType: 1,
-            billDate: 1,
-            paymentMethod: 1,
-            amount: 1,
-            attachments: 1,
-            invoiceNo: 1,
-            description: 1,
-            purpose: 1,
-            remarks: 1,
-            roomNo: 1,
-            note: 1,
-            kilometer: 1,
-            liter: 1,
-            createdAt: 1,
-            updatedAt: 1,
-            category: {
-              $arrayElemAt: [
-                {
-                  $map: {
-                    input: "$categoryData",
-                    as: "cat",
-                    in: {
-                      _id: "$$cat._id",
-                      name: "$$cat.name",
-                      description: "$$cat.description",
-                    },
-                  },
-                },
-                0,
-              ],
+            $lookup: {
+                from: "shops",
+                localField: "shop",
+                foreignField: "_id",
+                as: "shopData",
             },
-            shop: {
-              $arrayElemAt: [
-                {
-                  $map: {
-                    input: "$shopData",
-                    as: "shop",
-                    in: {
-                      _id: "$$shop._id",
-                      shopName: "$$shop.shopName",
-                      shopNo: "$$shop.shopNo",
-                      ownerName: "$$shop.ownerName",
-                    },
-                  },
-                },
-                0,
-              ],
-            },
-            vehicle: {
-              $arrayElemAt: [
-                {
-                  $map: {
-                    input: "$vehicleData",
-                    as: "vehicle",
-                    in: {
-                      _id: "$$vehicle._id",
-                      vehicleNumber: "$$vehicle.vehicleNumber",
-                      make: "$$vehicle.make",
-                      vechicleModel: "$$vehicle.vechicleModel",
-                    },
-                  },
-                },
-                0,
-              ],
-            },
-            vehicles: {
-              $map: {
-                input: "$vehiclesData",
-                as: "vehicle",
-                in: {
-                  _id: "$$vehicle._id",
-                  vehicleNumber: "$$vehicle.vehicleNumber",
-                  make: "$$vehicle.make",
-                  vechicleModel: "$$vehicle.vechicleModel",
-                },
-              },
-            },
-            createdBy: {
-              $arrayElemAt: [
-                {
-                  $map: {
-                    input: "$createdByData",
-                    as: "user",
-                    in: {
-                      _id: "$$user._id",
-                      firstName: "$$user.firstName",
-                      lastName: "$$user.lastName",
-                      email: "$$user.email",
-                    },
-                  },
-                },
-                0,
-              ],
-            },
-          },
         },
-      ],
-      totalCount: [{ $count: "count" }],
-      totalAmount: [{ $group: { _id: null, total: { $sum: "$amount" } } }],
-    },
-  });
-
-  const result = await Bill.aggregate(pipeline);
-  
-  const bills = result[0].data;
-  const total = result[0].totalCount[0]?.count || 0;
-  const totalAmount = result[0].totalAmount[0]?.total || 0;
-
-  res.status(200).json(
-    new ApiResponse(
-      200,
-      {
-        bills,
-        totalAmount,
-        pagination: {
-          total,
-          page,
-          limit,
-          totalPages: Math.ceil(total / limit),
-          hasNextPage: page * limit < total,
-          hasPreviousPage: page > 1,
+        {
+            $lookup: {
+                from: "vehicles",
+                localField: "vehicle",
+                foreignField: "_id",
+                as: "vehicleData",
+            },
         },
-      },
-      "Bills retrieved successfully"
-    )
-  );
+        {
+            $lookup: {
+                from: "vehicles",
+                localField: "vehicles",
+                foreignField: "_id",
+                as: "vehiclesData",
+            },
+        },
+        {
+            $lookup: {
+                from: "categories",
+                localField: "category",
+                foreignField: "_id",
+                as: "categoryData",
+            },
+        },
+        {
+            $lookup: {
+                from: "users",
+                localField: "createdBy",
+                foreignField: "_id",
+                as: "createdByData",
+            },
+        }
+    );
+
+    // Add search filter if provided
+    if (req.query.search) {
+        const searchTerm = req.query.search as string;
+        const searchRegex = { $regex: searchTerm, $options: "i" };
+
+        pipeline.push({
+            $match: {
+                $or: [
+                    // Bill fields
+                    { invoiceNo: searchRegex },
+                    { description: searchRegex },
+                    { purpose: searchRegex },
+                    { remarks: searchRegex },
+                    { roomNo: searchRegex },
+                    { note: searchRegex },
+                    // Shop fields
+                    { "shopData.shopName": searchRegex },
+                    { "shopData.shopNo": searchRegex },
+                    { "shopData.ownerName": searchRegex },
+                    // Vehicle fields
+                    { "vehicleData.vehicleNumber": searchRegex },
+                    { "vehicleData.make": searchRegex },
+                    { "vehicleData.vechicleModel": searchRegex },
+                    { "vehiclesData.vehicleNumber": searchRegex },
+                    { "vehiclesData.make": searchRegex },
+                    { "vehiclesData.vechicleModel": searchRegex },
+                    // Category fields
+                    { "categoryData.name": searchRegex },
+                    { "categoryData.description": searchRegex },
+                ],
+            },
+        });
+    }
+
+    // Add facet stage for pagination and total count
+    pipeline.push({
+        $facet: {
+            data: [
+                { $sort: { billDate: -1 } },
+                { $skip: skip },
+                { $limit: limit },
+                {
+                    $project: {
+                        _id: 1,
+                        billType: 1,
+                        billDate: 1,
+                        paymentMethod: 1,
+                        amount: 1,
+                        attachments: 1,
+                        invoiceNo: 1,
+                        description: 1,
+                        purpose: 1,
+                        remarks: 1,
+                        roomNo: 1,
+                        note: 1,
+                        kilometer: 1,
+                        liter: 1,
+                        createdAt: 1,
+                        updatedAt: 1,
+                        category: {
+                            $arrayElemAt: [
+                                {
+                                    $map: {
+                                        input: "$categoryData",
+                                        as: "cat",
+                                        in: {
+                                            _id: "$$cat._id",
+                                            name: "$$cat.name",
+                                            description: "$$cat.description",
+                                        },
+                                    },
+                                },
+                                0,
+                            ],
+                        },
+                        shop: {
+                            $arrayElemAt: [
+                                {
+                                    $map: {
+                                        input: "$shopData",
+                                        as: "shop",
+                                        in: {
+                                            _id: "$$shop._id",
+                                            shopName: "$$shop.shopName",
+                                            shopNo: "$$shop.shopNo",
+                                            ownerName: "$$shop.ownerName",
+                                        },
+                                    },
+                                },
+                                0,
+                            ],
+                        },
+                        vehicle: {
+                            $arrayElemAt: [
+                                {
+                                    $map: {
+                                        input: "$vehicleData",
+                                        as: "vehicle",
+                                        in: {
+                                            _id: "$$vehicle._id",
+                                            vehicleNumber: "$$vehicle.vehicleNumber",
+                                            make: "$$vehicle.make",
+                                            vechicleModel: "$$vehicle.vechicleModel",
+                                        },
+                                    },
+                                },
+                                0,
+                            ],
+                        },
+                        vehicles: {
+                            $map: {
+                                input: "$vehiclesData",
+                                as: "vehicle",
+                                in: {
+                                    _id: "$$vehicle._id",
+                                    vehicleNumber: "$$vehicle.vehicleNumber",
+                                    make: "$$vehicle.make",
+                                    vechicleModel: "$$vehicle.vechicleModel",
+                                },
+                            },
+                        },
+                        createdBy: {
+                            $arrayElemAt: [
+                                {
+                                    $map: {
+                                        input: "$createdByData",
+                                        as: "user",
+                                        in: {
+                                            _id: "$$user._id",
+                                            firstName: "$$user.firstName",
+                                            lastName: "$$user.lastName",
+                                            email: "$$user.email",
+                                        },
+                                    },
+                                },
+                                0,
+                            ],
+                        },
+                    },
+                },
+            ],
+            totalCount: [{ $count: "count" }],
+            totalAmount: [{ $group: { _id: null, total: { $sum: "$amount" } } }],
+        },
+    });
+
+    const result = await Bill.aggregate(pipeline);
+    
+    const bills = result[0].data;
+    const total = result[0].totalCount[0]?.count || 0;
+    const totalAmount = result[0].totalAmount[0]?.total || 0;
+
+    // Debug: Log the results
+    console.log('Query Results:', {
+        totalBills: total,
+        returnedBills: bills.length,
+        totalAmount: totalAmount
+    });
+
+    res.status(200).json(
+        new ApiResponse(
+            200,
+            {
+                bills,
+                totalAmount,
+                pagination: {
+                    total,
+                    page,
+                    limit,
+                    totalPages: Math.ceil(total / limit),
+                    hasNextPage: page * limit < total,
+                    hasPreviousPage: page > 1,
+                },
+            },
+            "Bills retrieved successfully"
+        )
+    );
 });
 // Get a single bill by ID
 export const getBill = asyncHandler(async (req: Request, res: Response) => {
