@@ -314,6 +314,11 @@ export const generateQuotationPdf = asyncHandler(
       return daysRemaining > 0 ? `${daysRemaining} days` : "Expired";
     };
 
+    // Function to clean up description - remove extra blank lines
+    const cleanDescription = (description: string) => {
+      return description.replace(/\n\n+/g, '\n').trim();
+    };
+
     let htmlContent = `<!DOCTYPE html>
 <html>
 <head>
@@ -814,7 +819,7 @@ export const generateQuotationPdf = asyncHandler(
               ${quotation.items.map((item, index) => `
                 <tr>
                   <td class="text-center col-no">${index + 1}</td>
-                  <td class="col-desc">${item.description}</td>
+                  <td class="col-desc">${cleanDescription(item.description)}</td>
                   <td class="text-center col-uom">${item.uom || "NOS"}</td>
                   <td class="text-center col-image" style="padding: 6px;">
                     ${item.image?.url ? `<img src="${item.image.url}" style="width: 100%; height: auto; max-height: 60px; object-fit: contain;"/>` : ""}
