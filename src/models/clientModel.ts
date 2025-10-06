@@ -71,13 +71,7 @@ const clientSchema = new Schema<IClient>(
       type: String,
       required: false,  // Changed from true to false
       trim: true,
-      validate: {
-        validator: function (v: string) {
-          // Only validate if value exists
-          return !v || /^[0-9]{6}$/.test(v);
-        },
-        message: (props: any) => `${props.value} is not a valid pincode!`,
-      },
+      
     },
     mobileNumber: {
       type: String,
