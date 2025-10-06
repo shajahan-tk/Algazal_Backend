@@ -514,16 +514,16 @@ export const updateEstimation = asyncHandler(
       throw new ApiError(404, "Estimation not found");
     }
 
-    if (estimation.isApproved) {
-      throw new ApiError(400, "Cannot update approved estimation");
-    }
+    // if (estimation.isApproved) {
+    //   throw new ApiError(400, "Cannot update approved estimation");
+    // }
 
-    // Reset checked status if updating
-    if (estimation.isChecked) {
-      estimation.isChecked = false;
-      estimation.checkedBy = undefined;
-      estimation.approvalComment = undefined;
-    }
+    // // Reset checked status if updating
+    // if (estimation.isChecked) {
+    //   estimation.isChecked = false;
+    //   estimation.checkedBy = undefined;
+    //   estimation.approvalComment = undefined;
+    // }
 
     // Don't allow changing these fields directly
     delete updateData.isApproved;
