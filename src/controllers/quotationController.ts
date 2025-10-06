@@ -512,6 +512,11 @@ export const generateQuotationPdf = asyncHandler(
       word-wrap: break-word;
     }
 
+    /* Preserve line breaks in description */
+    .col-desc {
+      white-space: pre-wrap;
+    }
+
     /* Optimized column widths for better fit */
     .col-no { width: 5%; }
     .col-desc { width: 30%; }
