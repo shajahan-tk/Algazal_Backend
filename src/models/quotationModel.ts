@@ -1,19 +1,26 @@
-import { Document, Schema, model, Types } from "mongoose";
+// models/quotationModel.ts
+import { Document, Schema, model, Types, ObjectId } from "mongoose";
 import { IProject } from "./projectModel";
 import { IUser } from "./userModel";
 import { IEstimation } from "./estimationModel";
 
+export interface IQuotationImage {
+  _id: ObjectId;
+  title: string;
+  imageUrl: string;
+  s3Key: string;
+  description?: string;
+  uploadedAt: Date;
+  relatedItemIndex?: number; // Optional: link to specific item
+}
+
 interface IQuotationItem {
   description: string;
   uom: string;
-  image?: {
-    url: string;
-    key: string;
-    mimetype: string;
-  };
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+  relatedImageId?: ObjectId; // Reference to image
 }
 
 export interface IQuotation extends Document {
@@ -24,6 +31,7 @@ export interface IQuotation extends Document {
   validUntil: Date;
   scopeOfWork: string[];
   items: IQuotationItem[];
+  images: IQuotationImage[]; // Separate images array
   subtotal: number;
   vatPercentage: number;
   vatAmount: number;
@@ -37,6 +45,15 @@ export interface IQuotation extends Document {
   updatedAt: Date;
 }
 
+const quotationImageSchema = new Schema<IQuotationImage>({
+  title: { type: String, required: true },
+  imageUrl: { type: String, required: true },
+  s3Key: { type: String, required: true },
+  description: { type: String },
+  relatedItemIndex: { type: Number },
+  uploadedAt: { type: Date, default: Date.now },
+});
+
 const quotationItemSchema = new Schema<IQuotationItem>({
   description: {
     type: String,
@@ -47,11 +64,6 @@ const quotationItemSchema = new Schema<IQuotationItem>({
     type: String,
     required: [true, "Unit of measurement is required"],
     trim: true,
-  },
-  image: {
-    url: String,
-    key: String,
-    mimetype: String,
   },
   quantity: {
     type: Number,
@@ -67,6 +79,10 @@ const quotationItemSchema = new Schema<IQuotationItem>({
     type: Number,
     required: true,
     min: 0,
+  },
+  relatedImageId: {
+    type: Schema.Types.ObjectId,
+    ref: "QuotationImage",
   },
 });
 
@@ -107,6 +123,7 @@ const quotationSchema = new Schema<IQuotation>(
         message: "At least one item is required",
       },
     },
+    images: [quotationImageSchema], // Separate images
     subtotal: {
       type: Number,
       required: true,

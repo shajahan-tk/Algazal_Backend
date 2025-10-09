@@ -5,30 +5,15 @@ import { ApiError } from "../utils/apiHandlerHelpers";
 import { Quotation } from "../models/quotationModel";
 import { IProject, Project } from "../models/projectModel";
 import { Estimation } from "../models/estimationModel";
-import { uploadItemImage, deleteFileFromS3 } from "../utils/uploadConf";
+import { uploadItemImage, deleteFileFromS3, uploadWorkCompletionImagesToS3 } from "../utils/uploadConf";
 import puppeteer from "puppeteer";
 import { generateRelatedDocumentNumber } from "../utils/documentNumbers";
 import { IUser } from "../models/userModel";
 import { IClient } from "../models/clientModel";
+import { Types } from "mongoose";
 
 export const createQuotation = asyncHandler(
   async (req: Request, res: Response) => {
-    // Debugging logs
-    console.log("Request body:", req.body);
-    console.log("Request files:", req.files);
-
-    if (!req.files || !Array.isArray(req.files)) {
-      throw new ApiError(400, "No files were uploaded");
-    }
-
-    // Parse the JSON data from form-data
-    let jsonData;
-    try {
-      jsonData = JSON.parse(req.body.data);
-    } catch (error) {
-      throw new ApiError(400, "Invalid JSON data format");
-    }
-
     const {
       project: projectId,
       validUntil,
@@ -36,7 +21,7 @@ export const createQuotation = asyncHandler(
       items = [],
       termsAndConditions = [],
       vatPercentage = 5,
-    } = jsonData;
+    } = req.body;
 
     // Validate items is an array
     if (!Array.isArray(items)) {
@@ -50,28 +35,11 @@ export const createQuotation = asyncHandler(
     const estimation = await Estimation.findOne({ project: projectId });
     const estimationId = estimation?._id;
 
-    // Process items with their corresponding files
-    const processedItems = await Promise.all(
-      items.map(async (item: any, index: number) => {
-        // Find the image file for this item using the correct fieldname pattern
-        const imageFile = (req.files as Express.Multer.File[]).find(
-          (f) => f.fieldname === `items[${index}][image]`
-        );
-
-        if (imageFile) {
-          console.log(`Processing image for item ${index}:`, imageFile);
-          const uploadResult = await uploadItemImage(imageFile);
-          if (uploadResult.uploadData) {
-            item.image = uploadResult.uploadData;
-          }
-        } else {
-          console.log(`No image found for item ${index}`);
-        }
-
-        item.totalPrice = item.quantity * item.unitPrice;
-        return item;
-      })
-    );
+    // Calculate item totals (no image processing)
+    const processedItems = items.map((item: any) => {
+      item.totalPrice = item.quantity * item.unitPrice;
+      return item;
+    });
 
     // Calculate financial totals
     const subtotal = processedItems.reduce(
@@ -89,6 +57,7 @@ export const createQuotation = asyncHandler(
       validUntil: new Date(validUntil),
       scopeOfWork,
       items: processedItems,
+      images: [], // Start with empty images array
       termsAndConditions,
       vatPercentage,
       subtotal,
@@ -99,7 +68,295 @@ export const createQuotation = asyncHandler(
 
     await Project.findByIdAndUpdate(projectId, { status: "quotation_sent" });
 
-    res.status(201).json(new ApiResponse(201, quotation, "Quotation created"));
+    const populatedQuotation = await Quotation.findById(quotation._id)
+      .populate("project", "projectName")
+      .populate("preparedBy", "firstName lastName");
+
+    res.status(201).json(new ApiResponse(201, populatedQuotation, "Quotation created"));
+  }
+);
+
+export const uploadQuotationImages = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const files = req.files as Express.Multer.File[];
+    const { titles = [], descriptions = [], relatedItemIndexes = [] } = req.body;
+
+    if (!id) {
+      throw new ApiError(400, "Quotation ID is required");
+    }
+
+    if (!files || files.length === 0) {
+      throw new ApiError(400, "No images uploaded");
+    }
+
+    if (!req.user?.userId) {
+      throw new ApiError(401, "Unauthorized");
+    }
+
+    const titlesArray: string[] = Array.isArray(titles) ? titles : [titles];
+    const descriptionsArray: string[] = Array.isArray(descriptions)
+      ? descriptions
+      : [descriptions];
+    const relatedIndexesArray: any[] = Array.isArray(relatedItemIndexes)
+      ? relatedItemIndexes
+      : [relatedItemIndexes];
+
+    if (titlesArray.length !== files.length) {
+      throw new ApiError(400, "Number of titles must match number of images");
+    }
+
+    if (titlesArray.some((title) => !title?.trim())) {
+      throw new ApiError(400, "All images must have a non-empty title");
+    }
+
+    const quotation = await Quotation.findById(id);
+    if (!quotation) {
+      throw new ApiError(404, "Quotation not found");
+    }
+
+    // Check if user is authorized to update this quotation
+    if (quotation.preparedBy.toString() !== req.user.userId.toString()) {
+      throw new ApiError(403, "Not authorized to update this quotation");
+    }
+
+    const uploadResults = await uploadWorkCompletionImagesToS3(files);
+
+    if (!uploadResults.success || !uploadResults.uploadData) {
+      throw new ApiError(500, "Failed to upload images to S3");
+    }
+
+    const newImages: any[] = uploadResults.uploadData.map(
+      (fileData, index) => {
+        const imageData: any = {
+          _id: new Types.ObjectId(),
+          title: titlesArray[index],
+          imageUrl: fileData.url,
+          s3Key: fileData.key,
+          description: descriptionsArray[index] || "",
+          uploadedAt: new Date(),
+        };
+
+        // Safely handle relatedItemIndex
+        const rawIndex = relatedIndexesArray[index];
+        if (rawIndex !== undefined && rawIndex !== null && rawIndex !== '') {
+          const parsedIndex = parseInt(rawIndex);
+          if (!isNaN(parsedIndex)) {
+            imageData.relatedItemIndex = parsedIndex;
+          }
+        }
+
+        return imageData;
+      }
+    );
+
+    quotation.images.push(...newImages);
+    await quotation.save();
+
+    const updatedQuotation = await Quotation.findById(id)
+      .populate("project", "projectName")
+      .populate("preparedBy", "firstName lastName");
+
+    res
+      .status(200)
+      .json(new ApiResponse(200, updatedQuotation, "Images uploaded successfully"));
+  }
+);
+
+export const replaceQuotationImage = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { id, imageId } = req.params;
+    const file = req.file as Express.Multer.File;
+
+    if (!id || !imageId) {
+      throw new ApiError(400, "Quotation ID and image ID are required");
+    }
+
+    if (!file) {
+      throw new ApiError(400, "No image file provided");
+    }
+
+    const quotation = await Quotation.findById(id);
+    if (!quotation) {
+      throw new ApiError(404, "Quotation not found");
+    }
+
+    // Check if user is authorized to update this quotation
+    if (quotation.preparedBy.toString() !== req.user?.userId.toString()) {
+      throw new ApiError(403, "Not authorized to update this quotation");
+    }
+
+    const imageIndex = quotation.images.findIndex(
+      (img) => img._id.toString() === imageId
+    );
+
+    if (imageIndex === -1) {
+      throw new ApiError(404, "Image not found");
+    }
+
+    const oldImage = quotation.images[imageIndex];
+
+    // Upload new image
+    const uploadResult = await uploadWorkCompletionImagesToS3([file]);
+
+    if (!uploadResult.success || !uploadResult.uploadData?.[0]) {
+      throw new ApiError(500, "Failed to upload new image to S3");
+    }
+
+    const newImageData = uploadResult.uploadData[0];
+
+    // Delete old image from S3
+    if (oldImage.s3Key) {
+      await deleteFileFromS3(oldImage.s3Key);
+    }
+
+    // Update image with new file
+    quotation.images[imageIndex].imageUrl = newImageData.url;
+    quotation.images[imageIndex].s3Key = newImageData.key;
+    quotation.images[imageIndex].uploadedAt = new Date();
+
+    await quotation.save();
+
+    const updatedQuotation = await Quotation.findById(id)
+      .populate("project", "projectName")
+      .populate("preparedBy", "firstName lastName");
+
+    res
+      .status(200)
+      .json(new ApiResponse(200, updatedQuotation, "Image replaced successfully"));
+  }
+);
+
+export const updateQuotationImage = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { id, imageId } = req.params;
+    const { title, description, relatedItemIndex } = req.body;
+
+    if (!id || !imageId) {
+      throw new ApiError(400, "Quotation ID and image ID are required");
+    }
+
+    const quotation = await Quotation.findById(id);
+    if (!quotation) {
+      throw new ApiError(404, "Quotation not found");
+    }
+
+    // Check if user is authorized to update this quotation
+    if (quotation.preparedBy.toString() !== req.user?.userId.toString()) {
+      throw new ApiError(403, "Not authorized to update this quotation");
+    }
+
+    const imageIndex = quotation.images.findIndex(
+      (img) => img._id.toString() === imageId
+    );
+
+    if (imageIndex === -1) {
+      throw new ApiError(404, "Image not found");
+    }
+
+    // Update image fields
+    if (title !== undefined) {
+      if (!title?.trim()) {
+        throw new ApiError(400, "Title cannot be empty");
+      }
+      quotation.images[imageIndex].title = title.trim();
+    }
+
+    if (description !== undefined) {
+      quotation.images[imageIndex].description = description?.trim() || "";
+    }
+
+    if (relatedItemIndex !== undefined) {
+      if (relatedItemIndex === '' || relatedItemIndex === null) {
+        quotation.images[imageIndex].relatedItemIndex = undefined;
+      } else {
+        const parsedIndex = parseInt(relatedItemIndex);
+        if (!isNaN(parsedIndex)) {
+          quotation.images[imageIndex].relatedItemIndex = parsedIndex;
+        }
+      }
+    }
+
+    await quotation.save();
+
+    const updatedQuotation = await Quotation.findById(id)
+      .populate("project", "projectName")
+      .populate("preparedBy", "firstName lastName");
+
+    res
+      .status(200)
+      .json(new ApiResponse(200, updatedQuotation, "Image updated successfully"));
+  }
+);
+
+export const getQuotationImages = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    if (!id) {
+      throw new ApiError(400, "Quotation ID is required");
+    }
+
+    const quotation = await Quotation.findById(id).select("images");
+    
+    if (!quotation) {
+      throw new ApiError(404, "Quotation not found");
+    }
+
+    res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          quotation.images,
+          "Quotation images retrieved successfully"
+        )
+      );
+  }
+);
+
+export const deleteQuotationImage = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { id, imageId } = req.params;
+
+    if (!id || !imageId) {
+      throw new ApiError(400, "Quotation ID and image ID are required");
+    }
+
+    const quotation = await Quotation.findById(id);
+    if (!quotation) {
+      throw new ApiError(404, "Quotation not found");
+    }
+
+    if (quotation.preparedBy.toString() !== req.user?.userId.toString()) {
+      throw new ApiError(403, "Not authorized to modify this quotation");
+    }
+
+    const imageIndex = quotation.images.findIndex(
+      (img) => img._id.toString() === imageId
+    );
+
+    if (imageIndex === -1) {
+      throw new ApiError(404, "Image not found");
+    }
+
+    const imageToDelete = quotation.images[imageIndex];
+    const deleteResult = await deleteFileFromS3(imageToDelete.s3Key);
+
+    if (!deleteResult.success) {
+      throw new ApiError(500, "Failed to delete image from S3");
+    }
+
+    quotation.images.splice(imageIndex, 1);
+    await quotation.save();
+
+    const updatedQuotation = await Quotation.findById(id)
+      .populate("project", "projectName")
+      .populate("preparedBy", "firstName lastName");
+
+    res
+      .status(200)
+      .json(new ApiResponse(200, updatedQuotation, "Image deleted successfully"));
   }
 );
 
@@ -119,22 +376,6 @@ export const getQuotationByProject = asyncHandler(
 
 export const updateQuotation = asyncHandler(
   async (req: Request, res: Response) => {
-    // Debugging logs
-    console.log("Request body:", req.body);
-    console.log("Request files:", req.files);
-
-    if (!req.files || !Array.isArray(req.files)) {
-      throw new ApiError(400, "No files were uploaded");
-    }
-
-    // Parse the JSON data from form-data
-    let jsonData;
-    try {
-      jsonData = JSON.parse(req.body.data);
-    } catch (error) {
-      throw new ApiError(400, "Invalid JSON data format");
-    }
-
     const { id } = req.params;
     const {
       items = [],
@@ -142,7 +383,7 @@ export const updateQuotation = asyncHandler(
       scopeOfWork,
       termsAndConditions,
       vatPercentage,
-    } = jsonData;
+    } = req.body;
 
     // Validate items is an array
     if (!Array.isArray(items)) {
@@ -152,41 +393,11 @@ export const updateQuotation = asyncHandler(
     const quotation = await Quotation.findById(id);
     if (!quotation) throw new ApiError(404, "Quotation not found");
 
-    // Process items with their corresponding files
-    const processedItems = await Promise.all(
-      items.map(async (item: any, index: number) => {
-        // Find the image file for this item using the correct fieldname pattern
-        const imageFile = (req.files as Express.Multer.File[]).find(
-          (f) => f.fieldname === `items[${index}][image]`
-        );
-
-        // If new image is uploaded
-        if (imageFile) {
-          console.log(`Processing image for item ${index}:`, imageFile);
-
-          // Delete old image if it exists
-          if (item.image?.key) {
-            await deleteFileFromS3(item.image.key);
-          }
-
-          // Upload new image
-          const uploadResult = await uploadItemImage(imageFile);
-          if (uploadResult.uploadData) {
-            item.image = uploadResult.uploadData;
-          }
-        } else if (item.image && typeof item.image === 'object') {
-          // Keep existing image if no new one was uploaded
-          item.image = item.image;
-        } else {
-          // No image for this item
-          item.image = undefined;
-        }
-
-        // Calculate total price
-        item.totalPrice = item.quantity * item.unitPrice;
-        return item;
-      })
-    );
+    // Calculate item totals (no image processing)
+    const processedItems = items.map((item: any) => {
+      item.totalPrice = item.quantity * item.unitPrice;
+      return item;
+    });
 
     // Calculate financial totals
     const subtotal = processedItems.reduce(
@@ -208,7 +419,11 @@ export const updateQuotation = asyncHandler(
 
     await quotation.save();
 
-    res.status(200).json(new ApiResponse(200, quotation, "Quotation updated"));
+    const updatedQuotation = await Quotation.findById(id)
+      .populate("project", "projectName")
+      .populate("preparedBy", "firstName lastName");
+
+    res.status(200).json(new ApiResponse(200, updatedQuotation, "Quotation updated"));
   }
 );
 
@@ -225,9 +440,14 @@ export const approveQuotation = asyncHandler(
         approvedBy: req.user?.userId,
       },
       { new: true }
-    );
+    ).populate("project", "projectName")
+     .populate("preparedBy", "firstName lastName");
 
-    await Project.findByIdAndUpdate(quotation?.project, {
+    if (!quotation) {
+      throw new ApiError(404, "Quotation not found");
+    }
+
+    await Project.findByIdAndUpdate(quotation.project, {
       status: isApproved ? "quotation_approved" : "quotation_rejected",
     });
 
@@ -246,15 +466,20 @@ export const approveQuotation = asyncHandler(
 export const deleteQuotation = asyncHandler(
   async (req: Request, res: Response) => {
     const { id } = req.params;
-    const quotation = await Quotation.findByIdAndDelete(id);
+    const quotation = await Quotation.findById(id);
 
     if (!quotation) throw new ApiError(404, "Quotation not found");
 
-    await Promise.all(
-      quotation.items.map((item) =>
-        item.image?.key ? deleteFileFromS3(item.image.key) : Promise.resolve()
-      )
-    );
+    // Delete all associated images from S3
+    if (quotation.images && quotation.images.length > 0) {
+      await Promise.all(
+        quotation.images.map((image) =>
+          image.s3Key ? deleteFileFromS3(image.s3Key) : Promise.resolve()
+        )
+      );
+    }
+
+    await Quotation.findByIdAndDelete(id);
 
     await Project.findByIdAndUpdate(quotation.project, {
       status: "estimation_prepared",
@@ -305,6 +530,7 @@ export const generateQuotationPdf = asyncHandler(
         year: "numeric",
       }) : "";
     };
+    
     const getDaysRemaining = (validUntil: Date) => {
       if (!validUntil) return "N/A";
       const today = new Date();
@@ -332,7 +558,7 @@ export const generateQuotationPdf = asyncHandler(
     body {
       font-family: 'Arial', sans-serif;
       font-size: 11pt;
-      line-height: 1.5;
+      line-height: 1.4;
       color: #333;
       margin: 0;
       padding: 0;
@@ -345,13 +571,13 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .content {
-      margin-bottom: 20px;
+      margin-bottom: 15px;
     }
 
     .header {
       display: flex;
       align-items: flex-start;
-      margin-bottom: 15px;
+      margin-bottom: 10px;
       gap: 15px;
       page-break-after: avoid;
     }
@@ -379,23 +605,23 @@ export const generateQuotationPdf = asyncHandler(
 
     .client-info-container {
       display: flex;
-      margin-bottom: 12px;
-      gap: 20px;
+      margin-bottom: 8px;
+      gap: 15px;
       page-break-after: avoid;
     }
 
     .client-info {
       flex: 1;
-      padding: 10px 12px;
+      padding: 8px 10px;
       border: 1px solid #ddd;
       border-radius: 4px;
-      font-size: 10pt;
+      font-size: 9.5pt;
       background-color: #f8f9fa;
     }
 
     .client-info p {
-      margin: 6px 0;
-      line-height: 1.4;
+      margin: 4px 0;
+      line-height: 1.3;
     }
 
     .client-info strong {
@@ -404,13 +630,13 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .quotation-info {
-      width: 250px;
+      width: 220px;
     }
 
     .quotation-details {
       width: 100%;
       border-collapse: collapse;
-      font-size: 10pt;
+      font-size: 9.5pt;
     }
 
     .quotation-details tr:not(:last-child) {
@@ -418,7 +644,7 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .quotation-details td {
-      padding: 8px 10px;
+      padding: 6px 8px;
       vertical-align: top;
     }
 
@@ -429,8 +655,8 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .subject-section {
-      margin: 12px 0;
-      padding: 10px 12px;
+      margin: 8px 0;
+      padding: 8px 10px;
       background-color: #f8f9fa;
       border-radius: 4px;
       page-break-after: avoid;
@@ -438,33 +664,32 @@ export const generateQuotationPdf = asyncHandler(
 
     .subject-title {
       font-weight: bold;
-      font-size: 11pt;
-      margin-bottom: 6px;
+      font-size: 10.5pt;
+      margin-bottom: 4px;
       color: #2c3e50;
     }
 
     .subject-content {
-      font-size: 10.5pt;
+      font-size: 10pt;
       color: #333;
       font-weight: 500;
     }
 
     .section {
-      margin-bottom: 15px;
+      margin-bottom: 12px;
       page-break-inside: avoid;
     }
 
     .section-title {
-      font-size: 12pt;
+      font-size: 11pt;
       font-weight: bold;
-      padding: 6px 0;
-      margin: 12px 0 8px 0;
+      padding: 4px 0;
+      margin: 8px 0 6px 0;
       border-bottom: 2px solid #94d7f4;
       page-break-after: avoid;
       color: #2c3e50;
     }
 
-    /* Critical fix for table page breaks */
     .table-container {
       page-break-inside: auto;
       overflow: visible;
@@ -473,9 +698,9 @@ export const generateQuotationPdf = asyncHandler(
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 15px;
+      margin-bottom: 10px;
       page-break-inside: auto;
-      font-size: 10pt;
+      font-size: 9.5pt;
       table-layout: fixed;
     }
 
@@ -487,7 +712,6 @@ export const generateQuotationPdf = asyncHandler(
       display: table-row-group;
     }
 
-    /* Allow rows to break across pages but keep cells intact */
     tr {
       page-break-inside: avoid;
       page-break-after: auto;
@@ -502,67 +726,56 @@ export const generateQuotationPdf = asyncHandler(
       background-color: #94d7f4;
       color: #000;
       font-weight: bold;
-      padding: 6px 8px;
+      padding: 5px 6px;
       text-align: left;
       border: 1px solid #ddd;
-      font-size: 10pt;
-      word-wrap: break-word;
+      font-size: 9.5pt;
     }
 
     td {
-      padding: 6px 8px;
+      padding: 5px 6px;
       border: 1px solid #ddd;
       vertical-align: top;
-      font-size: 10pt;
-      word-wrap: break-word;
+      font-size: 9.5pt;
     }
 
-    /* Preserve line breaks in description */
     .col-desc {
       white-space: pre-wrap;
     }
 
-    /* Optimized column widths for better fit */
     .col-no { width: 5%; }
-    .col-desc { width: 30%; }
-    .col-uom { width: 8%; }
-    .col-image { width: 12%; }
-    .col-qty { width: 8%; }
-    .col-unit { width: 12%; }
-    .col-total { width: 10%; }
-
-    td img {
-      max-height: 60px;
-      object-fit: contain;
-      page-break-inside: avoid;
-    }
+    .col-desc { width: 45%; }
+    .col-uom { width: 10%; }
+    .col-qty { width: 10%; }
+    .col-unit { width: 15%; }
+    .col-total { width: 15%; }
 
     .amount-summary {
-      margin-top: 12px;
+      margin-top: 8px;
       width: 100%;
       text-align: right;
       page-break-before: avoid;
-      font-size: 10.5pt;
+      font-size: 10pt;
     }
 
     .amount-summary-row {
       display: flex;
       justify-content: flex-end;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
 
     .amount-label {
-      width: 150px;
+      width: 120px;
       font-weight: bold;
       text-align: right;
-      padding-right: 12px;
-      font-size: 10pt;
+      padding-right: 10px;
+      font-size: 9.5pt;
     }
 
     .amount-value {
-      width: 100px;
+      width: 90px;
       text-align: right;
-      font-size: 10pt;
+      font-size: 9.5pt;
     }
 
     .net-amount-row {
@@ -571,14 +784,82 @@ export const generateQuotationPdf = asyncHandler(
       background-color: #94d7f4;
       color: #000;
       font-weight: bold;
-      font-size: 11pt;
-      margin-top: 6px;
-      padding: 6px 0;
+      font-size: 10pt;
+      margin-top: 4px;
+      padding: 4px 0;
       border-top: 2px solid #333;
     }
 
+    /* Compact Images Section - Card Layout */
+    .images-section {
+      margin-top: 12px;
+      page-break-inside: avoid;
+    }
+
+    .images-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    .image-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: calc(33.333% - 8px);
+      margin-bottom: 8px;
+      page-break-inside: avoid;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      padding: 6px;
+      background: #fafafa;
+    }
+
+    .image-card img {
+      max-height: 80px;
+      width: auto;
+      max-width: 100%;
+      object-fit: contain;
+      border-radius: 4px;
+    }
+
+    .image-content {
+      width: 100%;
+      margin-top: 4px;
+    }
+
+    .image-title {
+      font-size: 8.5pt;
+      font-weight: bold;
+      text-align: center;
+      color: #2c3e50;
+      line-height: 1.2;
+      margin-bottom: 2px;
+    }
+
+    .image-description {
+      font-size: 7.5pt;
+      text-align: center;
+      color: #666;
+      line-height: 1.2;
+      margin-bottom: 2px;
+    }
+
+    .image-category {
+      font-size: 7pt;
+      text-align: center;
+      color: #94d7f4;
+      font-weight: bold;
+      background: #e3f2fd;
+      padding: 2px 6px;
+      border-radius: 10px;
+      display: inline-block;
+      margin: 0 auto;
+    }
+
     .terms-prepared-section {
-      margin-top: 15px;
+      margin-top: 12px;
       page-break-inside: avoid;
     }
 
@@ -586,14 +867,14 @@ export const generateQuotationPdf = asyncHandler(
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding-bottom: 6px;
+      padding-bottom: 4px;
       border-bottom: 2px solid #94d7f4;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
       page-break-after: avoid;
     }
 
     .terms-title, .prepared-title {
-      font-size: 11pt;
+      font-size: 10pt;
       font-weight: bold;
       margin: 0;
       color: #2c3e50;
@@ -601,7 +882,7 @@ export const generateQuotationPdf = asyncHandler(
 
     .terms-prepared-content {
       display: flex;
-      gap: 20px;
+      gap: 15px;
       align-items: flex-start;
     }
 
@@ -610,67 +891,67 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .prepared-content {
-      width: 250px;
+      width: 200px;
       flex-shrink: 0;
       display: flex;
       flex-direction: column;
       align-items: flex-end;
-      font-size: 10pt;
+      font-size: 9.5pt;
     }
 
     .terms-box {
       border: 1px solid #000;
-      padding: 10px 12px;
+      padding: 8px 10px;
       width: 100%;
       box-sizing: border-box;
-      font-size: 10pt;
-      line-height: 1.5;
+      font-size: 9.5pt;
+      line-height: 1.4;
     }
 
     .terms-box ol {
       margin: 0;
-      padding-left: 18px;
+      padding-left: 15px;
     }
 
     .terms-box li {
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
 
     .prepared-by-name {
       font-weight: bold;
-      margin-top: 6px;
-      font-size: 10.5pt;
+      margin-top: 4px;
+      font-size: 10pt;
       color: #2c3e50;
     }
 
     .prepared-by-title {
-      font-size: 9.5pt;
+      font-size: 9pt;
       color: #555;
-      margin-top: 4px;
+      margin-top: 2px;
     }
 
     .tagline {
       text-align: center;
       font-weight: bold;
-      font-size: 12pt;
-      margin: 20px 0 12px 0;
+      font-size: 11pt;
+      margin: 15px 0 8px 0;
       color: #2c3e50;
       border-top: 2px solid #ddd;
-      padding-top: 12px;
+      padding-top: 8px;
       page-break-before: avoid;
     }
 
     .footer {
-      font-size: 9pt;
+      font-size: 8.5pt;
       color: #555;
       text-align: center;
-      margin-top: 12px;
+      margin-top: 8px;
       page-break-inside: avoid;
-      line-height: 1.5;
+      line-height: 1.3;
     }
 
     .footer p {
-      margin: 6px 0;
+      margin: 4px 0;
     }
 
     .footer strong {
@@ -686,15 +967,14 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     p {
-      margin: 6px 0;
-      line-height: 1.4;
+      margin: 4px 0;
+      line-height: 1.3;
     }
 
     strong {
       font-weight: 600;
     }
 
-    /* Print-specific optimizations */
     @media print {
       thead { 
         display: table-header-group; 
@@ -703,7 +983,6 @@ export const generateQuotationPdf = asyncHandler(
         display: table-footer-group; 
       }
       
-      /* Critical fix: Allow tables to break naturally across pages */
       table {
         page-break-inside: auto;
       }
@@ -713,13 +992,11 @@ export const generateQuotationPdf = asyncHandler(
         break-after: auto;
       }
 
-      /* Prevent the subject section from breaking awkwardly */
       .subject-section {
         page-break-after: avoid;
         page-break-inside: avoid;
       }
 
-      /* Ensure items section starts on new page if it doesn't fit */
       .items-section {
         page-break-before: auto;
       }
@@ -734,28 +1011,25 @@ export const generateQuotationPdf = asyncHandler(
         margin: 0;
         padding: 0;
       }
+
+      .image-card {
+        page-break-inside: avoid;
+      }
     }
 
-    /* Force page break if needed */
     .page-break {
       page-break-before: always;
     }
 
-    /* Prevent header sections from breaking across pages */
     .header-section {
       page-break-after: avoid;
       page-break-inside: avoid;
-    }
-
-    .no-small-text {
-      font-size: 9pt !important;
     }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="content">
-      <!-- Header Section - Keep together -->
       <div class="header-section">
         <div class="header">
           <img class="logo" src="https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/sample-spmc/logo+(1).png" alt="Company Logo">
@@ -792,14 +1066,12 @@ export const generateQuotationPdf = asyncHandler(
           </div>
         </div>
 
-        <!-- Subject Section - Keep with header -->
         <div class="subject-section">
           <div class="subject-title">SUBJECT</div>
           <div class="subject-content">${project.projectName || "N/A"}</div>
         </div>
       </div>
 
-      <!-- Items Section - Allow to break naturally across pages -->
       <div class="section items-section">
         <div class="section-title">ITEMS</div>
         <div class="table-container">
@@ -809,7 +1081,6 @@ export const generateQuotationPdf = asyncHandler(
                 <th class="col-no">No.</th>
                 <th class="col-desc">Description</th>
                 <th class="col-uom">UOM</th>
-                <th class="col-image">Image</th>
                 <th class="col-qty">Qty</th>
                 <th class="col-unit">Unit Price (AED)</th>
                 <th class="col-total text-right">Total (AED)</th>
@@ -821,9 +1092,6 @@ export const generateQuotationPdf = asyncHandler(
                   <td class="text-center col-no">${index + 1}</td>
                   <td class="col-desc">${cleanDescription(item.description)}</td>
                   <td class="text-center col-uom">${item.uom || "NOS"}</td>
-                  <td class="text-center col-image" style="padding: 6px;">
-                    ${item.image?.url ? `<img src="${item.image.url}" style="width: 100%; height: auto; max-height: 60px; object-fit: contain;"/>` : ""}
-                  </td>
                   <td class="text-center col-qty">${item.quantity.toFixed(2)}</td>
                   <td class="text-right col-unit">${item.unitPrice.toFixed(2)}</td>
                   <td class="text-right col-total">${item.totalPrice.toFixed(2)}</td>
@@ -848,6 +1116,30 @@ export const generateQuotationPdf = asyncHandler(
           </div>
         </div>
       </div>
+
+      ${quotation.images.length > 0 ? `
+      <div class="section images-section">
+        <div class="section-title">QUOTATION IMAGES</div>
+        <div class="images-grid">
+          ${quotation.images.map(image => {
+            const itemCategory = image.relatedItemIndex !== undefined 
+              ? `Item ${image.relatedItemIndex + 1}`
+              : 'General Image';
+            
+            return `
+            <div class="image-card">
+              <img src="${image.imageUrl}" alt="${image.title}" />
+              <div class="image-content">
+                <div class="image-title">${image.title}</div>
+                ${image.description ? `<div class="image-description">${image.description}</div>` : ''}
+                <div class="image-category">${itemCategory}</div>
+              </div>
+            </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+      ` : ''}
 
       ${quotation.termsAndConditions.length > 0 ? `
       <div class="terms-prepared-section">
@@ -904,7 +1196,6 @@ export const generateQuotationPdf = asyncHandler(
     try {
       const page = await browser.newPage();
 
-      // Set viewport for consistent rendering
       await page.setViewport({ width: 1200, height: 1600 });
 
       await page.setContent(htmlContent, {
