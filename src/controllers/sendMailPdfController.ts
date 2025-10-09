@@ -17,7 +17,7 @@ export const sendQuotationEmail = asyncHandler(
     const quotation = await Quotation.findById(id)
       .populate<{ project: IProject & { client: IClient } }>({
         path: "project",
-        select: "projectName client siteAddress location building apartmentNumber",
+        select: "projectName client siteAddress location building apartmentNumber attention",
         populate: {
           path: "client",
           select: "clientName clientAddress mobileNumber telephoneNumber email",
@@ -80,7 +80,7 @@ export const sendQuotationEmail = asyncHandler(
   }
 );
 
-// Helper function to generate PDF buffer (extracted from existing PDF generation code)
+// Helper function to generate PDF buffer (using the same template as your PDF generation)
 const generateQuotationPdfBuffer = async (
   quotation: any,
   client: IClient,
@@ -101,7 +101,7 @@ const generateQuotationPdfBuffer = async (
       year: "numeric",
     }) : "";
   };
-
+  
   const getDaysRemaining = (validUntil: Date) => {
     if (!validUntil) return "N/A";
     const today = new Date();
@@ -111,327 +111,567 @@ const generateQuotationPdfBuffer = async (
     return daysRemaining > 0 ? `${daysRemaining} days` : "Expired";
   };
 
-  // Use the same HTML content from your existing PDF generation
+  // Function to clean up description - remove extra blank lines
+  const cleanDescription = (description: string) => {
+    return description.replace(/\n\n+/g, '\n').trim();
+  };
+
+  // Use the exact same HTML content from your PDF generation template
   let htmlContent = `<!DOCTYPE html>
 <html>
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
   <style type="text/css">
-   @page {
-  size: A4;
-  margin: 1cm;
-}
-body {
-  font-family: 'Arial', sans-serif;
-  font-size: 10pt;
-  line-height: 1.4;
-  color: #333;
-  margin: 0;
-  padding: 0;
-}
+    @page {
+      size: A4;
+      margin: 0.5cm;
+    }
+    
+    body {
+      font-family: 'Arial', sans-serif;
+      font-size: 11pt;
+      line-height: 1.4;
+      color: #333;
+      margin: 0;
+      padding: 0;
+    }
 
-.container {
-  display: block;
-}
+    .container {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+    }
 
-.content {
-  margin-bottom: 20px;
-}
+    .content {
+      margin-bottom: 15px;
+    }
 
-.header {
-  display: flex;
-  align-items: flex-start;
-  margin-bottom: 15px;
-  gap: 15px;
-}
+    .header {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 10px;
+      gap: 15px;
+      page-break-after: avoid;
+    }
 
-.logo {
-  height: 50px;
-  width: auto;
-}
+    .logo {
+      height: 55px;
+      width: auto;
+      max-width: 180px;
+    }
 
-.header-content {
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-end;
-}
+    .header-content {
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-end;
+    }
 
-.document-title {
-  font-size: 14pt;
-  font-weight: bold;
-  margin: 0;
-  color: #000;
-  padding-top: 8px;
-}
+    .document-title {
+      font-size: 16pt;
+      font-weight: bold;
+      margin: 0;
+      color: #000;
+    }
 
-.client-info-container {
-  display: flex;
-  margin-bottom: 10px;
-  gap: 20px;
-}
+    .client-info-container {
+      display: flex;
+      margin-bottom: 8px;
+      gap: 15px;
+      page-break-after: avoid;
+    }
 
-.client-info {
-  flex: 1;
-  padding: 10px;
-  border: 1px solid #eee;
-  border-radius: 4px;
-}
+    .client-info {
+      flex: 1;
+      padding: 8px 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 9.5pt;
+      background-color: #f8f9fa;
+    }
 
-.quotation-info {
-  width: 250px;
-}
+    .client-info p {
+      margin: 4px 0;
+      line-height: 1.3;
+    }
 
-.quotation-details {
-  width: 100%;
-  border-collapse: collapse;
-}
+    .client-info strong {
+      font-weight: 600;
+      color: #2c3e50;
+    }
 
-.quotation-details tr:not(:last-child) {
-  border-bottom: 1px solid #eee;
-}
+    .quotation-info {
+      width: 220px;
+    }
 
-.quotation-details td {
-  padding: 8px 10px;
-  vertical-align: top;
-}
+    .quotation-details {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9.5pt;
+    }
 
-.quotation-details td:first-child {
-  font-weight: bold;
-  width: 40%;
-  color: #555;
-}
+    .quotation-details tr:not(:last-child) {
+      border-bottom: 1px solid #eee;
+    }
 
-.section {
-  margin-bottom: 15px;
-  page-break-inside: avoid;
-}
+    .quotation-details td {
+      padding: 6px 8px;
+      vertical-align: top;
+    }
 
-.section-title {
-  font-size: 11pt;
-  font-weight: bold;
-  padding: 5px 0;
-  margin: 10px 0 5px 0;
-  border-bottom: 1px solid #ddd;
-}
+    .quotation-details td:first-child {
+      font-weight: bold;
+      width: 40%;
+      color: #2c3e50;
+    }
 
-.terms-prepared-section {
-  margin-top: 15px;
-  page-break-inside: avoid;
-}
+    .subject-section {
+      margin: 8px 0;
+      padding: 8px 10px;
+      background-color: #f8f9fa;
+      border-radius: 4px;
+      page-break-after: avoid;
+    }
 
-.terms-prepared-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-bottom: 5px;
-  border-bottom: 1px solid #ddd;
-  margin-bottom: 10px;
-}
+    .subject-title {
+      font-weight: bold;
+      font-size: 10.5pt;
+      margin-bottom: 4px;
+      color: #2c3e50;
+    }
 
-.terms-title, .prepared-title {
-  font-size: 11pt;
-  font-weight: bold;
-  margin: 0;
-  color: #333;
-}
+    .subject-content {
+      font-size: 10pt;
+      color: #333;
+      font-weight: 500;
+    }
 
-.terms-prepared-content {
-  display: flex;
-  gap: 20px;
-  align-items: flex-start;
-}
+    .section {
+      margin-bottom: 12px;
+      page-break-inside: avoid;
+    }
 
-.terms-content {
-  flex: 1;
-}
+    .section-title {
+      font-size: 11pt;
+      font-weight: bold;
+      padding: 4px 0;
+      margin: 8px 0 6px 0;
+      border-bottom: 2px solid #94d7f4;
+      page-break-after: avoid;
+      color: #2c3e50;
+    }
 
-.prepared-content {
-  width: 250px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-}
+    .table-container {
+      page-break-inside: auto;
+      overflow: visible;
+    }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: 15px;
-  page-break-inside: avoid;
-}
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 10px;
+      page-break-inside: auto;
+      font-size: 9.5pt;
+      table-layout: fixed;
+    }
 
-th {
-  background-color: #94d7f4;
-  color: #000;
-  font-weight: bold;
-  padding: 6px 8px;
-  text-align: left;
-  border: 1px solid #ddd;
-}
+    thead {
+      display: table-header-group;
+    }
 
-td {
-  padding: 6px 8px;
-  border: 1px solid #ddd;
-  vertical-align: top;
-}
+    tbody {
+      display: table-row-group;
+    }
 
-.amount-summary {
-  margin-top: 10px;
-  width: 100%;
-  text-align: right;
-}
+    tr {
+      page-break-inside: avoid;
+      page-break-after: auto;
+    }
 
-.amount-summary-row {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 5px;
-}
+    th, td {
+      page-break-inside: avoid;
+      page-break-before: auto;
+    }
 
-.amount-label {
-  width: 150px;
-  font-weight: bold;
-  text-align: right;
-  padding-right: 10px;
-}
+    th {
+      background-color: #94d7f4;
+      color: #000;
+      font-weight: bold;
+      padding: 5px 6px;
+      text-align: left;
+      border: 1px solid #ddd;
+      font-size: 9.5pt;
+    }
 
-.amount-value {
-  width: 100px;
-  text-align: right;
-}
+    td {
+      padding: 5px 6px;
+      border: 1px solid #ddd;
+      vertical-align: top;
+      font-size: 9.5pt;
+    }
 
-.net-amount-row {
-  display: flex;
-  justify-content: flex-end;
-  background-color: #94d7f4;
-  color: #000;
-  font-weight: bold;
-  font-size: 11pt;
-  margin-top: 5px;
-  padding: 5px 0;
-  border-top: 1px solid #333;
-}
+    .col-desc {
+      white-space: pre-wrap;
+    }
 
-.terms-box {
-  border: 1px solid #000;
-  padding: 10px;
-  width: 100%;
-  box-sizing: border-box;
-}
+    .col-no { width: 5%; }
+    .col-desc { width: 45%; }
+    .col-uom { width: 10%; }
+    .col-qty { width: 10%; }
+    .col-unit { width: 15%; }
+    .col-total { width: 15%; }
 
-.prepared-by-name {
-  font-weight: bold;
-  margin-top: 5px;
-}
+    .amount-summary {
+      margin-top: 8px;
+      width: 100%;
+      text-align: right;
+      page-break-before: avoid;
+      font-size: 10pt;
+    }
 
-.prepared-by-title {
-  font-size: 9pt;
-  color: #777;
-  margin-top: 5px;
-}
+    .amount-summary-row {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 4px;
+    }
 
-.tagline {
-  text-align: center;
-  font-weight: bold;
-  font-size: 12pt;
-  margin: 20px 0 10px 0;
-  color: #333;
-  border-top: 2px solid #ddd;
-  padding-top: 15px;
-  page-break-before: avoid;
-}
+    .amount-label {
+      width: 120px;
+      font-weight: bold;
+      text-align: right;
+      padding-right: 10px;
+      font-size: 9.5pt;
+    }
 
-.footer {
-  font-size: 9pt;
-  color: #777;
-  text-align: center;
-  margin-top: 10px;
-  page-break-inside: avoid;
-  page-break-before: avoid;
-}
+    .amount-value {
+      width: 90px;
+      text-align: right;
+      font-size: 9.5pt;
+    }
 
-.text-center {
-  text-align: center;
-}
+    .net-amount-row {
+      display: flex;
+      justify-content: flex-end;
+      background-color: #94d7f4;
+      color: #000;
+      font-weight: bold;
+      font-size: 10pt;
+      margin-top: 4px;
+      padding: 4px 0;
+      border-top: 2px solid #333;
+    }
 
-.text-right {
-  text-align: right;
-}
+    /* Compact Images Section - Card Layout */
+    .images-section {
+      margin-top: 12px;
+      page-break-inside: avoid;
+    }
 
-p {
-  margin: 5px 0;
-}
+    .images-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    .image-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: calc(33.333% - 8px);
+      margin-bottom: 8px;
+      page-break-inside: avoid;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      padding: 6px;
+      background: #fafafa;
+    }
+
+    .image-card img {
+      max-height: 80px;
+      width: auto;
+      max-width: 100%;
+      object-fit: contain;
+      border-radius: 4px;
+    }
+
+    .image-content {
+      width: 100%;
+      margin-top: 4px;
+    }
+
+    .image-title {
+      font-size: 8.5pt;
+      font-weight: bold;
+      text-align: center;
+      color: #2c3e50;
+      line-height: 1.2;
+      margin-bottom: 2px;
+    }
+
+    .image-description {
+      font-size: 7.5pt;
+      text-align: center;
+      color: #666;
+      line-height: 1.2;
+      margin-bottom: 2px;
+    }
+
+    .image-category {
+      font-size: 7pt;
+      text-align: center;
+      color: #94d7f4;
+      font-weight: bold;
+      background: #e3f2fd;
+      padding: 2px 6px;
+      border-radius: 10px;
+      display: inline-block;
+      margin: 0 auto;
+    }
+
+    .terms-prepared-section {
+      margin-top: 12px;
+      page-break-inside: avoid;
+    }
+
+    .terms-prepared-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 4px;
+      border-bottom: 2px solid #94d7f4;
+      margin-bottom: 8px;
+      page-break-after: avoid;
+    }
+
+    .terms-title, .prepared-title {
+      font-size: 10pt;
+      font-weight: bold;
+      margin: 0;
+      color: #2c3e50;
+    }
+
+    .terms-prepared-content {
+      display: flex;
+      gap: 15px;
+      align-items: flex-start;
+    }
+
+    .terms-content {
+      flex: 1;
+    }
+
+    .prepared-content {
+      width: 200px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      font-size: 9.5pt;
+    }
+
+    .terms-box {
+      border: 1px solid #000;
+      padding: 8px 10px;
+      width: 100%;
+      box-sizing: border-box;
+      font-size: 9.5pt;
+      line-height: 1.4;
+    }
+
+    .terms-box ol {
+      margin: 0;
+      padding-left: 15px;
+    }
+
+    .terms-box li {
+      margin-bottom: 4px;
+    }
+
+    .prepared-by-name {
+      font-weight: bold;
+      margin-top: 4px;
+      font-size: 10pt;
+      color: #2c3e50;
+    }
+
+    .prepared-by-title {
+      font-size: 9pt;
+      color: #555;
+      margin-top: 2px;
+    }
+
+    .tagline {
+      text-align: center;
+      font-weight: bold;
+      font-size: 11pt;
+      margin: 15px 0 8px 0;
+      color: #2c3e50;
+      border-top: 2px solid #ddd;
+      padding-top: 8px;
+      page-break-before: avoid;
+    }
+
+    .footer {
+      font-size: 8.5pt;
+      color: #555;
+      text-align: center;
+      margin-top: 8px;
+      page-break-inside: avoid;
+      line-height: 1.3;
+    }
+
+    .footer p {
+      margin: 4px 0;
+    }
+
+    .footer strong {
+      color: #2c3e50;
+    }
+
+    .text-center {
+      text-align: center;
+    }
+
+    .text-right {
+      text-align: right;
+    }
+
+    p {
+      margin: 4px 0;
+      line-height: 1.3;
+    }
+
+    strong {
+      font-weight: 600;
+    }
+
+    @media print {
+      thead { 
+        display: table-header-group; 
+      }
+      tfoot { 
+        display: table-footer-group; 
+      }
+      
+      table {
+        page-break-inside: auto;
+      }
+      
+      tr {
+        break-inside: avoid;
+        break-after: auto;
+      }
+
+      .subject-section {
+        page-break-after: avoid;
+        page-break-inside: avoid;
+      }
+
+      .items-section {
+        page-break-before: auto;
+      }
+
+      body {
+        font-size: 10pt;
+        margin: 0;
+        padding: 0;
+      }
+
+      .container {
+        margin: 0;
+        padding: 0;
+      }
+
+      .image-card {
+        page-break-inside: avoid;
+      }
+    }
+
+    .page-break {
+      page-break-before: always;
+    }
+
+    .header-section {
+      page-break-after: avoid;
+      page-break-inside: avoid;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="content">
-      <div class="header">
-        <img class="logo" src="https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/sample-spmc/logo+(1).png" alt="Company Logo">
-        <div class="header-content">
-          <div class="document-title">QUOTE</div>
+      <div class="header-section">
+        <div class="header">
+          <img class="logo" src="https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/sample-spmc/logo+(1).png" alt="Company Logo">
+          <div class="header-content">
+            <div class="document-title">QUOTE</div>
+          </div>
+        </div>
+
+        <div class="client-info-container">
+          <div class="client-info">
+            <p><strong>CLIENT:</strong> ${client.clientName || "N/A"}</p>
+            <p><strong>ADDRESS:</strong> ${client.clientAddress || "N/A"}</p>
+            <p><strong>CONTACT:</strong> ${client.mobileNumber || client.telephoneNumber || "N/A"}</p>
+            <p><strong>EMAIL:</strong> ${client.email || "N/A"}</p>
+            <p><strong>SITE:</strong> ${site}</p>
+            <p><strong>ATTENTION:</strong> ${project.attention || "N/A"}</p>
+          </div>
+
+          <div class="quotation-info">
+            <table class="quotation-details">
+              <tr>
+                <td>Quotation #:</td>
+                <td>${quotation.quotationNumber}</td>
+              </tr>
+              <tr>
+                <td>Date:</td>
+                <td>${formatDate(quotation.date)}</td>
+              </tr>
+              <tr>
+                <td>Valid Until:</td>
+                <td>${formatDate(quotation.validUntil)} (${getDaysRemaining(quotation.validUntil)})</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+
+        <div class="subject-section">
+          <div class="subject-title">SUBJECT</div>
+          <div class="subject-content">${project.projectName || "N/A"}</div>
         </div>
       </div>
 
-      <div class="client-info-container">
-        <div class="client-info">
-          <p><strong>CLIENT:</strong> ${client.clientName || "N/A"}</p>
-          <p><strong>ADRESS:</strong> ${client.clientAddress || "N/A"}</p>
-          <p><strong>CONTACT:</strong> ${client.mobileNumber || client.telephoneNumber || "N/A"}</p>
-          <p><strong>EMAIL:</strong> ${client.email || "N/A"}</p>
-          <p><strong>SITE:</strong> ${site}</p>
-          <p><strong>SUBJECT:</strong> ${project.projectName || "N/A"}</p>
-        </div>
-
-        <div class="quotation-info">
-          <table class="quotation-details">
-            <tr>
-              <td>Quotation #:</td>
-              <td>${quotation.quotationNumber}</td>
-            </tr>
-            <tr>
-              <td>Date:</td>
-              <td>${formatDate(quotation.date)}</td>
-            </tr>
-            <tr>
-              <td>Valid Until:</td>
-              <td>${getDaysRemaining(quotation.validUntil)}</td>
-            </tr>
+      <div class="section items-section">
+        <div class="section-title">ITEMS</div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th class="col-no">No.</th>
+                <th class="col-desc">Description</th>
+                <th class="col-uom">UOM</th>
+                <th class="col-qty">Qty</th>
+                <th class="col-unit">Unit Price (AED)</th>
+                <th class="col-total text-right">Total (AED)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${quotation.items.map((item: any, index: number) => `
+                <tr>
+                  <td class="text-center col-no">${index + 1}</td>
+                  <td class="col-desc">${cleanDescription(item.description)}</td>
+                  <td class="text-center col-uom">${item.uom || "NOS"}</td>
+                  <td class="text-center col-qty">${item.quantity.toFixed(2)}</td>
+                  <td class="text-right col-unit">${item.unitPrice.toFixed(2)}</td>
+                  <td class="text-right col-total">${item.totalPrice.toFixed(2)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
           </table>
         </div>
-      </div>
-
-      <div class="section">
-        <div class="section-title">ITEMS</div>
-        <table>
-          <thead>
-            <tr>
-              <th width="5%">No.</th>
-              <th width="35%">Description</th>
-              <th width="10%">UOM</th>
-              <th width="15%">Image</th>
-              <th width="10%">Qty</th>
-              <th width="15%">Unit Price (AED)</th>
-              <th width="10%" class="text-right">Total (AED)</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${quotation.items.map((item: any, index: number) => `
-              <tr>
-                <td class="text-center">${index + 1}</td>
-                <td>${item.description}</td>
-                <td class="text-center">${item.uom || "NOS"}</td>
-                <td class="text-center" style="padding: 5px;">
-                  ${item.image?.url ? `<img src="${item.image.url}" style="width: 100%; height: auto; max-height: 80px; object-fit: contain;"/>` : ""}
-                </td>
-                <td class="text-center">${item.quantity.toFixed(2)}</td>
-                <td class="text-right">${item.unitPrice.toFixed(2)}</td>
-                <td class="text-right">${item.totalPrice.toFixed(2)}</td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
 
         <div class="amount-summary">
           <div class="amount-summary-row">
@@ -449,7 +689,31 @@ p {
         </div>
       </div>
 
-      ${quotation.termsAndConditions.length > 0 ? `
+      ${quotation.images && quotation.images.length > 0 ? `
+      <div class="section images-section">
+        <div class="section-title">QUOTATION IMAGES</div>
+        <div class="images-grid">
+          ${quotation.images.map((image: any) => {
+            const itemCategory = image.relatedItemIndex !== undefined 
+              ? `Item ${image.relatedItemIndex + 1}`
+              : 'General Image';
+            
+            return `
+            <div class="image-card">
+              <img src="${image.imageUrl}" alt="${image.title}" />
+              <div class="image-content">
+                <div class="image-title">${image.title}</div>
+                ${image.description ? `<div class="image-description">${image.description}</div>` : ''}
+                <div class="image-category">${itemCategory}</div>
+              </div>
+            </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+      ` : ''}
+
+      ${quotation.termsAndConditions && quotation.termsAndConditions.length > 0 ? `
       <div class="terms-prepared-section">
         <div class="terms-prepared-header">
           <div class="terms-title">TERMS & CONDITIONS</div>
@@ -474,10 +738,12 @@ p {
       ` : `
       <div class="section">
         <div class="section-title">PREPARED BY</div>
-        <div class="prepared-by-name" >${preparedBy?.firstName || "N/A"} ${preparedBy?.lastName || ""}</div>
-        ${preparedBy?.phoneNumbers?.length ? `
-        <div class="prepared-by-title">Phone: ${preparedBy.phoneNumbers.join(", ")}</div>
-        ` : ''}
+        <div class="prepared-content">
+          <div class="prepared-by-name">${preparedBy?.firstName || "N/A"} ${preparedBy?.lastName || ""}</div>
+          ${preparedBy?.phoneNumbers?.length ? `
+          <div class="prepared-by-title">Phone: ${preparedBy.phoneNumbers.join(", ")}</div>
+          ` : ''}
+        </div>
       </div>
       `}
     </div>
@@ -496,11 +762,14 @@ p {
 
   const browser = await puppeteer.launch({
     headless: "shell",
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--font-render-hinting=none"],
   });
 
   try {
     const page = await browser.newPage();
+
+    await page.setViewport({ width: 1200, height: 1600 });
+
     await page.setContent(htmlContent, {
       waitUntil: ["load", "networkidle0", "domcontentloaded"],
       timeout: 30000,
@@ -510,20 +779,25 @@ p {
       format: "A4",
       printBackground: true,
       margin: {
-        top: "1cm",
-        right: "1cm",
-        bottom: "1cm",
-        left: "1cm",
+        top: "0.5cm",
+        right: "0.5cm",
+        bottom: "0.5cm",
+        left: "0.5cm",
       },
+      displayHeaderFooter: false,
+      preferCSSPageSize: true,
     });
 
     return pdfBuffer;
+  } catch (error) {
+    console.error("PDF generation error:", error);
+    throw new ApiError(500, "Failed to generate PDF");
   } finally {
     await browser.close();
   }
 };
 
-// Helper function to create email HTML template
+// Helper function to create email HTML template (unchanged)
 const createQuotationEmailTemplate = (
   quotationNumber: string,
   clientName: string,
