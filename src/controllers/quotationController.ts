@@ -80,7 +80,7 @@ export const uploadQuotationImages = asyncHandler(
   async (req: Request, res: Response) => {
     const { id } = req.params;
     const files = req.files as Express.Multer.File[];
-    const { titles = [], descriptions = [], relatedItemIndexes = [] } = req.body;
+    const { titles = [], descriptions = [] } = req.body;
 
     if (!id) {
       throw new ApiError(400, "Quotation ID is required");
@@ -98,9 +98,6 @@ export const uploadQuotationImages = asyncHandler(
     const descriptionsArray: string[] = Array.isArray(descriptions)
       ? descriptions
       : [descriptions];
-    const relatedIndexesArray: any[] = Array.isArray(relatedItemIndexes)
-      ? relatedItemIndexes
-      : [relatedItemIndexes];
 
     if (titlesArray.length !== files.length) {
       throw new ApiError(400, "Number of titles must match number of images");
@@ -136,15 +133,6 @@ export const uploadQuotationImages = asyncHandler(
           description: descriptionsArray[index] || "",
           uploadedAt: new Date(),
         };
-
-        // Safely handle relatedItemIndex
-        const rawIndex = relatedIndexesArray[index];
-        if (rawIndex !== undefined && rawIndex !== null && rawIndex !== '') {
-          const parsedIndex = parseInt(rawIndex);
-          if (!isNaN(parsedIndex)) {
-            imageData.relatedItemIndex = parsedIndex;
-          }
-        }
 
         return imageData;
       }
@@ -230,7 +218,7 @@ export const replaceQuotationImage = asyncHandler(
 export const updateQuotationImage = asyncHandler(
   async (req: Request, res: Response) => {
     const { id, imageId } = req.params;
-    const { title, description, relatedItemIndex } = req.body;
+    const { title, description } = req.body;
 
     if (!id || !imageId) {
       throw new ApiError(400, "Quotation ID and image ID are required");
@@ -264,17 +252,6 @@ export const updateQuotationImage = asyncHandler(
 
     if (description !== undefined) {
       quotation.images[imageIndex].description = description?.trim() || "";
-    }
-
-    if (relatedItemIndex !== undefined) {
-      if (relatedItemIndex === '' || relatedItemIndex === null) {
-        quotation.images[imageIndex].relatedItemIndex = undefined;
-      } else {
-        const parsedIndex = parseInt(relatedItemIndex);
-        if (!isNaN(parsedIndex)) {
-          quotation.images[imageIndex].relatedItemIndex = parsedIndex;
-        }
-      }
     }
 
     await quotation.save();
@@ -790,72 +767,73 @@ export const generateQuotationPdf = asyncHandler(
       border-top: 2px solid #333;
     }
 
-    /* Compact Images Section - Card Layout */
+    /* Compact Images Section */
     .images-section {
-      margin-top: 12px;
+      margin-top: 10px;
       page-break-inside: avoid;
     }
 
     .images-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 6px;
-    }
-
-    .image-card {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      width: calc(33.333% - 8px);
-      margin-bottom: 8px;
-      page-break-inside: avoid;
-      border: 1px solid #e0e0e0;
-      border-radius: 6px;
-      padding: 6px;
-      background: #fafafa;
-    }
-
-    .image-card img {
-      max-height: 80px;
-      width: auto;
-      max-width: 100%;
-      object-fit: contain;
-      border-radius: 4px;
-    }
-
-    .image-content {
-      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
       margin-top: 4px;
     }
 
+    .image-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      page-break-inside: avoid;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      padding: 4px;
+      background: #fafafa;
+      min-height: 0;
+    }
+
+    .image-container {
+      width: 100%;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      margin-bottom: 3px;
+    }
+
+    .image-container img {
+      max-height: 100%;
+      max-width: 100%;
+      object-fit: contain;
+    }
+
     .image-title {
-      font-size: 8.5pt;
-      font-weight: bold;
+      font-size: 7pt;
+      font-weight: 600;
       text-align: center;
       color: #2c3e50;
-      line-height: 1.2;
-      margin-bottom: 2px;
+      line-height: 1.1;
+      margin: 0;
+      word-break: break-word;
+      max-height: 28px;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
     }
 
     .image-description {
-      font-size: 7.5pt;
+      font-size: 6pt;
       text-align: center;
       color: #666;
-      line-height: 1.2;
-      margin-bottom: 2px;
-    }
-
-    .image-category {
-      font-size: 7pt;
-      text-align: center;
-      color: #94d7f4;
-      font-weight: bold;
-      background: #e3f2fd;
-      padding: 2px 6px;
-      border-radius: 10px;
-      display: inline-block;
-      margin: 0 auto;
+      line-height: 1.1;
+      margin: 1px 0 0 0;
+      max-height: 18px;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
     }
 
     .terms-prepared-section {
@@ -1012,8 +990,12 @@ export const generateQuotationPdf = asyncHandler(
         padding: 0;
       }
 
-      .image-card {
+      .image-item {
         page-break-inside: avoid;
+      }
+
+      .images-grid {
+        break-inside: avoid;
       }
     }
 
@@ -1121,22 +1103,15 @@ export const generateQuotationPdf = asyncHandler(
       <div class="section images-section">
         <div class="section-title">QUOTATION IMAGES</div>
         <div class="images-grid">
-          ${quotation.images.map(image => {
-            const itemCategory = image.relatedItemIndex !== undefined 
-              ? `Item ${image.relatedItemIndex + 1}`
-              : 'General Image';
-            
-            return `
-            <div class="image-card">
-              <img src="${image.imageUrl}" alt="${image.title}" />
-              <div class="image-content">
-                <div class="image-title">${image.title}</div>
-                ${image.description ? `<div class="image-description">${image.description}</div>` : ''}
-                <div class="image-category">${itemCategory}</div>
+          ${quotation.images.map(image => `
+            <div class="image-item">
+              <div class="image-container">
+                <img src="${image.imageUrl}" alt="${image.title}" />
               </div>
+              <div class="image-title">${image.title}</div>
+              ${image.description ? `<div class="image-description">${image.description}</div>` : ''}
             </div>
-            `;
-          }).join('')}
+            `).join('')}
         </div>
       </div>
       ` : ''}

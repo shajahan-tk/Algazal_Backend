@@ -1,4 +1,3 @@
-// models/quotationModel.ts
 import { Document, Schema, model, Types, ObjectId } from "mongoose";
 import { IProject } from "./projectModel";
 import { IUser } from "./userModel";
@@ -11,7 +10,6 @@ export interface IQuotationImage {
   s3Key: string;
   description?: string;
   uploadedAt: Date;
-  relatedItemIndex?: number; // Optional: link to specific item
 }
 
 interface IQuotationItem {
@@ -20,7 +18,6 @@ interface IQuotationItem {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
-  relatedImageId?: ObjectId; // Reference to image
 }
 
 export interface IQuotation extends Document {
@@ -31,7 +28,7 @@ export interface IQuotation extends Document {
   validUntil: Date;
   scopeOfWork: string[];
   items: IQuotationItem[];
-  images: IQuotationImage[]; // Separate images array
+  images: IQuotationImage[];
   subtotal: number;
   vatPercentage: number;
   vatAmount: number;
@@ -50,7 +47,6 @@ const quotationImageSchema = new Schema<IQuotationImage>({
   imageUrl: { type: String, required: true },
   s3Key: { type: String, required: true },
   description: { type: String },
-  relatedItemIndex: { type: Number },
   uploadedAt: { type: Date, default: Date.now },
 });
 
@@ -79,10 +75,6 @@ const quotationItemSchema = new Schema<IQuotationItem>({
     type: Number,
     required: true,
     min: 0,
-  },
-  relatedImageId: {
-    type: Schema.Types.ObjectId,
-    ref: "QuotationImage",
   },
 });
 
@@ -123,7 +115,7 @@ const quotationSchema = new Schema<IQuotation>(
         message: "At least one item is required",
       },
     },
-    images: [quotationImageSchema], // Separate images
+    images: [quotationImageSchema],
     subtotal: {
       type: Number,
       required: true,
