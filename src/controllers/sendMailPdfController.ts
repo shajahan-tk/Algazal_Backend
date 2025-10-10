@@ -46,11 +46,12 @@ export const sendQuotationEmail = asyncHandler(
     // Generate PDF first
     const pdfBuffer = await generateQuotationPdfBuffer(quotation, client, preparedBy, project);
 
-    // Create email HTML content using the template
+    // Create email HTML content using the exact same template as PDF
     const emailHtmlContent = createQuotationEmailTemplate(
-      quotation.quotationNumber,
-      client.clientName,
-      `${preparedBy.firstName} ${preparedBy.lastName}`
+      quotation,
+      client,
+      preparedBy,
+      project
     );
 
     try {
@@ -362,72 +363,73 @@ const generateQuotationPdfBuffer = async (
       border-top: 2px solid #333;
     }
 
-    /* Compact Images Section - Card Layout */
+    /* Compact Images Section */
     .images-section {
-      margin-top: 12px;
+      margin-top: 10px;
       page-break-inside: avoid;
     }
 
     .images-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 6px;
-    }
-
-    .image-card {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      width: calc(33.333% - 8px);
-      margin-bottom: 8px;
-      page-break-inside: avoid;
-      border: 1px solid #e0e0e0;
-      border-radius: 6px;
-      padding: 6px;
-      background: #fafafa;
-    }
-
-    .image-card img {
-      max-height: 80px;
-      width: auto;
-      max-width: 100%;
-      object-fit: contain;
-      border-radius: 4px;
-    }
-
-    .image-content {
-      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
       margin-top: 4px;
     }
 
+    .image-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      page-break-inside: avoid;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      padding: 4px;
+      background: #fafafa;
+      min-height: 0;
+    }
+
+    .image-container {
+      width: 100%;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      margin-bottom: 3px;
+    }
+
+    .image-container img {
+      max-height: 100%;
+      max-width: 100%;
+      object-fit: contain;
+    }
+
     .image-title {
-      font-size: 8.5pt;
-      font-weight: bold;
+      font-size: 7pt;
+      font-weight: 600;
       text-align: center;
       color: #2c3e50;
-      line-height: 1.2;
-      margin-bottom: 2px;
+      line-height: 1.1;
+      margin: 0;
+      word-break: break-word;
+      max-height: 28px;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
     }
 
     .image-description {
-      font-size: 7.5pt;
+      font-size: 6pt;
       text-align: center;
       color: #666;
-      line-height: 1.2;
-      margin-bottom: 2px;
-    }
-
-    .image-category {
-      font-size: 7pt;
-      text-align: center;
-      color: #94d7f4;
-      font-weight: bold;
-      background: #e3f2fd;
-      padding: 2px 6px;
-      border-radius: 10px;
-      display: inline-block;
-      margin: 0 auto;
+      line-height: 1.1;
+      margin: 1px 0 0 0;
+      max-height: 18px;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
     }
 
     .terms-prepared-section {
@@ -584,8 +586,12 @@ const generateQuotationPdfBuffer = async (
         padding: 0;
       }
 
-      .image-card {
+      .image-item {
         page-break-inside: avoid;
+      }
+
+      .images-grid {
+        break-inside: avoid;
       }
     }
 
@@ -693,22 +699,15 @@ const generateQuotationPdfBuffer = async (
       <div class="section images-section">
         <div class="section-title">QUOTATION IMAGES</div>
         <div class="images-grid">
-          ${quotation.images.map((image: any) => {
-            const itemCategory = image.relatedItemIndex !== undefined 
-              ? `Item ${image.relatedItemIndex + 1}`
-              : 'General Image';
-            
-            return `
-            <div class="image-card">
-              <img src="${image.imageUrl}" alt="${image.title}" />
-              <div class="image-content">
-                <div class="image-title">${image.title}</div>
-                ${image.description ? `<div class="image-description">${image.description}</div>` : ''}
-                <div class="image-category">${itemCategory}</div>
+          ${quotation.images.map((image: any) => `
+            <div class="image-item">
+              <div class="image-container">
+                <img src="${image.imageUrl}" alt="${image.title}" />
               </div>
+              <div class="image-title">${image.title}</div>
+              ${image.description ? `<div class="image-description">${image.description}</div>` : ''}
             </div>
-            `;
-          }).join('')}
+            `).join('')}
         </div>
       </div>
       ` : ''}
@@ -797,105 +796,226 @@ const generateQuotationPdfBuffer = async (
   }
 };
 
-// Helper function to create email HTML template (unchanged)
+// Updated email template function to use the exact same HTML as PDF
 const createQuotationEmailTemplate = (
-  quotationNumber: string,
-  clientName: string,
-  senderName: string
+  quotation: any,
+  client: IClient,
+  preparedBy: IUser,
+  project: IProject
 ): string => {
+  const site = `${project.location} ${project.building} ${project.apartmentNumber}`;
+  
+  // Calculate totals
+  const subtotal = quotation.items.reduce((sum: number, item: any) => sum + item.totalPrice, 0);
+  const vatAmount = subtotal * (quotation.vatPercentage / 100);
+  const netAmount = subtotal + vatAmount;
+
+  const formatDate = (date: Date) => {
+    return date ? new Date(date).toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }) : "";
+  };
+
+  // Function to clean up description - remove extra blank lines
+  const cleanDescription = (description: string) => {
+    return description.replace(/\n\n+/g, '\n').trim();
+  };
+
   return `<!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quote Template</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f0f0f0;
-        }
-        
-        .quote-container {
-            max-width: 800px;
-            margin: 0 auto;
-            background-color: white;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        
-        .quote-header {
-            background: linear-gradient(135deg, #4a90e2, #357abd);
-            color: white;
-            text-align: center;
-            padding: 15px;
-            font-size: 18px;
-            font-weight: bold;
-        }
-        
-        .quote-body {
-            padding: 30px;
-            line-height: 1.6;
-            color: #333;
-        }
-        
-        .greeting {
-            margin-bottom: 20px;
-        }
-        
-        .client-name {
-            background-color: #ffeb3b;
-            padding: 2px 4px;
-            font-weight: bold;
-        }
-        
-        .content-line {
-            margin-bottom: 15px;
-        }
-        
-        .signature {
-            margin-top: 30px;
-        }
-        
-        .sender-name {
-            background-color: #ffeb3b;
-            padding: 2px 4px;
-            font-weight: bold;
-        }
-        
-        .company-name {
-            margin-top: 5px;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quotation ${quotation.quotationNumber}</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #333;
+      margin: 0;
+      padding: 20px;
+      background-color: #f9f9f9;
+    }
+    
+    .email-container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+    
+    .email-header {
+      background: linear-gradient(135deg, #4a90e2, #357abd);
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+    
+    .email-body {
+      padding: 30px;
+    }
+    
+    .greeting {
+      margin-bottom: 20px;
+      font-size: 16px;
+    }
+    
+    .client-name {
+      background-color: #ffeb3b;
+      padding: 2px 6px;
+      font-weight: bold;
+      color: #333;
+    }
+    
+    .content-section {
+      margin-bottom: 25px;
+    }
+    
+    .content-line {
+      margin-bottom: 12px;
+      font-size: 14px;
+    }
+    
+    .attachment-notice {
+      background: #e3f2fd;
+      border-left: 4px solid #2196f3;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    
+    .signature {
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 2px solid #e0e0e0;
+    }
+    
+    .sender-name {
+      font-weight: bold;
+      font-size: 16px;
+      color: #2c3e50;
+    }
+    
+    .company-name {
+      font-weight: bold;
+      color: #4a90e2;
+      margin-top: 5px;
+    }
+    
+    .quotation-details {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 6px;
+      margin: 20px 0;
+    }
+    
+    .detail-row {
+      display: flex;
+      margin-bottom: 8px;
+    }
+    
+    .detail-label {
+      font-weight: bold;
+      min-width: 120px;
+      color: #2c3e50;
+    }
+    
+    .footer {
+      background: #2c3e50;
+      color: white;
+      padding: 20px;
+      text-align: center;
+      font-size: 12px;
+    }
+    
+    .footer a {
+      color: #4a90e2;
+      text-decoration: none;
+    }
+  </style>
 </head>
 <body>
-    <div class="quote-container">
-        <div class="quote-header">
-            Quote #${quotationNumber}
+  <div class="email-container">
+    <div class="email-header">
+      <h1>Quotation #${quotation.quotationNumber}</h1>
+      <p>${project.projectName}</p>
+    </div>
+    
+    <div class="email-body">
+      <div class="greeting">
+        Dear <span class="client-name">${client.clientName}</span>,
+      </div>
+      
+      <div class="content-section">
+        <div class="content-line">
+          We are pleased to submit our quotation for your project. Please find the detailed quotation attached with this email.
         </div>
         
-        <div class="quote-body">
-            <div class="greeting">
-                Dear <span class="client-name">${clientName}</span>
-            </div>
-            
-            <div class="content-line">
-                Please Find the Attached Proposal for your reference.
-            </div>
-            
-            <div class="content-line">
-                We are waiting for your positive response.
-            </div>
-            
-            <div class="signature">
-                <div>Regards,</div>
-                <div><span class="sender-name">${senderName}</span></div>
-                <div class="company-name">AL GHAZAL AL ABYAD TECHNICAL SERVICES</div>
-            </div>
+        <div class="quotation-details">
+          <div class="detail-row">
+            <span class="detail-label">Project:</span>
+            <span>${project.projectName}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Quotation Date:</span>
+            <span>${formatDate(quotation.date)}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Valid Until:</span>
+            <span>${formatDate(quotation.validUntil)}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Net Amount:</span>
+            <span><strong>AED ${netAmount.toFixed(2)}</strong></span>
+          </div>
         </div>
+        
+        <div class="content-line">
+          The attached PDF contains complete details including:
+        </div>
+        <ul>
+          <li>Itemized pricing with descriptions</li>
+          <li>Terms and conditions</li>
+          <li>Project scope and specifications</li>
+          ${quotation.images && quotation.images.length > 0 ? '<li>Reference images</li>' : ''}
+        </ul>
+      </div>
+      
+      <div class="attachment-notice">
+        <strong>📎 Attachment:</strong> Quotation-${quotation.quotationNumber}.pdf
+      </div>
+      
+      <div class="content-line">
+        We are confident that our proposal meets your requirements and look forward to the opportunity to work with you.
+      </div>
+      
+      <div class="content-line">
+        Please don't hesitate to contact us if you have any questions or require further clarification.
+      </div>
+      
+      <div class="signature">
+        <div>Best regards,</div>
+        <div class="sender-name">${preparedBy.firstName} ${preparedBy.lastName}</div>
+        <div class="company-name">AL GHAZAL AL ABYAD TECHNICAL SERVICES</div>
+        ${preparedBy.phoneNumbers?.length ? `
+        <div style="margin-top: 8px;">
+          <strong>Phone:</strong> ${preparedBy.phoneNumbers.join(", ")}
+        </div>
+        ` : ''}
+      </div>
     </div>
+    
+    <div class="footer">
+      <p><strong>AL GHAZAL AL ABYAD TECHNICAL SERVICES</strong></p>
+      <p>Office No:04, R09-France Cluster, International City-Dubai | P.O.Box:262760, Dubai-U.A.E</p>
+      <p>Tel: 044102555 | <a href="http://www.alghazalgroup.com/">www.alghazalgroup.com</a></p>
+    </div>
+  </div>
 </body>
 </html>`;
 };
