@@ -55,7 +55,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: "*", // 👈 must be specific, not '*'
+    origin: "https://new.alghazalgroup.com/", // 👈 must be specific, not '*'
     credentials: true, // 👈 required for cookies/auth headers
   })
 );
