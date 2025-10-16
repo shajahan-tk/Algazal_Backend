@@ -48,7 +48,6 @@ router.patch(
   authorize(["admin", "super_admin", "engineer"]),
   updateQuotationImage
 );
-
 // Replace image file
 router.put(
   "/:id/images/:imageId/replace",

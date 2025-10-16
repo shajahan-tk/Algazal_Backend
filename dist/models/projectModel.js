@@ -101,6 +101,7 @@ const projectSchema = new mongoose_1.Schema({
     },
     workStartDate: { type: Date },
     workEndDate: { type: Date },
+    attention: { type: String },
 }, { timestamps: true });
 projectSchema.index({ projectName: 1 });
 projectSchema.index({ client: 1 });

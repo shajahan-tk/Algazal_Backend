@@ -2,6 +2,12 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Quotation = void 0;
 const mongoose_1 = require("mongoose");
+const quotationImageSchema = new mongoose_1.Schema({
+    title: { type: String, required: true },
+    imageUrl: { type: String, required: true },
+    s3Key: { type: String, required: true },
+    uploadedAt: { type: Date, default: Date.now },
+});
 const quotationItemSchema = new mongoose_1.Schema({
     description: {
         type: String,
@@ -12,11 +18,6 @@ const quotationItemSchema = new mongoose_1.Schema({
         type: String,
         required: [true, "Unit of measurement is required"],
         trim: true,
-    },
-    image: {
-        url: String,
-        key: String,
-        mimetype: String,
     },
     quantity: {
         type: Number,
@@ -70,6 +71,7 @@ const quotationSchema = new mongoose_1.Schema({
             message: "At least one item is required",
         },
     },
+    images: [quotationImageSchema],
     subtotal: {
         type: Number,
         required: true,

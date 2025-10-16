@@ -92,7 +92,7 @@ exports.createWorkCompletion = (0, asyncHandler_1.asyncHandler)(async (req, res)
     }
     const workCompletion = await workCompletionModel_1.WorkCompletion.create({
         project: projectId,
-        completionNumber: await (0, documentNumbers_1.generateRelatedDocumentNumber)(projectId, "WCP"),
+        completionNumber: await (0, documentNumbers_1.generateRelatedDocumentNumber)(projectId, "WCPAGA"),
         createdBy: req.user?.userId,
     });
     res
@@ -293,6 +293,8 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
         .populate("createdBy", "firstName lastName signatureImage")
         .sort({ createdAt: -1 });
     const engineer = project.assignedTo;
+    // Add type assertion or safe access for workCompletion.createdBy
+    const preparedBy = workCompletion?.createdBy;
     // Format dates - updated to use project dates
     const formatDate = (date) => {
         if (!date)
@@ -316,7 +318,7 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
         <style>
             @page {
               size: A4;
-              margin: 0.4in;
+              margin: 0.5in;
             }
             body {
                 font-family: Arial, sans-serif;
@@ -324,78 +326,97 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
                 padding: 0;
                 color: #000;
                 border: 1px solid #000;
+                font-size: 11pt; /* Base font size increased */
+                line-height: 1.5; /* Better line height */
             }
             .container {
                 width: 96%;
                 margin: 0 auto;
-                padding: 10px;
-                padding-bottom: 80px; /* Reduced space for footer */
+                padding: 15px;
+                padding-bottom: 60px; /* Reduced space for footer */
             }
             .header {
                 display: flex;
                 align-items: center;
-                margin-bottom: 10px;
+                margin-bottom: 15px;
+                border-bottom: 2px solid #94d7f4;
+                padding-bottom: 15px;
             }
             .logo {
-                max-height: 60px; /* Smaller logo */
-                margin-right: 20px;
+                max-height: 70px; /* Slightly larger logo */
+                margin-right: 25px;
             }
             .title-container {
                 flex-grow: 1;
                 text-align: end;
             }
             h1 {
-                color: purple;
-                font-size: 24px;
+                color: #800080; /* Purple color */
+                font-size: 28px; /* Larger title */
                 font-weight: bold;
                 margin: 0;
+                text-transform: uppercase;
+                letter-spacing: 1px;
             }
             .highlight {
-                padding: 1px 3px;
+                padding: 2px 6px;
+                background-color: #f0f8ff; /* Light blue background */
+                border-radius: 3px;
+                font-weight: 600;
             }
             table {
                 width: 100%;
                 border-collapse: collapse;
-                margin: 8px 0;
-                font-size: 12px;
+                margin: 12px 0;
+                font-size: 11pt; /* Better table font size */
             }
             td {
-                padding: 5px 6px;
+                padding: 8px 10px; /* More padding */
                 vertical-align: top;
+                line-height: 1.4;
             }
             .bordered {
                 border: 1px solid #000;
+                margin: 15px 0;
             }
             .bordered td {
                 border: 1px solid #000;
             }
             .bold {
                 font-weight: bold;
+                color: #2c3e50; /* Darker color for better readability */
             }
             .section-title {
-                margin: 15px 0 5px 0;
+                margin: 20px 0 8px 0;
                 font-weight: bold;
-                font-size: 13px;
+                font-size: 14pt; /* Larger section titles */
+                color: #2c3e50;
+                border-bottom: 1px solid #94d7f4;
+                padding-bottom: 5px;
             }
             .signature-img {
-                height: 40px;
-                max-width: 150px;
+                height: 50px; /* Larger signature images */
+                max-width: 180px;
+                object-fit: contain;
             }
             .green-text {
-                color: green;
+                color: #228B22; /* Forest green */
                 font-weight: bold;
+                font-size: 11pt;
             }
             .blue-bg {
-                background-color: #0074cc;
-                color: white;
+                background-color: #94d7f4; /* Consistent with other PDFs */
+                color: #000;
                 font-weight: bold;
-                padding: 3px 6px;
+                padding: 8px 12px;
+                font-size: 12pt; /* Larger header text */
+                text-align: center;
             }
             .image-container {
                 display: flex;
                 flex-wrap: wrap;
-                gap: 8px;
-                margin: 10px 0 5px 0;
+                gap: 12px;
+                margin: 15px 0 10px 0;
                 justify-content: center;
             }
             .image-item {
@@ -403,27 +424,30 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
                 flex-direction: column;
                 align-items: center;
                 flex-grow: 1;
-                max-width: 180px;
-                margin-bottom: 10px;
+                max-width: 200px; /* Slightly larger images */
+                margin-bottom: 15px;
             }
             .image-item img {
-                height: 100px;
+                height: 120px; /* Larger images */
                 width: 100%;
-                border: 1px solid #000;
+                border: 1px solid #ddd;
                 object-fit: cover;
-                margin-bottom: 5px;
+                margin-bottom: 8px;
+                border-radius: 4px;
             }
             .image-title {
-                font-size: 10px;
-                font-weight: bold;
+                font-size: 10.5pt; /* Better font size */
+                font-weight: 600;
                 text-align: center;
                 color: #333;
                 word-wrap: break-word;
                 width: 100%;
-                padding: 2px 4px;
+                padding: 4px 6px;
+                background-color: #f8f9fa;
+                border-radius: 3px;
             }
             .footer-container {
-                margin-top: 20px;
+                margin-top: 25px;
                 width: 96%;
                 margin-left: auto;
                 margin-right: auto;
@@ -432,22 +456,68 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
             .tagline {
                 text-align: center;
                 font-weight: bold;
-                font-size: 12pt;
-                margin: 10px 0 5px 0;
-                color: #333;
+                font-size: 13pt; /* Consistent with other PDFs */
+                margin: 15px 0 10px 0;
+                color: #2c3e50;
             }
             .footer {
                 text-align: center;
-                font-size: 11px;
+                font-size: 10pt; /* Better footer font size */
                 color: #555;
-                border-top: 1px solid #ddd;
-                padding-top: 8px;
+                border-top: 2px solid #ddd;
+                padding-top: 12px;
+                margin-top: 10px;
+                line-height: 1.6;
+            }
+            .footer p {
+                margin: 6px 0;
+            }
+            .footer strong {
+                color: #2c3e50;
+                font-size: 10.5pt;
+            }
+            .certification-text {
+                margin: 15px 0;
+                padding: 12px 15px;
+                background-color: #f8f9fa;
+                border-left: 4px solid #94d7f4;
+                border-radius: 4px;
+                font-size: 11.5pt; /* Better text size */
+                line-height: 1.6;
+                color: #333;
+            }
+            .signature-section {
+                margin: 5px 0;
+            }
+            .signature-name {
+                font-weight: 600;
+                color: #2c3e50;
                 margin-top: 5px;
             }
-            .footer h1 {
-                font-size: 16px;
-                margin: 5px 0;
-                color: #333;
+            .empty-signature {
+                height: 50px;
+                border: 1px dashed #ccc;
+                background-color: #f9f9f9;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: #999;
+                font-size: 10pt;
+            }
+            /* Improved table row styling */
+            .bordered tr:nth-child(even) {
+                background-color: #f8f9fa;
+            }
+            .bordered tr:hover {
+                background-color: #e9f7fe;
+            }
+            /* Certificate border styling */
+            body {
+                border: 2px solid #800080; /* Purple border to match title */
+                background: linear-gradient(white, white) padding-box,
+                            linear-gradient(135deg, #94d7f4, #800080) border-box;
+                border: 2px solid transparent;
+                background-clip: padding-box, border-box;
             }
         </style>
     </head>
@@ -463,15 +533,14 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
             <table>
                 <tr>
                     <td class="bold" style="width: 30%">Reference</td>
-                    <td>: <span class="highlight">${`QTN${project.projectNumber.slice(3, 10)}`}</span></td>
+                    <td>: <span class="highlight">${`QTN${project.projectNumber.slice(3, 40)}`}</span></td>
                 </tr>
                 <tr>
                     <td class="bold">FM CONTRACTOR</td>
-                      <td>: ${client.clientName}</td>
+                    <td>: ${client.clientName}</td>
                 </tr>
                 <tr>
                     <td class="bold">SUB CONTRACTOR</td>
-                  
                     <td>: AL GHAZAL ALABYAD TECHNICAL SERVICES</td>
                 </tr>
                 <tr>
@@ -484,9 +553,9 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
                 </tr>
             </table>
 
-            <p style="margin: 10px 0; font-size: 12px;">
-                This is to certify that the work described above in the project description has been cleared out and completed.
-            </p>
+            <div class="certification-text">
+                This is to certify that the work described above in the project description has been cleared out and completed to the required standards and specifications.
+            </div>
 
             <table>
                 <tr>
@@ -503,19 +572,19 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
                 </tr>
             </table>
 
-            <table class="bordered" style="margin-top: 15px;">
+            <table class="bordered">
                 <tr>
                     <td colspan="2" class="blue-bg">Hand over by:</td>
                     <td colspan="2" class="blue-bg">AL GHAZAL AL ABYAD TECHNICAL SERVICES</td>
                 </tr>
                 <tr>
                     <td class="bold" style="width: 25%">Name:</td>
-                    <td style="width: 25%">${engineer?.firstName} ${engineer?.lastName || ""}</td>
+                    <td style="width: 25%" class="signature-name">${engineer?.firstName} ${engineer?.lastName || ""}</td>
                     <td class="bold" style="width: 25%">Signature:</td>
-                    <td style="width: 25%">
+                    <td style="width: 25%" class="signature-section">
                         ${engineer?.signatureImage
         ? `<img src="${engineer.signatureImage}" class="signature-img" />`
-        : "(signature)"}
+        : '<div class="empty-signature">Signature</div>'}
                     </td>
                 </tr>
                 <tr>
@@ -526,16 +595,18 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
                 </tr>
             </table>
 
-            <table class="bordered" style="margin-top: 15px;">
+            <table class="bordered">
                 <tr>
                     <td colspan="2" class="blue-bg">Accepted by:</td>
                     <td colspan="2" class="blue-bg">Client side</td>
                 </tr>
                 <tr>
                     <td class="bold" style="width: 25%">Name:</td>
-                    <td style="width: 25%">${client.clientName}</td>
+                    <td style="width: 25%" class="signature-name">${client.clientName}</td>
                     <td class="bold" style="width: 25%">Signature:</td>
-                    <td style="width: 25%">(signature)</td>
+                    <td style="width: 25%" class="signature-section">
+                        <div class="empty-signature">Client Signature</div>
+                    </td>
                 </tr>
                 <tr>
                     <td class="bold">Date:</td>
@@ -545,19 +616,19 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
                 </tr>
             </table>
 
-            <table class="bordered" style="margin-top: 15px;">
+            <table class="bordered">
                 <tr>
                     <td colspan="2" class="blue-bg">Prepared by:</td>
                     <td colspan="2" class="blue-bg">AL GHAZAL AL ABYAD TECHNICAL SERVICES</td>
                 </tr>
                 <tr>
                     <td class="bold" style="width: 25%">Name:</td>
-                    <td style="width: 25%">${engineer?.firstName} ${engineer?.lastName || ""}</td>
+                    <td style="width: 25%" class="signature-name">${preparedBy?.firstName || ""} ${preparedBy?.lastName || ""}</td>
                     <td class="bold" style="width: 25%">Signature:</td>
-                    <td style="width: 25%">
-                        ${engineer?.signatureImage
-        ? `<img src="${engineer.signatureImage}" class="signature-img" />`
-        : "(signature)"}
+                    <td style="width: 25%" class="signature-section">
+                        ${preparedBy?.signatureImage
+        ? `<img src="${preparedBy.signatureImage}" class="signature-img" />`
+        : '<div class="empty-signature">Signature</div>'}
                     </td>
                 </tr>
                 <tr>
@@ -568,16 +639,16 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
                 </tr>
             </table>
 
-            <p class="section-title">Site Pictures:</p>
+            <div class="section-title">Site Pictures:</div>
             <div class="image-container">
                 ${workCompletion?.images && workCompletion.images.length > 0
         ? workCompletion.images
             .map((image) => `<div class="image-item">
                                <img src="${image.imageUrl}" alt="${image.title || "Site picture"}" />
-                               <div class="image-title">${image.title || "Untitled"}</div>
+                               <div class="image-title">${image.title || "Site Image"}</div>
                              </div>`)
             .join("")
-        : '<p style="text-align: center; width: 100%;">No site pictures available</p>'}
+        : '<p style="text-align: center; width: 100%; font-size: 11pt; color: #666; padding: 20px;">No site pictures available</p>'}
             </div>
         </div>
 
@@ -586,7 +657,7 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
             <div class="footer">
                 <p><strong>AL GHAZAL AL ABYAD TECHNICAL SERVICES</strong></p>
                 <p>Office No:04, R09-France Cluster, International City-Dubai | P.O.Box:262760, Dubai-U.A.E</p>
-                <p>Tel: 044102555 | <a href="http://www.alghazalgroup.com/">www.alghazalgroup.com</a></p>
+                <p>Tel: 044102555 | <a href="http://www.alghazalgroup.com/" style="color: #0074cc; text-decoration: none;">www.alghazalgroup.com</a></p>
                 <p>Generated on ${formatDate(new Date())}</p>
             </div>
         </div>
@@ -596,23 +667,27 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
     // Generate PDF
     const browser = await puppeteer_1.default.launch({
         headless: "shell",
-        args: ["--no-sandbox", "--disable-setuid-sandbox"],
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--font-render-hinting=none"],
     });
     try {
         const page = await browser.newPage();
+        // Set viewport for consistent rendering
+        await page.setViewport({ width: 1200, height: 1600 });
         await page.setContent(htmlContent, {
             waitUntil: ["networkidle0", "domcontentloaded"],
+            timeout: 30000,
         });
         const pdfBuffer = await page.pdf({
             format: "A4",
             printBackground: true,
             margin: {
-                top: "0.4in",
-                right: "0.4in",
-                bottom: "0.4in",
-                left: "0.4in",
+                top: "0.5in",
+                right: "0.5in",
+                bottom: "0.5in",
+                left: "0.5in",
             },
             preferCSSPageSize: true,
+            displayHeaderFooter: false,
         });
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", `attachment; filename=completion-certificate-${project.projectNumber}.pdf`);

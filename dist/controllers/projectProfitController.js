@@ -288,28 +288,50 @@ exports.exportProjectProfitsToExcel = (0, asyncHandler_1.asyncHandler)(async (re
             { description: searchRegex },
         ];
     }
-    // Date range filter (fixed $year/$month issue)
-    if (month || year) {
-        const startDate = new Date();
-        const endDate = new Date();
-        if (year) {
-            const yearNum = parseInt(year);
-            if (isNaN(yearNum))
-                throw new apiHandlerHelpers_2.ApiError(400, "Invalid year value");
-            startDate.setFullYear(yearNum, 0, 1);
-            endDate.setFullYear(yearNum + 1, 0, 1);
+    // Date range filter - Fixed implementation
+    if (month && year) {
+        // Both month and year provided
+        const monthNum = parseInt(month);
+        const yearNum = parseInt(year);
+        if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+            throw new apiHandlerHelpers_2.ApiError(400, "Invalid month value (1-12)");
         }
-        if (month) {
-            const monthNum = parseInt(month);
-            if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
-                throw new apiHandlerHelpers_2.ApiError(400, "Invalid month value (1-12)");
-            }
-            startDate.setMonth(monthNum - 1);
-            endDate.setMonth(monthNum);
+        if (isNaN(yearNum)) {
+            throw new apiHandlerHelpers_2.ApiError(400, "Invalid year value");
         }
+        // Create start and end dates for the specific month
+        const startDate = new Date(yearNum, monthNum - 1, 1); // First day of month
+        const endDate = new Date(yearNum, monthNum, 0); // Last day of month
         filter.startDate = {
             $gte: startDate,
-            $lt: endDate
+            $lte: endDate
+        };
+    }
+    else if (year && !month) {
+        // Only year provided
+        const yearNum = parseInt(year);
+        if (isNaN(yearNum)) {
+            throw new apiHandlerHelpers_2.ApiError(400, "Invalid year value");
+        }
+        const startDate = new Date(yearNum, 0, 1); // January 1st of the year
+        const endDate = new Date(yearNum, 11, 31); // December 31st of the year
+        filter.startDate = {
+            $gte: startDate,
+            $lte: endDate
+        };
+    }
+    else if (month && !year) {
+        // Only month provided, use current year
+        const monthNum = parseInt(month);
+        const currentYear = new Date().getFullYear();
+        if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+            throw new apiHandlerHelpers_2.ApiError(400, "Invalid month value (1-12)");
+        }
+        const startDate = new Date(currentYear, monthNum - 1, 1);
+        const endDate = new Date(currentYear, monthNum, 0);
+        filter.startDate = {
+            $gte: startDate,
+            $lte: endDate
         };
     }
     // Profit range filter
@@ -372,6 +394,8 @@ exports.exportProjectProfitsToExcel = (0, asyncHandler_1.asyncHandler)(async (re
             right: { style: "thin" },
         };
     });
+    // Freeze the header row
+    worksheet.views = [{ state: "frozen", ySplit: 1 }];
     // Add totals row
     const totals = await projectProfitModel_1.ProjectProfit.aggregate([
         { $match: filter },
@@ -387,6 +411,7 @@ exports.exportProjectProfitsToExcel = (0, asyncHandler_1.asyncHandler)(async (re
     if (totals.length > 0) {
         worksheet.addRow([]); // Empty row before totals
         const totalRow = worksheet.addRow({
+            sno: "", // Empty for totals row
             projectName: "TOTALS",
             budget: totals[0].totalBudget,
             expenses: totals[0].totalExpenses,
@@ -395,13 +420,11 @@ exports.exportProjectProfitsToExcel = (0, asyncHandler_1.asyncHandler)(async (re
         // Style totals row
         totalRow.eachCell((cell) => {
             cell.font = { bold: true };
-            if (Number(cell.col) === 1) { // First column
-                cell.fill = {
-                    type: "pattern",
-                    pattern: "solid",
-                    fgColor: { argb: "FFD3D3D3" },
-                };
-            }
+            cell.fill = {
+                type: "pattern",
+                pattern: "solid",
+                fgColor: { argb: "FFF2F2F2" },
+            };
         });
     }
     // Set response headers

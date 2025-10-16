@@ -76,80 +76,6 @@ export const createQuotation = asyncHandler(
   }
 );
 
-export const uploadQuotationImages = asyncHandler(
-  async (req: Request, res: Response) => {
-    const { id } = req.params;
-    const files = req.files as Express.Multer.File[];
-    const { titles = [], descriptions = [] } = req.body;
-
-    if (!id) {
-      throw new ApiError(400, "Quotation ID is required");
-    }
-
-    if (!files || files.length === 0) {
-      throw new ApiError(400, "No images uploaded");
-    }
-
-    if (!req.user?.userId) {
-      throw new ApiError(401, "Unauthorized");
-    }
-
-    const titlesArray: string[] = Array.isArray(titles) ? titles : [titles];
-    const descriptionsArray: string[] = Array.isArray(descriptions)
-      ? descriptions
-      : [descriptions];
-
-    if (titlesArray.length !== files.length) {
-      throw new ApiError(400, "Number of titles must match number of images");
-    }
-
-    if (titlesArray.some((title) => !title?.trim())) {
-      throw new ApiError(400, "All images must have a non-empty title");
-    }
-
-    const quotation = await Quotation.findById(id);
-    if (!quotation) {
-      throw new ApiError(404, "Quotation not found");
-    }
-
-    // Check if user is authorized to update this quotation
-    if (quotation.preparedBy.toString() !== req.user.userId.toString()) {
-      throw new ApiError(403, "Not authorized to update this quotation");
-    }
-
-    const uploadResults = await uploadWorkCompletionImagesToS3(files);
-
-    if (!uploadResults.success || !uploadResults.uploadData) {
-      throw new ApiError(500, "Failed to upload images to S3");
-    }
-
-    const newImages: any[] = uploadResults.uploadData.map(
-      (fileData, index) => {
-        const imageData: any = {
-          _id: new Types.ObjectId(),
-          title: titlesArray[index],
-          imageUrl: fileData.url,
-          s3Key: fileData.key,
-          description: descriptionsArray[index] || "",
-          uploadedAt: new Date(),
-        };
-
-        return imageData;
-      }
-    );
-
-    quotation.images.push(...newImages);
-    await quotation.save();
-
-    const updatedQuotation = await Quotation.findById(id)
-      .populate("project", "projectName")
-      .populate("preparedBy", "firstName lastName");
-
-    res
-      .status(200)
-      .json(new ApiResponse(200, updatedQuotation, "Images uploaded successfully"));
-  }
-);
 
 export const replaceQuotationImage = asyncHandler(
   async (req: Request, res: Response) => {
@@ -215,10 +141,81 @@ export const replaceQuotationImage = asyncHandler(
   }
 );
 
+export const uploadQuotationImages = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const files = req.files as Express.Multer.File[];
+    const { titles = [] } = req.body; // Remove descriptions
+
+    if (!id) {
+      throw new ApiError(400, "Quotation ID is required");
+    }
+
+    if (!files || files.length === 0) {
+      throw new ApiError(400, "No images uploaded");
+    }
+
+    if (!req.user?.userId) {
+      throw new ApiError(401, "Unauthorized");
+    }
+
+    const titlesArray: string[] = Array.isArray(titles) ? titles : [titles];
+
+    if (titlesArray.length !== files.length) {
+      throw new ApiError(400, "Number of titles must match number of images");
+    }
+
+    if (titlesArray.some((title) => !title?.trim())) {
+      throw new ApiError(400, "All images must have a non-empty title");
+    }
+
+    const quotation = await Quotation.findById(id);
+    if (!quotation) {
+      throw new ApiError(404, "Quotation not found");
+    }
+
+    // Check if user is authorized to update this quotation
+    if (quotation.preparedBy.toString() !== req.user.userId.toString()) {
+      throw new ApiError(403, "Not authorized to update this quotation");
+    }
+
+    const uploadResults = await uploadWorkCompletionImagesToS3(files);
+
+    if (!uploadResults.success || !uploadResults.uploadData) {
+      throw new ApiError(500, "Failed to upload images to S3");
+    }
+
+    const newImages: any[] = uploadResults.uploadData.map(
+      (fileData, index) => {
+        const imageData: any = {
+          _id: new Types.ObjectId(),
+          title: titlesArray[index],
+          imageUrl: fileData.url,
+          s3Key: fileData.key,
+          uploadedAt: new Date(),
+        };
+
+        return imageData;
+      }
+    );
+
+    quotation.images.push(...newImages);
+    await quotation.save();
+
+    const updatedQuotation = await Quotation.findById(id)
+      .populate("project", "projectName")
+      .populate("preparedBy", "firstName lastName");
+
+    res
+      .status(200)
+      .json(new ApiResponse(200, updatedQuotation, "Images uploaded successfully"));
+  }
+);
+
 export const updateQuotationImage = asyncHandler(
   async (req: Request, res: Response) => {
     const { id, imageId } = req.params;
-    const { title, description } = req.body;
+    const { title } = req.body; // Remove description
 
     if (!id || !imageId) {
       throw new ApiError(400, "Quotation ID and image ID are required");
@@ -242,16 +239,12 @@ export const updateQuotationImage = asyncHandler(
       throw new ApiError(404, "Image not found");
     }
 
-    // Update image fields
+    // Update image fields - only title
     if (title !== undefined) {
       if (!title?.trim()) {
         throw new ApiError(400, "Title cannot be empty");
       }
       quotation.images[imageIndex].title = title.trim();
-    }
-
-    if (description !== undefined) {
-      quotation.images[imageIndex].description = description?.trim() || "";
     }
 
     await quotation.save();
@@ -275,7 +268,7 @@ export const getQuotationImages = asyncHandler(
     }
 
     const quotation = await Quotation.findById(id).select("images");
-    
+
     if (!quotation) {
       throw new ApiError(404, "Quotation not found");
     }
@@ -418,7 +411,7 @@ export const approveQuotation = asyncHandler(
       },
       { new: true }
     ).populate("project", "projectName")
-     .populate("preparedBy", "firstName lastName");
+      .populate("preparedBy", "firstName lastName");
 
     if (!quotation) {
       throw new ApiError(404, "Quotation not found");
@@ -507,7 +500,7 @@ export const generateQuotationPdf = asyncHandler(
         year: "numeric",
       }) : "";
     };
-    
+
     const getDaysRemaining = (validUntil: Date) => {
       if (!validUntil) return "N/A";
       const today = new Date();
@@ -1103,15 +1096,15 @@ export const generateQuotationPdf = asyncHandler(
       <div class="section images-section">
         <div class="section-title">QUOTATION IMAGES</div>
         <div class="images-grid">
-          ${quotation.images.map(image => `
-            <div class="image-item">
-              <div class="image-container">
-                <img src="${image.imageUrl}" alt="${image.title}" />
-              </div>
-              <div class="image-title">${image.title}</div>
-              ${image.description ? `<div class="image-description">${image.description}</div>` : ''}
-            </div>
-            `).join('')}
+          // In generateQuotationPdf function, remove description from images section
+${quotation.images.map(image => `
+  <div class="image-item">
+    <div class="image-container">
+      <img src="${image.imageUrl}" alt="${image.title}" />
+    </div>
+    <div class="image-title">${image.title}</div>
+  </div>
+`).join('')}
         </div>
       </div>
       ` : ''}

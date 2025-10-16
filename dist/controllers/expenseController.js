@@ -100,7 +100,7 @@ exports.getProjectLaborData = (0, asyncHandler_1.asyncHandler)(async (req, res) 
         throw new apiHandlerHelpers_2.ApiError(500, "Failed to fetch labor data");
     }
 });
-async function processMaterialsWithFiles(materials, files, prefix) {
+async function processMaterialsWithFiles(materials, files, prefix, existingMaterials = []) {
     const fileMap = new Map();
     files.forEach((file) => {
         const indexMatch = file.originalname.match(new RegExp(`${prefix}(\\d+)`));
@@ -110,8 +110,14 @@ async function processMaterialsWithFiles(materials, files, prefix) {
     });
     return await Promise.all(materials.map(async (material, index) => {
         const processedMaterial = { ...material };
+        // If a new file is uploaded for this material index
         if (fileMap.has(index)) {
             try {
+                // Delete old file if it exists
+                if (existingMaterials[index]?.documentKey) {
+                    await (0, uploadConf_1.deleteFileFromS3)(existingMaterials[index].documentKey);
+                }
+                // Upload new file
                 const uploadResult = await (0, uploadConf_1.uploadExpenseDocument)(fileMap.get(index));
                 if (uploadResult.success) {
                     processedMaterial.documentUrl = uploadResult.uploadData?.url;
@@ -120,7 +126,13 @@ async function processMaterialsWithFiles(materials, files, prefix) {
             }
             catch (uploadError) {
                 console.error(`File upload error for material ${index}:`, uploadError);
+                throw new apiHandlerHelpers_2.ApiError(500, `Failed to upload document for material ${index + 1}`);
             }
+        }
+        else if (existingMaterials[index]?.documentKey) {
+            // Preserve existing file if no new file is uploaded
+            processedMaterial.documentUrl = existingMaterials[index].documentUrl;
+            processedMaterial.documentKey = existingMaterials[index].documentKey;
         }
         return processedMaterial;
     }));
@@ -234,61 +246,59 @@ exports.getExpenseById = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
 });
 exports.updateExpense = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const { expenseId } = req.params;
-    const { materials, miscellaneous } = req.body;
-    const files = req.files;
-    if (!materials ||
-        !Array.isArray(materials) ||
-        !miscellaneous ||
-        !Array.isArray(miscellaneous)) {
-        throw new apiHandlerHelpers_2.ApiError(400, "Materials and miscellaneous arrays are required");
+    const userId = req.user?.userId;
+    if (!userId) {
+        throw new apiHandlerHelpers_2.ApiError(401, "Unauthorized");
     }
+    if (!req.body.materials || !req.body.miscellaneous) {
+        throw new apiHandlerHelpers_2.ApiError(400, "Materials and miscellaneous data are required");
+    }
+    let materials;
+    let miscellaneous;
+    try {
+        materials =
+            typeof req.body.materials === "string"
+                ? JSON.parse(req.body.materials)
+                : req.body.materials;
+        miscellaneous =
+            typeof req.body.miscellaneous === "string"
+                ? JSON.parse(req.body.miscellaneous)
+                : req.body.miscellaneous;
+    }
+    catch (err) {
+        throw new apiHandlerHelpers_2.ApiError(400, "Invalid JSON format for materials or miscellaneous");
+    }
+    const files = req.files;
+    const materialFiles = files?.files ? [...files.files] : [];
     const existingExpense = await expenseModel_1.Expense.findById(expenseId);
     if (!existingExpense) {
         throw new apiHandlerHelpers_2.ApiError(404, "Expense not found");
     }
-    const laborDetails = await calculateLaborDetails(existingExpense.project.toString());
-    // Process materials with documents
-    const processedMaterials = await Promise.all(materials.map(async (material, index) => {
-        const materialData = {
-            description: material.description,
-            date: material.date || new Date(),
-            invoiceNo: material.invoiceNo,
-            amount: material.amount,
-            supplierName: material.supplierName || "",
-            supplierMobile: material.supplierMobile || "",
-            supplierEmail: material.supplierEmail || "",
-        };
-        if (files?.materialFiles?.[index]) {
-            if (existingExpense.materials[index]?.documentKey) {
-                await (0, uploadConf_1.deleteFileFromS3)(existingExpense.materials[index].documentKey);
-            }
-            const uploadResult = await (0, uploadConf_1.uploadExpenseDocument)(files.materialFiles[index]);
-            if (!uploadResult.success) {
-                throw new apiHandlerHelpers_2.ApiError(500, `Failed to upload document for material item ${index + 1}`);
-            }
-            materialData.documentUrl = uploadResult.uploadData?.url;
-            materialData.documentKey = uploadResult.uploadData?.key;
-        }
-        else if (existingExpense.materials[index]?.documentKey) {
-            materialData.documentUrl =
-                existingExpense.materials[index].documentUrl;
-            materialData.documentKey =
-                existingExpense.materials[index].documentKey;
-        }
-        return materialData;
-    }));
-    const updatedExpense = await expenseModel_1.Expense.findByIdAndUpdate(expenseId, {
-        materials: processedMaterials,
-        miscellaneous,
-        laborDetails,
-        updatedAt: new Date(),
-    }, { new: true })
-        .populate("laborDetails.workers.user", "firstName lastName profileImage salary")
-        .populate("laborDetails.driver.user", "firstName lastName profileImage salary")
-        .populate("createdBy", "firstName lastName");
-    res
-        .status(200)
-        .json(new apiHandlerHelpers_1.ApiResponse(200, updatedExpense, "Expense updated successfully"));
+    try {
+        const laborDetails = await calculateLaborDetails(existingExpense.project.toString());
+        // Process materials with files
+        const processedMaterials = await processMaterialsWithFiles(materials, materialFiles, "material-", existingExpense.materials // Pass existing materials to handle file preservation
+        );
+        const updatedExpense = await expenseModel_1.Expense.findByIdAndUpdate(expenseId, {
+            materials: processedMaterials,
+            miscellaneous,
+            laborDetails,
+            updatedAt: new Date(),
+        }, { new: true })
+            .populate("laborDetails.workers.user", "firstName lastName profileImage salary")
+            .populate("laborDetails.driver.user", "firstName lastName profileImage salary")
+            .populate("createdBy", "firstName lastName")
+            .populate("project", "projectName projectNumber");
+        return res
+            .status(200)
+            .json(new apiHandlerHelpers_1.ApiResponse(200, updatedExpense, "Expense updated successfully"));
+    }
+    catch (error) {
+        console.error("Expense update error:", error);
+        const status = error instanceof apiHandlerHelpers_2.ApiError ? error.statusCode : 500;
+        const message = error instanceof Error ? error.message : "Failed to update expense";
+        throw new apiHandlerHelpers_2.ApiError(status, message);
+    }
 });
 exports.deleteExpense = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const { expenseId } = req.params;

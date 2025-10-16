@@ -79,7 +79,7 @@ const validStatusTransitions = {
     team_assigned: ["work_started", "on_hold"],
 };
 exports.createProject = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
-    const { projectName, projectDescription, client, location, building, apartmentNumber, } = req.body;
+    const { projectName, projectDescription, client, location, building, apartmentNumber, attention } = req.body;
     console.log(req.body);
     if (!projectName || !client || !location || !building || !apartmentNumber) {
         throw new apiHandlerHelpers_2.ApiError(400, "Required fields are missing");
@@ -99,6 +99,7 @@ exports.createProject = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         status: "draft",
         progress: 0,
         createdBy: req.user?.userId,
+        attention
     });
     res
         .status(201)
@@ -326,8 +327,8 @@ exports.assignProject = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             templateParams: {
                 userName: "Team", // Generic since we're sending to multiple people
                 actionUrl: `${constant_1.FRONTEND_URL}/app/project-view/${project._id}`,
-                contactEmail: "info@alghazal.ae",
-                logoUrl: "https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/alghazal/logo+alghazal.png",
+                contactEmail: "info@alghazalgroup.com",
+                logoUrl: "https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg",
                 projectName: project.projectName || "the project",
             },
             text: `Dear Team,\n\nEngineer ${engineer.firstName || "Engineer"} has been assigned to project "${project.projectName || "the project"}".\n\nView project details: ${constant_1.FRONTEND_URL}/app/project-view/${project._id}\n\nBest regards,\nTECHNICAL SERVICE TEAM`,
@@ -436,13 +437,13 @@ exports.updateProjectProgress = (0, asyncHandler_1.asyncHandler)(async (req, res
                 projectName: project.projectName,
                 progress: progress,
                 progressDetails: comment,
-                contactEmail: "info@alghazal.ae",
-                logoUrl: "https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/alghazal/logo+alghazal.png",
+                contactEmail: "info@alghazalgroup.com",
+                logoUrl: "https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg",
                 actionUrl: `${constant_1.FRONTEND_URL}/app/project-view/${project._id}`,
             };
             // Send email to all recipients
             await mailer_1.mailer.sendEmail({
-                to: process.env.NOTIFICATION_INBOX || "notifications@company.com",
+                to: process.env.NOTIFICATION_INBOX || "info@alghazalgroup.com",
                 bcc: uniqueRecipients.map((r) => r.email).join(","),
                 subject: `Progress Update: ${project.projectName} (${progress}% Complete)`,
                 templateParams,
@@ -1017,8 +1018,8 @@ exports.generateInvoicePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
     }
     body {
       font-family: 'Arial', sans-serif;
-      font-size: 10pt;
-      line-height: 1.4;
+      font-size: 11pt; /* Increased from 10pt for better readability */
+      line-height: 1.5; /* Increased line height for better readability */
       color: #333;
       margin: 0;
       padding: 0;
@@ -1026,12 +1027,13 @@ exports.generateInvoicePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
     .header {
       display: flex;
       align-items: flex-start;
-      margin-bottom: 15px;
-      gap: 15px;
+      margin-bottom: 20px; /* Increased spacing */
+      gap: 20px;
     }
     .logo {
-      height: 50px;
+      height: 60px; /* Slightly larger logo */
       width: auto;
+      max-width: 200px;
     }
     .header-content {
       flex-grow: 1;
@@ -1040,97 +1042,113 @@ exports.generateInvoicePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
       justify-content: center;
     }
     .document-title {
-      font-size: 14pt;
+      font-size: 18pt; /* Larger and more prominent */
       font-weight: bold;
       margin: 0;
       text-align: right;
       color: #000;
-      padding-top: 8px;
+      padding-top: 5px;
     }
     .invoice-header {
       display: flex;
       justify-content: space-between;
-      margin-bottom: 15px;
-      padding-bottom: 10px;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
       border-bottom: 2px solid #94d7f4;
       align-items: flex-start;
     }
     .invoice-info {
       text-align: right;
+      font-size: 10pt; /* Consistent font size */
+    }
+    .invoice-info p {
+      margin: 3px 0; /* Tighter paragraph spacing */
     }
     .service-period {
-      margin: 0 0 20px 0;
+      margin: 10px 0 15px 0;
       padding: 8px 0;
       font-weight: bold;
+      font-size: 10.5pt; /* Slightly larger than body text */
       border-bottom: 1px solid #eee;
+      background-color: #f8f9fa;
+      padding: 8px 12px;
+      border-radius: 4px;
     }
     .client-info-container {
       display: flex;
-      margin-bottom: 20px;
-      gap: 20px;
+      margin-bottom: 25px;
+      gap: 25px;
     }
-    .client-info {
+    .client-info, .company-info {
       flex: 1;
-      padding: 10px;
+      padding: 12px 15px;
       border: 1px solid #ddd;
       border-radius: 5px;
+      font-size: 10.5pt; /* Slightly larger for better readability */
     }
-    .company-info {
-      width: 250px;
-      padding: 10px;
-      border: 1px solid #ddd;
-      border-radius: 5px;
+    .client-info h3, .company-info h3 {
+      font-size: 12pt; /* Larger section headers */
+      margin: 0 0 10px 0;
+      color: #2c3e50;
+      border-bottom: 1px solid #94d7f4;
+      padding-bottom: 5px;
     }
     .section {
-      margin-bottom: 15px;
+      margin-bottom: 20px;
       page-break-inside: avoid;
     }
     .section-title {
-      font-size: 11pt;
+      font-size: 13pt; /* Larger section titles */
       font-weight: bold;
-      padding: 5px 0;
-      margin: 10px 0 5px 0;
-      border-bottom: 1px solid #94d7f4;
-      color: #333;
+      padding: 8px 0;
+      margin: 15px 0 8px 0;
+      border-bottom: 2px solid #94d7f4;
+      color: #2c3e50;
     }
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 15px;
+      margin-bottom: 20px;
       page-break-inside: avoid;
+      font-size: 10.5pt; /* Better table font size */
     }
     th {
       background-color: #94d7f4;
       color: #000;
       font-weight: bold;
-      padding: 6px 8px;
+      padding: 8px 10px; /* More padding for better readability */
       text-align: left;
       border: 1px solid #ddd;
+      font-size: 10.5pt;
     }
     td {
-      padding: 6px 8px;
+      padding: 8px 10px; /* More padding for better readability */
       border: 1px solid #ddd;
       vertical-align: top;
+      font-size: 10.5pt;
     }
     .amount-summary {
-      margin-top: 10px;
+      margin-top: 15px;
       width: 100%;
       text-align: right;
+      font-size: 11pt;
     }
     .amount-summary-row {
       display: flex;
       justify-content: flex-end;
-      margin-bottom: 5px;
+      margin-bottom: 6px;
     }
     .amount-label {
-      width: 150px;
+      width: 180px; /* Slightly wider for better alignment */
       font-weight: bold;
       text-align: right;
-      padding-right: 10px;
+      padding-right: 15px;
+      font-size: 10.5pt;
     }
     .amount-value {
-      width: 100px;
+      width: 120px; /* Slightly wider for better alignment */
       text-align: right;
+      font-size: 10.5pt;
     }
     .net-amount-row {
       display: flex;
@@ -1138,24 +1156,32 @@ exports.generateInvoicePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
       background-color: #94d7f4;
       color: #000;
       font-weight: bold;
-      font-size: 11pt;
-      margin-top: 5px;
-      padding: 5px 0;
-      border-top: 1px solid #333;
+      font-size: 12pt; /* Larger for emphasis */
+      margin-top: 8px;
+      padding: 8px 0;
+      border-top: 2px solid #333;
     }
     .terms-box {
       border: 1px solid #000;
-      padding: 10px;
-      margin-top: 15px;
+      padding: 12px;
+      margin-top: 20px;
       display: inline-block;
       width: auto;
       min-width: 50%;
+      font-size: 10.5pt;
     }
     .bank-details {
-      margin-top: 20px;
-      padding: 10px;
+      margin-top: 25px;
+      padding: 15px;
       border: 1px solid #ddd;
       border-radius: 5px;
+      background-color: #f8f9fa;
+      font-size: 10.5pt;
+    }
+    .bank-details h3 {
+      font-size: 12pt;
+      margin: 0 0 12px 0;
+      color: #2c3e50;
     }
     .text-center {
       text-align: center;
@@ -1168,26 +1194,37 @@ exports.generateInvoicePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
       padding-top: 20px;
     }
     .footer {
-      font-size: 9pt;
-      color: #777;
+      font-size: 9.5pt; /* Slightly larger footer */
+      color: #555;
       text-align: center;
-      border-top: 1px solid #ddd;
-      padding-top: 10px;
-      margin-top: 30px;
+      border-top: 2px solid #ddd;
+      padding-top: 15px;
+      margin-top: 35px;
+      line-height: 1.6;
     }
     .tagline {
       text-align: center;
       font-weight: bold;
-      font-size: 12pt;
-      margin: 20px 0 10px 0;
-      color: #333;
+      font-size: 13pt; /* More prominent tagline */
+      margin: 25px 0 15px 0;
+      color: #2c3e50;
     }
     p {
-      margin: 5px 0;
+      margin: 6px 0; /* Consistent paragraph spacing */
+      line-height: 1.5;
     }
     h3 {
-      margin: 0 0 8px 0;
-      color: #333;
+      margin: 0 0 12px 0;
+      color: #2c3e50;
+      font-size: 12pt;
+    }
+    strong {
+      font-weight: 600; /* Slightly bolder strong text */
+    }
+    /* Ensure no text is too small */
+    .no-small-text {
+      font-size: 10pt !important;
+      min-font-size: 10pt;
     }
   </style>
 </head>
@@ -1200,13 +1237,13 @@ exports.generateInvoicePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
   </div>
 
   <div class="invoice-header">
-    <div>
+    <div class="no-small-text">
       <p><strong>Invoice #:</strong> ${invoiceNumber}</p>
       <p><strong>Date:</strong> ${formatDate(new Date())}</p>
       ${lpo ? `<p><strong>LPO #:</strong> ${lpo.lpoNumber}</p>` : ''}
       ${project.grnNumber ? `<p><strong>GRN #:</strong> ${project.grnNumber}</p>` : ''}
     </div>
-    <div class="invoice-info">
+    <div class="invoice-info no-small-text">
       <p><strong>Project:</strong> ${project.projectName || "N/A"}</p>
       <!-- Service Period moved to top below project name -->
       <div class="service-period">
@@ -1304,10 +1341,12 @@ exports.generateInvoicePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
 `;
     const browser = await puppeteer_1.default.launch({
         headless: "shell",
-        args: ["--no-sandbox", "--disable-setuid-sandbox"],
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--font-render-hinting=none"],
     });
     try {
         const page = await browser.newPage();
+        // Set viewport for consistent rendering
+        await page.setViewport({ width: 1200, height: 1600 });
         await page.setContent(htmlContent, {
             waitUntil: ["load", "networkidle0", "domcontentloaded"],
             timeout: 30000,
@@ -1322,6 +1361,7 @@ exports.generateInvoicePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
                 left: "1cm",
             },
             displayHeaderFooter: false,
+            preferCSSPageSize: true,
         });
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", `attachment; filename=invoice-${invoiceNumber}.pdf`);

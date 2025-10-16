@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getWorkProgressTemplate = void 0;
-const getWorkProgressTemplate = ({ userName = "Valued Customer", projectName = "your project", progress = 0, progressDetails = "", contactEmail = "propertymanagement@alhamra.ae", logoUrl = "https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/alghazal/logo+alghazal.png", actionUrl = "#" } = {}) => {
+const getWorkProgressTemplate = ({ userName = "Valued Customer", projectName = "your project", progress = 0, progressDetails = "", contactEmail = "info@alghazalgroup.com", logoUrl = "https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg", actionUrl = "#" } = {}) => {
     return `
     <!DOCTYPE html>
     <html lang="en">

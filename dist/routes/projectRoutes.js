@@ -24,16 +24,16 @@ router.put("/:projectId/grn-number", (0, authMiddleware_1.authorize)(["admin", "
 // Update project - Admin/Engineer only
 router.put("/:id", (0, authMiddleware_1.authorize)(["admin", "super_admin", "engineer"]), projectController_1.updateProject);
 router.post("/:id/assign", (0, authMiddleware_1.authorize)(["admin", "super_admin", "finance"]), projectController_1.assignProject);
-router.get("/:projectId/team", (0, authMiddleware_1.authorize)(["admin", "super_admin", "finance"]), projectController_1.getAssignedTeam);
+router.get("/:projectId/team", (0, authMiddleware_1.authorize)(["admin", "super_admin", "finance", "engineer"]), projectController_1.getAssignedTeam);
 router.put("/:id/assign-workers-driver", (0, authMiddleware_1.authorize)(["admin", "super_admin", "finance"]), projectController_1.updateWorkersAndDriver);
-router.get("/:projectId/progress", (0, authMiddleware_1.authorize)(["admin", "super_admin", "finance"]), projectController_1.getProjectProgressUpdates);
+router.get("/:projectId/progress", (0, authMiddleware_1.authorize)(["admin", "super_admin", "finance", "engineer"]), projectController_1.getProjectProgressUpdates);
 // Update project status
 router.patch("/:id/status", (0, authMiddleware_1.authorize)(["admin", "super_admin", "engineer", "finance"]), projectController_1.updateProjectStatus);
 // Update project progress
 router.patch("/:id/progress", (0, authMiddleware_1.authorize)(["admin", "super_admin", "engineer"]), projectController_1.updateProjectProgress);
 // Delete project - Admin only
 router.delete("/:id", (0, authMiddleware_1.authorize)(["admin", "super_admin"]), projectController_1.deleteProject);
-router.post("/:projectId/assign-team", (0, authMiddleware_1.authorize)(["admin", "super_admin"]), // Only admins can assign teams
+router.post("/:projectId/assign-team", (0, authMiddleware_1.authorize)(["admin", "super_admin", "engineer"]), // Only admins can assign teams
 projectController_1.assignTeamAndDriver);
 router.patch("/:id/work-start-date", (0, authMiddleware_1.authorize)(["admin", "super_admin", "engineer"]), projectController_1.setWorkStartDate);
 router.patch("/:id/work-end-date", (0, authMiddleware_1.authorize)(["admin", "super_admin", "engineer"]), projectController_1.setWorkEndDate);

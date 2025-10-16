@@ -13,8 +13,8 @@ router.post("/login", userController_1.login);
 router.use(authMiddleware_1.authenticate);
 //
 router.get("/engineers", (0, authMiddleware_1.authorize)(["admin", "super_admin", "finance"]), userController_1.getActiveEngineers);
-router.get("/drivers", (0, authMiddleware_1.authorize)(["admin", "super_admin", "finance"]), userController_1.getActiveDrivers);
-router.get("/workers", (0, authMiddleware_1.authorize)(["admin", "super_admin", "finance"]), userController_1.getActiveWorkers);
+router.get("/drivers", (0, authMiddleware_1.authorize)(["admin", "super_admin", "finance", "engineer"]), userController_1.getActiveDrivers);
+router.get("/workers", (0, authMiddleware_1.authorize)(["admin", "super_admin", "finance", "engineer"]), userController_1.getActiveWorkers);
 // Create user - Admin only
 router.post("/", (0, authMiddleware_1.authorize)(["admin", "super_admin"]), multer_1.upload.fields([
     { name: "profileImage", maxCount: 1 },

@@ -31,6 +31,7 @@ const payrollRoutes_1 = __importDefault(require("./routes/payrollRoutes"));
 const visaExpenseRoutes_1 = __importDefault(require("./routes/visaExpenseRoutes"));
 const reportRoutes_1 = __importDefault(require("./routes/reportRoutes"));
 const employeeSummaryRoutes_1 = __importDefault(require("./routes/employeeSummaryRoutes"));
+const attendanceManagementRoutes_1 = __importDefault(require("./routes/attendanceManagementRoutes"));
 const db_1 = require("./config/db");
 const seeder_1 = require("./utils/seeder");
 dotenv_1.default.config();
@@ -87,6 +88,7 @@ app.use("/api/payroll", payrollRoutes_1.default);
 app.use("/api/visa-expenses", visaExpenseRoutes_1.default);
 app.use("/api/reports", reportRoutes_1.default);
 app.use("/api/employee-summary", employeeSummaryRoutes_1.default);
+app.use("/api/attendance-management", attendanceManagementRoutes_1.default);
 app.use(errorHandler_1.errorHandler);
 app.use((req, res, next) => {
     throw new apiHandlerHelpers_1.ApiError(404, "Route not found");

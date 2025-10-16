@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getEstimationCheckedTemplate = void 0;
-const getEstimationCheckedTemplate = ({ userName = "Valued Team Member", actionUrl = "#", contactEmail = "propertymanagement@alhamra.ae", logoUrl = "https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/alghazal/logo+alghazal.png", estimationNumber = "", checkerName = "a team member", projectName = "the project", dueDate = "" } = {}) => {
+const getEstimationCheckedTemplate = ({ userName = "Valued Team Member", actionUrl = "#", contactEmail = "info@alghazalgroup.com", logoUrl = "https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg", estimationNumber = "", checkerName = "a team member", projectName = "the project", dueDate = "" } = {}) => {
     return `
     <!DOCTYPE html>
     <html lang="en">

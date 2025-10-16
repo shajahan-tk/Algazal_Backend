@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getEmailTemplate = void 0;
-const getEmailTemplate = ({ userName = "Valued Customer", actionUrl = "#", contactEmail = "propertymanagement@alhamra.ae", logoUrl = "https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/alghazal/logo+alghazal.png", projectName = "the project", } = {}) => {
+const getEmailTemplate = ({ userName = "Valued Customer", actionUrl = "#", contactEmail = "info@alghazalgroup.com", logoUrl = "https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg", projectName = "the project", } = {}) => {
     return `
       <!DOCTYPE html>
       <html lang="en">

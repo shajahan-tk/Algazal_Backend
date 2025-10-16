@@ -16,6 +16,10 @@ const mongoose_1 = require("mongoose");
 exports.markAttendance = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const { projectId, userId } = req.params;
     let { present, type = "project", workingHours = 0 } = req.body;
+    console.log('Request body:', req.body);
+    console.log('Present:', present);
+    console.log('Working hours:', workingHours);
+    console.log('Type:', type);
     // Ensure markedBy exists and is valid
     if (!req.user?.userId) {
         throw new apiHandlerHelpers_2.ApiError(401, "Unauthorized - User not authenticated");
@@ -31,18 +35,41 @@ exports.markAttendance = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     if (!["project", "normal"].includes(type)) {
         throw new apiHandlerHelpers_2.ApiError(400, "Invalid attendance type");
     }
-    // FIX: Allow 0 working hours for absent cases
+    // FIXED: Convert time string to hours and validate
+    let workingHoursValue = 0;
     if (present) {
-        if (typeof workingHours !== "number" ||
-            workingHours < 0 ||
-            workingHours > 24) {
+        // Handle both number and time string formats
+        if (typeof workingHours === 'string' && workingHours.includes(':')) {
+            // Convert time string like "15:00" to hours
+            const [hours, minutes] = workingHours.split(':').map(Number);
+            workingHoursValue = hours + (minutes / 60);
+            // Round to 2 decimal places for cleaner storage
+            workingHoursValue = Math.round(workingHoursValue * 100) / 100;
+        }
+        else if (typeof workingHours === 'number') {
+            workingHoursValue = workingHours;
+        }
+        else if (typeof workingHours === 'string') {
+            // Try to parse as number if it's a string number
+            workingHoursValue = parseFloat(workingHours);
+            if (isNaN(workingHoursValue)) {
+                throw new apiHandlerHelpers_2.ApiError(400, "Working hours must be a valid number or time string (HH:MM)");
+            }
+        }
+        else {
+            throw new apiHandlerHelpers_2.ApiError(400, "Working hours must be a number or time string (HH:MM)");
+        }
+        // Validate the converted value
+        if (workingHoursValue < 0 || workingHoursValue > 24) {
             throw new apiHandlerHelpers_2.ApiError(400, "Working hours must be between 0 and 24");
         }
     }
     else {
-        // For absent, force workingHours to 0
-        workingHours = 0;
+        // For absent cases, force workingHours to 0
+        workingHoursValue = 0;
     }
+    // Use the converted value
+    workingHours = workingHoursValue;
     let project;
     if (type === "project") {
         if (!projectId) {
@@ -97,7 +124,6 @@ exports.markAttendance = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         .status(200)
         .json(new apiHandlerHelpers_1.ApiResponse(200, attendance, "Attendance marked successfully"));
 });
-;
 // Get attendance records (supports both types)
 exports.getAttendance = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const { userId } = req.params;

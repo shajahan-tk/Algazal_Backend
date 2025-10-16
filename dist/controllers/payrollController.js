@@ -305,20 +305,74 @@ exports.deletePayroll = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
 });
 // Export payrolls to Excel
 exports.exportPayrollsToExcel = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    const { month, year, search, employee, period, labourCard, startDate, endDate } = req.query;
+    // Build filter query based on parameters
     const filter = {};
-    // Apply filters with type safety
-    if (req.query.period)
-        filter.period = req.query.period;
-    if (req.query.employee)
-        filter.employee = req.query.employee;
-    if (req.query.labourCard)
-        filter.labourCard = req.query.labourCard;
-    const payrolls = await payrollModel_1.Payroll.find(filter)
+    // Handle month and year filtering
+    if (month && year) {
+        const startOfMonth = new Date(Number(year), Number(month) - 1, 1);
+        const endOfMonth = new Date(Number(year), Number(month), 0, 23, 59, 59, 999);
+        filter.createdAt = {
+            $gte: startOfMonth,
+            $lte: endOfMonth
+        };
+    }
+    else if (year) {
+        const startOfYear = new Date(Number(year), 0, 1);
+        const endOfYear = new Date(Number(year), 11, 31, 23, 59, 59, 999);
+        filter.createdAt = {
+            $gte: startOfYear,
+            $lte: endOfYear
+        };
+    }
+    // Handle date range filtering (takes precedence over month/year)
+    if (startDate && endDate) {
+        filter.createdAt = {
+            $gte: new Date(startDate),
+            $lte: new Date(endDate)
+        };
+    }
+    else if (startDate) {
+        filter.createdAt = { $gte: new Date(startDate) };
+    }
+    else if (endDate) {
+        filter.createdAt = { $lte: new Date(endDate) };
+    }
+    // Apply other filters
+    if (period)
+        filter.period = period;
+    if (employee)
+        filter.employee = employee;
+    if (labourCard)
+        filter.labourCard = labourCard;
+    // Build search filter for text fields
+    let searchFilter = {};
+    if (search && search.toString().trim()) {
+        searchFilter = {
+            $or: [
+                { period: { $regex: search, $options: 'i' } },
+                { labourCard: { $regex: search, $options: 'i' } },
+                { labourCardPersonalNo: { $regex: search, $options: 'i' } },
+                { remark: { $regex: search, $options: 'i' } }
+            ]
+        };
+    }
+    // Combine filters
+    const finalFilter = Object.keys(searchFilter).length > 0
+        ? { ...filter, ...searchFilter }
+        : filter;
+    const payrolls = await payrollModel_1.Payroll.find(finalFilter)
         .sort({ period: -1, createdAt: -1 })
         .populate({
         path: 'employee',
         select: 'firstName lastName role emiratesId'
     });
+    if (payrolls.length === 0) {
+        return res.status(404).json({
+            success: false,
+            message: "No payroll records found for the specified criteria"
+        });
+    }
     // Create workbook and worksheet
     const workbook = new exceljs_1.default.Workbook();
     const worksheet = workbook.addWorksheet('Payroll Report');
@@ -386,9 +440,22 @@ exports.exportPayrollsToExcel = (0, asyncHandler_1.asyncHandler)(async (req, res
             right: { style: 'thin' }
         };
     });
+    // Generate filename with date filter info
+    let filename = 'payroll_report';
+    if (month && year) {
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+            'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        filename += `_${monthNames[Number(month) - 1]}_${year}`;
+    }
+    else if (year) {
+        filename += `_${year}`;
+    }
+    else {
+        filename += `_${new Date().toISOString().split('T')[0]}`;
+    }
     // Set response headers
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=payroll_report_${new Date().toISOString().split('T')[0]}.xlsx`);
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}.xlsx`);
     // Send the workbook
     await workbook.xlsx.write(res);
     res.end();

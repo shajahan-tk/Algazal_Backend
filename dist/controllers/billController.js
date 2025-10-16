@@ -13,24 +13,12 @@ const vehicleModel_1 = require("../models/vehicleModel");
 const categoryModel_1 = require("../models/categoryModel");
 const uploadConf_1 = require("../utils/uploadConf");
 const exceljs_1 = __importDefault(require("exceljs"));
+const mongoose_1 = require("mongoose");
 exports.createBill = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
-    const { billType, billDate, paymentMethod, amount, 
-    // General fields
-    category, shop, invoiceNo, remarks, 
-    // Fuel fields
-    description, vehicle, // For single vehicle (backward compatibility)
-    vehicles, // For multiple vehicles in fuel bills
-    kilometer, liter, 
-    // Vehicle fields
-    purpose, 
-    // vehicles is used for vehicle bills too
-    // Accommodation fields
-    roomNo, note, } = req.body;
-    // Validate required fields
+    const { billType, billDate, paymentMethod, amount, category, shop, invoiceNo, remarks, description, vehicle, vehicles, kilometer, liter, purpose, roomNo, note, } = req.body;
     if (!billType || !billDate || !paymentMethod || !amount) {
         throw new apiHandlerHelpers_2.ApiError(400, "Required fields are missing");
     }
-    // Validate bill type specific fields
     switch (billType) {
         case "general":
             if (!category || !shop) {
@@ -61,12 +49,10 @@ exports.createBill = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             }
             break;
         case "commission":
-            // No additional fields required for commission bills
             break;
         default:
             throw new apiHandlerHelpers_2.ApiError(400, "Invalid bill type");
     }
-    // Check references
     if (shop) {
         const shopExists = await shopModel_1.Shop.findById(shop);
         if (!shopExists) {
@@ -79,7 +65,6 @@ exports.createBill = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             throw new apiHandlerHelpers_2.ApiError(404, "Category not found");
         }
     }
-    // Handle vehicle validation for fuel bills (can have multiple vehicles)
     if (billType === "fuel") {
         let vehicleIds = [];
         if (vehicles && Array.isArray(vehicles)) {
@@ -95,23 +80,19 @@ exports.createBill = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             }
         }
     }
-    // Handle single vehicle validation for other bill types
     if (vehicle && billType !== "fuel") {
         const vehicleExists = await vehicleModel_1.Vehicle.findById(vehicle);
         if (!vehicleExists) {
             throw new apiHandlerHelpers_2.ApiError(404, "Vehicle not found");
         }
     }
-    // Handle multiple vehicles validation for vehicle bills
     if (vehicles && vehicles.length > 0 && billType === "vehicle") {
         const vehiclesExist = await vehicleModel_1.Vehicle.find({ _id: { $in: vehicles } });
         if (vehiclesExist.length !== vehicles.length) {
             throw new apiHandlerHelpers_2.ApiError(404, "One or more vehicles not found");
         }
     }
-    // Handle file uploads with proper typing
     let attachments = [];
-    // Fix for req.files type issue
     const files = Array.isArray(req.files)
         ? req.files
         : req.files
@@ -129,7 +110,6 @@ exports.createBill = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
                 filePath: file.url,
             })) || [];
     }
-    // Prepare bill data
     const billData = {
         billType,
         billDate: new Date(billDate),
@@ -137,24 +117,18 @@ exports.createBill = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         amount,
         attachments,
         createdBy: req.user?.userId,
-        // General fields
         category,
         shop,
         invoiceNo,
         remarks,
-        // Fuel fields
         description,
         kilometer,
         liter,
-        // Vehicle fields
         purpose,
-        // Accommodation fields
         roomNo,
         note,
     };
-    // Handle vehicle assignment based on bill type
     if (billType === "fuel") {
-        // For fuel bills, use vehicles array to support multiple vehicles
         if (vehicles && Array.isArray(vehicles)) {
             billData.vehicles = vehicles;
         }
@@ -163,176 +137,156 @@ exports.createBill = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         }
     }
     else if (billType === "vehicle") {
-        // For vehicle bills, use vehicles array
         billData.vehicles = vehicles;
     }
     else {
-        // For other bill types, use single vehicle field
         billData.vehicle = vehicle;
     }
-    // Create the bill with proper typing
     const bill = await billModel_1.Bill.create(billData);
     res.status(201).json(new apiHandlerHelpers_1.ApiResponse(201, bill, "Bill created successfully"));
 });
-// Get all bills with filters
 exports.getBills = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
-    // Build base match conditions
     const matchConditions = {};
     // Bill type filter
     if (req.query.billType) {
         matchConditions.billType = req.query.billType;
     }
-    // Date range filter (takes precedence over year/month)
+    // Date filters - Don't combine date range with month/year
     if (req.query.startDate && req.query.endDate) {
+        const startDate = new Date(req.query.startDate);
+        const endDate = new Date(req.query.endDate);
+        endDate.setHours(23, 59, 59, 999);
         matchConditions.billDate = {
-            $gte: new Date(req.query.startDate),
-            $lte: new Date(req.query.endDate),
+            $gte: startDate,
+            $lte: endDate,
         };
     }
-    else {
-        // Year filter
-        if (req.query.year) {
-            const year = parseInt(req.query.year);
-            if (isNaN(year)) {
-                throw new apiHandlerHelpers_2.ApiError(400, "Invalid year value");
-            }
-            matchConditions.billDate = {
-                $gte: new Date(year, 0, 1),
-                $lte: new Date(year + 1, 0, 1),
-            };
+    else if (req.query.month && req.query.year) {
+        const month = parseInt(req.query.month) - 1;
+        const year = parseInt(req.query.year);
+        const startOfMonth = new Date(year, month, 1);
+        startOfMonth.setHours(0, 0, 0, 0);
+        const endOfMonth = new Date(year, month + 1, 0);
+        endOfMonth.setHours(23, 59, 59, 999);
+        matchConditions.billDate = {
+            $gte: startOfMonth,
+            $lte: endOfMonth,
+        };
+    }
+    else if (req.query.year && !req.query.month) {
+        const year = parseInt(req.query.year);
+        const startOfYear = new Date(year, 0, 1);
+        startOfYear.setHours(0, 0, 0, 0);
+        const endOfYear = new Date(year, 11, 31);
+        endOfYear.setHours(23, 59, 59, 999);
+        matchConditions.billDate = {
+            $gte: startOfYear,
+            $lte: endOfYear,
+        };
+    }
+    // FIXED: Convert string IDs to ObjectId for proper matching
+    if (req.query.shop) {
+        try {
+            matchConditions.shop = new mongoose_1.Types.ObjectId(req.query.shop);
         }
-        // Month filter
-        if (req.query.month) {
-            const month = parseInt(req.query.month);
-            if (isNaN(month) || month < 1 || month > 12) {
-                throw new apiHandlerHelpers_2.ApiError(400, "Invalid month value (1-12)");
-            }
-            if (!matchConditions.billDate) {
-                const currentYear = new Date().getFullYear();
-                matchConditions.billDate = {
-                    $gte: new Date(currentYear, month - 1, 1),
-                    $lt: new Date(currentYear, month, 1),
-                };
-            }
-            else {
-                const startDate = new Date(matchConditions.billDate.$gte);
-                startDate.setMonth(month - 1);
-                startDate.setDate(1);
-                const endDate = new Date(startDate);
-                endDate.setMonth(month);
-                matchConditions.billDate.$gte = startDate;
-                matchConditions.billDate.$lte = endDate;
-            }
+        catch (error) {
+            throw new apiHandlerHelpers_2.ApiError(400, "Invalid shop ID format");
         }
     }
-    // Other filters
-    if (req.query.shop)
-        matchConditions.shop = req.query.shop;
-    if (req.query.category)
-        matchConditions.category = req.query.category;
-    if (req.query.paymentMethod)
+    if (req.query.category) {
+        try {
+            matchConditions.category = new mongoose_1.Types.ObjectId(req.query.category);
+        }
+        catch (error) {
+            throw new apiHandlerHelpers_2.ApiError(400, "Invalid category ID format");
+        }
+    }
+    if (req.query.paymentMethod) {
         matchConditions.paymentMethod = req.query.paymentMethod;
+    }
     if (req.query.vehicle) {
-        matchConditions.$or = [
-            { vehicle: req.query.vehicle },
-            { vehicles: req.query.vehicle },
-        ];
-    }
-    // Amount range filter
-    if (req.query.minAmount || req.query.maxAmount) {
-        const amountFilter = {};
-        if (req.query.minAmount) {
-            amountFilter.$gte = parseFloat(req.query.minAmount);
+        try {
+            const vehicleId = new mongoose_1.Types.ObjectId(req.query.vehicle);
+            matchConditions.$or = [
+                { vehicle: vehicleId },
+                { vehicles: vehicleId },
+            ];
         }
-        if (req.query.maxAmount) {
-            amountFilter.$lte = parseFloat(req.query.maxAmount);
+        catch (error) {
+            throw new apiHandlerHelpers_2.ApiError(400, "Invalid vehicle ID format");
         }
-        matchConditions.amount = amountFilter;
     }
-    // Build aggregation pipeline
-    const pipeline = [
-        // Lookup related collections
-        {
-            $lookup: {
-                from: "shops",
-                localField: "shop",
-                foreignField: "_id",
-                as: "shopData",
-            },
+    console.log('Match Conditions:', JSON.stringify(matchConditions, null, 2));
+    const pipeline = [];
+    if (Object.keys(matchConditions).length > 0) {
+        pipeline.push({ $match: matchConditions });
+    }
+    pipeline.push({
+        $lookup: {
+            from: "shops",
+            localField: "shop",
+            foreignField: "_id",
+            as: "shopData",
         },
-        {
-            $lookup: {
-                from: "vehicles",
-                localField: "vehicle",
-                foreignField: "_id",
-                as: "vehicleData",
-            },
+    }, {
+        $lookup: {
+            from: "vehicles",
+            localField: "vehicle",
+            foreignField: "_id",
+            as: "vehicleData",
         },
-        {
-            $lookup: {
-                from: "vehicles",
-                localField: "vehicles",
-                foreignField: "_id",
-                as: "vehiclesData",
-            },
+    }, {
+        $lookup: {
+            from: "vehicles",
+            localField: "vehicles",
+            foreignField: "_id",
+            as: "vehiclesData",
         },
-        {
-            $lookup: {
-                from: "categories",
-                localField: "category",
-                foreignField: "_id",
-                as: "categoryData",
-            },
+    }, {
+        $lookup: {
+            from: "categories",
+            localField: "category",
+            foreignField: "_id",
+            as: "categoryData",
         },
-        {
-            $lookup: {
-                from: "users",
-                localField: "createdBy",
-                foreignField: "_id",
-                as: "createdByData",
-            },
+    }, {
+        $lookup: {
+            from: "users",
+            localField: "createdBy",
+            foreignField: "_id",
+            as: "createdByData",
         },
-    ];
-    // Add search filter if provided
+    });
     if (req.query.search) {
         const searchTerm = req.query.search;
         const searchRegex = { $regex: searchTerm, $options: "i" };
         pipeline.push({
             $match: {
                 $or: [
-                    // Bill fields
                     { invoiceNo: searchRegex },
                     { description: searchRegex },
                     { purpose: searchRegex },
                     { remarks: searchRegex },
                     { roomNo: searchRegex },
                     { note: searchRegex },
-                    // Shop fields
                     { "shopData.shopName": searchRegex },
                     { "shopData.shopNo": searchRegex },
                     { "shopData.ownerName": searchRegex },
-                    // Vehicle fields
                     { "vehicleData.vehicleNumber": searchRegex },
                     { "vehicleData.make": searchRegex },
                     { "vehicleData.vechicleModel": searchRegex },
                     { "vehiclesData.vehicleNumber": searchRegex },
                     { "vehiclesData.make": searchRegex },
                     { "vehiclesData.vechicleModel": searchRegex },
-                    // Category fields
                     { "categoryData.name": searchRegex },
                     { "categoryData.description": searchRegex },
                 ],
             },
         });
     }
-    // Add other match conditions
-    if (Object.keys(matchConditions).length > 0) {
-        pipeline.unshift({ $match: matchConditions });
-    }
-    // Add facet stage for pagination and total count
     pipeline.push({
         $facet: {
             data: [
@@ -447,6 +401,11 @@ exports.getBills = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const bills = result[0].data;
     const total = result[0].totalCount[0]?.count || 0;
     const totalAmount = result[0].totalAmount[0]?.total || 0;
+    console.log('Query Results:', {
+        totalBills: total,
+        returnedBills: bills.length,
+        totalAmount: totalAmount
+    });
     res.status(200).json(new apiHandlerHelpers_1.ApiResponse(200, {
         bills,
         totalAmount,
@@ -460,7 +419,6 @@ exports.getBills = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         },
     }, "Bills retrieved successfully"));
 });
-// Get a single bill by ID
 exports.getBill = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const { id } = req.params;
     const bill = await billModel_1.Bill.findById(id)
@@ -483,7 +441,6 @@ exports.updateBill = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     if (!bill) {
         throw new apiHandlerHelpers_2.ApiError(404, "Bill not found");
     }
-    // Check references if being updated
     if (updateData.shop) {
         const shopExists = await shopModel_1.Shop.findById(updateData.shop);
         if (!shopExists) {
@@ -496,9 +453,7 @@ exports.updateBill = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             throw new apiHandlerHelpers_2.ApiError(404, "Category not found");
         }
     }
-    // Handle vehicle validation based on bill type
     if (bill.billType === "fuel") {
-        // For fuel bills, check vehicles array
         if (updateData.vehicles && updateData.vehicles.length > 0) {
             const vehiclesExist = await vehicleModel_1.Vehicle.find({
                 _id: { $in: updateData.vehicles },
@@ -508,18 +463,15 @@ exports.updateBill = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             }
         }
         else if (updateData.vehicle) {
-            // Handle single vehicle for backward compatibility
             const vehicleExists = await vehicleModel_1.Vehicle.findById(updateData.vehicle);
             if (!vehicleExists) {
                 throw new apiHandlerHelpers_2.ApiError(404, "Vehicle not found");
             }
-            // Convert single vehicle to vehicles array
             updateData.vehicles = [updateData.vehicle];
             delete updateData.vehicle;
         }
     }
     else {
-        // For other bill types
         if (updateData.vehicle) {
             const vehicleExists = await vehicleModel_1.Vehicle.findById(updateData.vehicle);
             if (!vehicleExists) {
@@ -535,9 +487,7 @@ exports.updateBill = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             }
         }
     }
-    // Handle file uploads for new attachments
     let newAttachments = [];
-    // Fix for req.files type issue
     const files = Array.isArray(req.files)
         ? req.files
         : req.files
@@ -555,7 +505,6 @@ exports.updateBill = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
                 filePath: file.url,
             })) || [];
     }
-    // Handle attachment deletions if specified
     if (updateData.deletedAttachments &&
         updateData.deletedAttachments.length > 0) {
         await Promise.all(updateData.deletedAttachments.map(async (attachmentId) => {
@@ -572,16 +521,13 @@ exports.updateBill = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             }
         }));
     }
-    // Prepare update payload
     const updatePayload = {
         ...updateData,
         $push: { attachments: { $each: newAttachments } },
     };
-    // Convert dates if they exist in updateData
     if (updateData.billDate) {
         updatePayload.billDate = new Date(updateData.billDate);
     }
-    // Update the bill
     const updatedBill = await billModel_1.Bill.findByIdAndUpdate(id, updatePayload, {
         new: true,
     })
@@ -597,14 +543,12 @@ exports.updateBill = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         .status(200)
         .json(new apiHandlerHelpers_1.ApiResponse(200, updatedBill, "Bill updated successfully"));
 });
-// Delete a bill
 exports.deleteBill = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const { id } = req.params;
     const bill = await billModel_1.Bill.findById(id);
     if (!bill) {
         throw new apiHandlerHelpers_2.ApiError(404, "Bill not found");
     }
-    // Delete all associated files from S3
     if (bill.attachments && bill.attachments.length > 0) {
         await Promise.all(bill.attachments.map(async (attachment) => {
             try {
@@ -619,7 +563,6 @@ exports.deleteBill = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     await billModel_1.Bill.findByIdAndDelete(id);
     res.status(200).json(new apiHandlerHelpers_1.ApiResponse(200, null, "Bill deleted successfully"));
 });
-// Get financial summary
 exports.getFinancialSummary = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const { startDate, endDate, groupBy } = req.query;
     const match = {};
@@ -714,7 +657,6 @@ exports.getFinancialSummary = (0, asyncHandler_1.asyncHandler)(async (req, res) 
         .status(200)
         .json(new apiHandlerHelpers_1.ApiResponse(200, summary, "Financial summary retrieved successfully"));
 });
-// Get bill statistics
 exports.getBillStatistics = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const { startDate, endDate } = req.query;
     const match = {};
@@ -811,80 +753,74 @@ exports.getBillStatistics = (0, asyncHandler_1.asyncHandler)(async (req, res) =>
 });
 exports.exportBillsToExcel = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const filter = {};
-    // Bill type filter
     if (req.query.billType) {
         filter.billType = req.query.billType;
     }
-    // Date range filter - Handle both date range and month/year
     if (req.query.startDate && req.query.endDate) {
-        // Handle startDate and endDate parameters
         const startDate = new Date(req.query.startDate);
         const endDate = new Date(req.query.endDate);
-        // Set start date to beginning of day (00:00:00.000)
         startDate.setHours(0, 0, 0, 0);
-        // Set end date to end of day (23:59:59.999)
         endDate.setHours(23, 59, 59, 999);
-        console.log('Date Range Filter Applied:');
-        console.log('Start Date:', startDate);
-        console.log('End Date:', endDate);
         filter.billDate = {
             $gte: startDate,
             $lte: endDate,
         };
     }
     else if (req.query.month && req.query.year) {
-        // Handle month and year parameters (this is what your frontend sends)
-        const month = parseInt(req.query.month) - 1; // JavaScript months are 0-indexed
+        const month = parseInt(req.query.month) - 1;
         const year = parseInt(req.query.year);
         const startOfMonth = new Date(year, month, 1);
         startOfMonth.setHours(0, 0, 0, 0);
-        const endOfMonth = new Date(year, month + 1, 0); // Last day of the month
+        const endOfMonth = new Date(year, month + 1, 0);
         endOfMonth.setHours(23, 59, 59, 999);
-        console.log('Month/Year Filter Applied:');
-        console.log('Month:', req.query.month, 'Year:', req.query.year);
-        console.log('Start of Month:', startOfMonth);
-        console.log('End of Month:', endOfMonth);
         filter.billDate = {
             $gte: startOfMonth,
             $lte: endOfMonth,
         };
     }
     else if (req.query.year && !req.query.month) {
-        // Handle year only filter
         const year = parseInt(req.query.year);
         const startOfYear = new Date(year, 0, 1);
         startOfYear.setHours(0, 0, 0, 0);
         const endOfYear = new Date(year, 11, 31);
         endOfYear.setHours(23, 59, 59, 999);
-        console.log('Year Filter Applied:');
-        console.log('Year:', req.query.year);
-        console.log('Start of Year:', startOfYear);
-        console.log('End of Year:', endOfYear);
         filter.billDate = {
             $gte: startOfYear,
             $lte: endOfYear,
         };
     }
-    // Shop filter
+    // FIXED: Convert string IDs to ObjectId
     if (req.query.shop) {
-        filter.shop = req.query.shop;
+        try {
+            filter.shop = new mongoose_1.Types.ObjectId(req.query.shop);
+        }
+        catch (error) {
+            throw new apiHandlerHelpers_2.ApiError(400, "Invalid shop ID format");
+        }
     }
-    // Category filter
     if (req.query.category) {
-        filter.category = req.query.category;
+        try {
+            filter.category = new mongoose_1.Types.ObjectId(req.query.category);
+        }
+        catch (error) {
+            throw new apiHandlerHelpers_2.ApiError(400, "Invalid category ID format");
+        }
     }
-    // Payment method filter
     if (req.query.paymentMethod) {
         filter.paymentMethod = req.query.paymentMethod;
     }
-    // Vehicle filter
     if (req.query.vehicle) {
-        filter.$or = [
-            { vehicle: req.query.vehicle },
-            { vehicles: req.query.vehicle },
-        ];
+        try {
+            const vehicleId = new mongoose_1.Types.ObjectId(req.query.vehicle);
+            filter.$or = [
+                { vehicle: vehicleId },
+                { vehicles: vehicleId },
+            ];
+        }
+        catch (error) {
+            throw new apiHandlerHelpers_2.ApiError(400, "Invalid vehicle ID format");
+        }
     }
-    // Amount range filter
     if (req.query.minAmount || req.query.maxAmount) {
         filter.amount = {};
         if (req.query.minAmount) {
@@ -894,28 +830,25 @@ exports.exportBillsToExcel = (0, asyncHandler_1.asyncHandler)(async (req, res) =
             filter.amount.$lte = parseFloat(req.query.maxAmount);
         }
     }
-    // Search filter - Handle conflict with vehicle filter
     if (req.query.search) {
         const searchFilters = [
             { invoiceNo: { $regex: req.query.search, $options: "i" } },
             { description: { $regex: req.query.search, $options: "i" } },
             { purpose: { $regex: req.query.search, $options: "i" } },
+            { remarks: { $regex: req.query.search, $options: "i" } },
         ];
-        // If vehicle filter already exists with $or, merge them
         if (filter.$or) {
             filter.$and = [
-                { $or: filter.$or }, // existing vehicle filter
-                { $or: searchFilters } // search filter
+                { $or: filter.$or },
+                { $or: searchFilters }
             ];
-            delete filter.$or; // remove the original $or to avoid conflict
+            delete filter.$or;
         }
         else {
             filter.$or = searchFilters;
         }
     }
-    // Debug: Log the final filter
-    console.log('Final MongoDB Filter:', JSON.stringify(filter, null, 2));
-    // Get all bills matching the filter with proper typing for populated fields
+    console.log('Export Filter:', JSON.stringify(filter, null, 2));
     const bills = await billModel_1.Bill.find(filter)
         .sort({ billDate: -1 })
         .populate([
@@ -925,16 +858,9 @@ exports.exportBillsToExcel = (0, asyncHandler_1.asyncHandler)(async (req, res) =
         { path: 'vehicles', select: 'vehicleNumber' },
         { path: 'createdBy', select: 'firstName lastName' }
     ]);
-    // Debug: Log the number of bills found
-    console.log('Bills found:', bills.length);
-    if (bills.length > 0) {
-        console.log('First bill date:', bills[0].billDate);
-        console.log('Last bill date:', bills[bills.length - 1].billDate);
-    }
-    // Create a new workbook
+    console.log('Bills found for export:', bills.length);
     const workbook = new exceljs_1.default.Workbook();
     const worksheet = workbook.addWorksheet("Bills");
-    // Define columns for each bill type
     const billTypeColumns = {
         general: [
             { header: "SNO", key: "sno", width: 5 },
@@ -995,24 +921,22 @@ exports.exportBillsToExcel = (0, asyncHandler_1.asyncHandler)(async (req, res) =
         commission: [
             { header: "SNO", key: "sno", width: 5 },
             { header: "DATE", key: "billDate", width: 12, style: { numFmt: "dd-mm-yyyy" } },
-            { header: "AMOUNT", key: "amount", width: 12, style: { numFmt: "#,##0.00" } }
+            { header: "PAYMENT METHOD", key: "paymentMethod", width: 15 },
+            { header: "AMOUNT", key: "amount", width: 12, style: { numFmt: "#,##0.00" } },
+            { header: "REMARKS", key: "remarks", width: 30 }
         ]
     };
-    // Determine which columns to use based on bill type filter
     let columns = [];
     if (req.query.billType && typeof req.query.billType === "string") {
         const billType = req.query.billType;
         columns = billTypeColumns[billType];
     }
     else {
-        // If no bill type specified, use all possible columns (with unique keys)
         const allColumns = Object.values(billTypeColumns).flat();
         const uniqueColumns = allColumns.filter((col, index, self) => index === self.findIndex((c) => c.key === col.key));
         columns = uniqueColumns;
     }
-    // Set the worksheet columns
     worksheet.columns = columns;
-    // Add data rows with proper typing for populated fields
     bills.forEach((bill, index) => {
         const rowData = {
             sno: index + 1,
@@ -1021,12 +945,10 @@ exports.exportBillsToExcel = (0, asyncHandler_1.asyncHandler)(async (req, res) =
             paymentMethod: bill.paymentMethod,
             remarks: bill.remarks || "",
         };
-        // Common fields
         if (bill.shop && typeof bill.shop === 'object') {
             rowData.shopName = bill.shop.shopName;
             rowData.shopNo = bill.shop.shopNo;
         }
-        // Type-specific fields
         switch (bill.billType) {
             case "general":
                 rowData.category = bill.category && typeof bill.category === 'object'
@@ -1047,7 +969,6 @@ exports.exportBillsToExcel = (0, asyncHandler_1.asyncHandler)(async (req, res) =
                 break;
             case "fuel":
                 rowData.description = bill.description || "";
-                // For fuel bills, use vehicles array (which now stores multiple vehicles)
                 rowData.vehicles = bill.vehicles && Array.isArray(bill.vehicles)
                     ? bill.vehicles.map(v => typeof v === 'object' ? v.vehicleNumber : "").join(", ")
                     : "";
@@ -1063,12 +984,10 @@ exports.exportBillsToExcel = (0, asyncHandler_1.asyncHandler)(async (req, res) =
                 rowData.liter = bill.liter || "";
                 break;
             case "commission":
-                // Only basic fields needed
                 break;
         }
         worksheet.addRow(rowData);
     });
-    // Style the header row
     worksheet.getRow(1).eachCell((cell) => {
         cell.font = { bold: true };
         cell.fill = {
@@ -1083,12 +1002,9 @@ exports.exportBillsToExcel = (0, asyncHandler_1.asyncHandler)(async (req, res) =
             right: { style: "thin" },
         };
     });
-    // Freeze the header row
     worksheet.views = [{ state: "frozen", ySplit: 1 }];
-    // Set response headers for Excel file download
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename=bills_export_${new Date().toISOString().split("T")[0]}.xlsx`);
-    // Write the workbook to the response
     await workbook.xlsx.write(res);
     res.end();
 });

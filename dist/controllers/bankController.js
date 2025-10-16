@@ -514,11 +514,23 @@ exports.exportBankReportsToExcel = (0, asyncHandler_1.asyncHandler)(async (req, 
     if (req.query.reportType) {
         filter.reportType = req.query.reportType;
     }
-    // Date range filter
+    // Date range filter - Handle both date range and month/year formats
     if (req.query.startDate && req.query.endDate) {
         filter.reportDate = {
             $gte: new Date(req.query.startDate),
             $lte: new Date(req.query.endDate),
+        };
+    }
+    else if (req.query.month && req.query.year) {
+        // Handle month/year filtering
+        const month = parseInt(req.query.month);
+        const year = parseInt(req.query.year);
+        // Create start and end dates for the specified month
+        const startDate = new Date(year, month - 1, 1); // month - 1 because Date months are 0-indexed
+        const endDate = new Date(year, month, 0); // Last day of the month
+        filter.reportDate = {
+            $gte: startDate,
+            $lte: endDate,
         };
     }
     // Shop filter

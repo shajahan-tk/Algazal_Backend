@@ -8,7 +8,6 @@ export interface IQuotationImage {
   title: string;
   imageUrl: string;
   s3Key: string;
-  description?: string;
   uploadedAt: Date;
 }
 
@@ -46,7 +45,6 @@ const quotationImageSchema = new Schema<IQuotationImage>({
   title: { type: String, required: true },
   imageUrl: { type: String, required: true },
   s3Key: { type: String, required: true },
-  description: { type: String },
   uploadedAt: { type: Date, default: Date.now },
 });
 

@@ -1,5 +1,3 @@
-// Add this to your quotationController.ts file
-
 import { IClient } from "../models/clientModel";
 import { IProject, Project } from "../models/projectModel";
 import { Quotation } from "../models/quotationModel";
@@ -46,7 +44,7 @@ export const sendQuotationEmail = asyncHandler(
     // Generate PDF first
     const pdfBuffer = await generateQuotationPdfBuffer(quotation, client, preparedBy, project);
 
-    // Create email HTML content using the exact same template as PDF
+    // Create email HTML content
     const emailHtmlContent = createQuotationEmailTemplate(
       quotation,
       client,
@@ -69,8 +67,6 @@ export const sendQuotationEmail = asyncHandler(
         ]
       });
 
-      // Update project status to quotation_sent if not already
-     
       res.status(200).json(
         new ApiResponse(200, null, "Quotation email sent successfully")
       );
@@ -81,7 +77,7 @@ export const sendQuotationEmail = asyncHandler(
   }
 );
 
-// Helper function to generate PDF buffer (using the same template as your PDF generation)
+// Helper function to generate PDF buffer
 const generateQuotationPdfBuffer = async (
   quotation: any,
   client: IClient,
@@ -117,7 +113,6 @@ const generateQuotationPdfBuffer = async (
     return description.replace(/\n\n+/g, '\n').trim();
   };
 
-  // Use the exact same HTML content from your PDF generation template
   let htmlContent = `<!DOCTYPE html>
 <html>
 <head>
@@ -415,20 +410,7 @@ const generateQuotationPdfBuffer = async (
       max-height: 28px;
       overflow: hidden;
       display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-    }
-
-    .image-description {
-      font-size: 6pt;
-      text-align: center;
-      color: #666;
-      line-height: 1.1;
-      margin: 1px 0 0 0;
-      max-height: 18px;
-      overflow: hidden;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
+      -webkit-line-amp: 2;
       -webkit-box-orient: vertical;
     }
 
@@ -705,7 +687,6 @@ const generateQuotationPdfBuffer = async (
                 <img src="${image.imageUrl}" alt="${image.title}" />
               </div>
               <div class="image-title">${image.title}</div>
-              ${image.description ? `<div class="image-description">${image.description}</div>` : ''}
             </div>
             `).join('')}
         </div>
@@ -796,7 +777,7 @@ const generateQuotationPdfBuffer = async (
   }
 };
 
-// Updated email template function to use the exact same HTML as PDF
+// Email template function
 const createQuotationEmailTemplate = (
   quotation: any,
   client: IClient,
@@ -816,11 +797,6 @@ const createQuotationEmailTemplate = (
       month: "short",
       year: "numeric",
     }) : "";
-  };
-
-  // Function to clean up description - remove extra blank lines
-  const cleanDescription = (description: string) => {
-    return description.replace(/\n\n+/g, '\n').trim();
   };
 
   return `<!DOCTYPE html>
