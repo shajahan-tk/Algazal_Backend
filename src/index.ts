@@ -39,24 +39,18 @@ dotenv.config();
 
 const app = express();
 
-// app.use(
-//   // cors({
-//   //   origin: "*", // Allow all origins
-//   //   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], // Allow all common methods
-//   //   allowedHeaders: [
-//   //     "Content-Type",
-//   //     "Authorization",
-//   //     "Origin",
-//   //     "X-Requested-With",
-//   //     "Accept",
-//   //   ], // Allow all common headers
-//   // })
-// );
-
 app.use(
   cors({
-    origin: "https://new.alghazalgroup.com", // 👈 must be specific, not '*'
-    credentials: true, // 👈 required for cookies/auth headers
+    origin: ["https://new.alghazalgroup.com","https://new.alghazalgroup.com/"], // Ensure NO trailing slash
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "Origin",
+      "X-Requested-With",
+      "Accept",
+    ],
   })
 );
 // app.use(limiter);
