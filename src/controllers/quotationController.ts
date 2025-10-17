@@ -1096,7 +1096,7 @@ export const generateQuotationPdf = asyncHandler(
       <div class="section images-section">
         <div class="section-title">QUOTATION IMAGES</div>
         <div class="images-grid">
-          // In generateQuotationPdf function, remove description from images section
+        
 ${quotation.images.map(image => `
   <div class="image-item">
     <div class="image-container">
