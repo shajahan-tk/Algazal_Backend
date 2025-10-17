@@ -334,7 +334,7 @@ export const getQuotationByProject = asyncHandler(
   async (req: Request, res: Response) => {
     const { projectId } = req.params;
     const quotation = await Quotation.findOne({ project: projectId })
-      .populate("project", "projectName")
+      .populate("project", "projectName location")
       .populate("preparedBy", "firstName lastName");
 
     if (!quotation) throw new ApiError(404, "Quotation not found");

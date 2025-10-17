@@ -41,7 +41,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: ["https://new.alghazalgroup.com","https://new.alghazalgroup.com/"], // Ensure NO trailing slash
+    origin: ["https://new.alghazalgroup.com","https://new.alghazalgroup.com/","http://localhost:5173","http://localhost:5173/"], // Ensure NO trailing slash
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: [
