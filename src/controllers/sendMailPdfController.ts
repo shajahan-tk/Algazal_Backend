@@ -885,7 +885,7 @@ const createQuotationEmailTemplate = (
     }
     
     .client-name {
-      background-color: #ffeb3b;
+    
       padding: 2px 6px;
       font-weight: bold;
       color: #333;
