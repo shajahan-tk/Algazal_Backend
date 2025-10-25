@@ -546,31 +546,53 @@ export const generateQuotationPdf = asyncHandler(
 
     .header {
       display: flex;
-      align-items: flex-start;
-      margin-bottom: 10px;
-      gap: 15px;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 15px;
+      gap: 20px;
       page-break-after: avoid;
+      padding: 10px 0;
+      border-bottom: 3px solid #94d7f4;
+      position: relative;
     }
 
     .logo {
-      height: 55px;
+      height: 50px;
       width: auto;
-      max-width: 180px;
+      max-width: 150px;
+      object-fit: contain;
+      position: absolute;
+      left: 0;
+      top:-12px;
     }
 
-    .header-content {
-      flex-grow: 1;
+    .company-names {
       display: flex;
       flex-direction: column;
+      align-items: center;
       justify-content: center;
-      align-items: flex-end;
+      text-align: center;
+      flex-grow: 1;
     }
 
-    .document-title {
-      font-size: 16pt;
+    .company-name-arabic {
+      font-size: 20pt;
       font-weight: bold;
-      margin: 0;
-      color: #000;
+      color: #1a1a1a;
+      line-height: 1.3;
+      direction: rtl;
+      unicode-bidi: bidi-override;
+      letter-spacing: 0;
+      margin-bottom: 5px;
+    }
+
+    .company-name-english {
+      font-size: 10pt;
+      font-weight: bold;
+      color: #1a1a1a;
+      line-height: 1.3;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
     }
 
     .client-info-container {
@@ -760,7 +782,7 @@ export const generateQuotationPdf = asyncHandler(
       border-top: 2px solid #333;
     }
 
-    /* Compact Images Section */
+    /* Enhanced Images Section */
     .images-section {
       margin-top: 10px;
       page-break-inside: avoid;
@@ -768,8 +790,8 @@ export const generateQuotationPdf = asyncHandler(
 
     .images-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 6px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
       margin-top: 4px;
     }
 
@@ -778,21 +800,23 @@ export const generateQuotationPdf = asyncHandler(
       flex-direction: column;
       align-items: center;
       page-break-inside: avoid;
-      border: 1px solid #e0e0e0;
-      border-radius: 4px;
-      padding: 4px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 8px;
       background: #fafafa;
       min-height: 0;
     }
 
     .image-container {
       width: 100%;
-      height: 60px;
+      height: 140px;
       display: flex;
       align-items: center;
       justify-content: center;
       overflow: hidden;
-      margin-bottom: 3px;
+      margin-bottom: 6px;
+      background: #fff;
+      border-radius: 4px;
     }
 
     .image-container img {
@@ -802,14 +826,14 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .image-title {
-      font-size: 7pt;
+      font-size: 8.5pt;
       font-weight: 600;
       text-align: center;
       color: #2c3e50;
-      line-height: 1.1;
+      line-height: 1.2;
       margin: 0;
       word-break: break-word;
-      max-height: 28px;
+      max-height: 32px;
       overflow: hidden;
       display: -webkit-box;
       -webkit-line-clamp: 2;
@@ -817,12 +841,12 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     .image-description {
-      font-size: 6pt;
+      font-size: 7.5pt;
       text-align: center;
       color: #666;
-      line-height: 1.1;
-      margin: 1px 0 0 0;
-      max-height: 18px;
+      line-height: 1.2;
+      margin: 2px 0 0 0;
+      max-height: 20px;
       overflow: hidden;
       display: -webkit-box;
       -webkit-line-clamp: 2;
@@ -1008,8 +1032,9 @@ export const generateQuotationPdf = asyncHandler(
       <div class="header-section">
         <div class="header">
           <img class="logo" src="https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/sample-spmc/logo+(1).png" alt="Company Logo">
-          <div class="header-content">
-            <div class="document-title">QUOTE</div>
+          <div class="company-names">
+            <div class="company-name-arabic">الغزال الأبيض للخدمات الفنية</div>
+            <div class="company-name-english">AL GHAZAL AL ABYAD TECHNICAL SERVICES</div>
           </div>
         </div>
 
@@ -1096,15 +1121,14 @@ export const generateQuotationPdf = asyncHandler(
       <div class="section images-section">
         <div class="section-title">QUOTATION IMAGES</div>
         <div class="images-grid">
-        
-${quotation.images.map(image => `
-  <div class="image-item">
-    <div class="image-container">
-      <img src="${image.imageUrl}" alt="${image.title}" />
-    </div>
-    <div class="image-title">${image.title}</div>
-  </div>
-`).join('')}
+          ${quotation.images.map(image => `
+            <div class="image-item">
+              <div class="image-container">
+                <img src="${image.imageUrl}" alt="${image.title}" />
+              </div>
+              <div class="image-title">${image.title}</div>
+            </div>
+          `).join('')}
         </div>
       </div>
       ` : ''}

@@ -465,10 +465,9 @@ export const generateCompletionCertificatePdf = asyncHandler(
       .sort({ createdAt: -1 });
 
     const engineer: any = project.assignedTo;
-    // Add type assertion or safe access for workCompletion.createdBy
     const preparedBy: any = workCompletion?.createdBy;
 
-    // Format dates - updated to use project dates
+    // Format dates
     const formatDate = (date: Date | string | undefined) => {
       if (!date) return "";
       const dateObj = typeof date === "string" ? new Date(date) : date;
@@ -481,7 +480,7 @@ export const generateCompletionCertificatePdf = asyncHandler(
         .replace(/ /g, "-");
     };
 
-    // Prepare HTML content with optimized spacing
+    // Prepare HTML content
     const htmlContent = `
     <!DOCTYPE html>
     <html lang="en">
@@ -493,20 +492,23 @@ export const generateCompletionCertificatePdf = asyncHandler(
               size: A4;
               margin: 0.5in;
             }
+            * {
+                box-sizing: border-box;
+            }
             body {
                 font-family: Arial, sans-serif;
                 margin: 0;
-                padding: 0;
+               
                 color: #000;
-                border: 1px solid #000;
-                font-size: 11pt; /* Base font size increased */
-                line-height: 1.5; /* Better line height */
+                font-size: 11pt;
+                line-height: 1.5;
+                background-color: #fff;
             }
-            .container {
-                width: 96%;
-                margin: 0 auto;
-                padding: 15px;
-                padding-bottom: 60px; /* Reduced space for footer */
+            .certificate-wrapper {
+                border: 1px solid #000;
+                padding: 25px;
+                min-height: 95vh;
+                background-color: #fff;
             }
             .header {
                 display: flex;
@@ -516,7 +518,7 @@ export const generateCompletionCertificatePdf = asyncHandler(
                 padding-bottom: 15px;
             }
             .logo {
-                max-height: 70px; /* Slightly larger logo */
+                max-height: 70px;
                 margin-right: 25px;
             }
             .title-container {
@@ -524,8 +526,8 @@ export const generateCompletionCertificatePdf = asyncHandler(
                 text-align: end;
             }
             h1 {
-                color: #800080; /* Purple color */
-                font-size: 28px; /* Larger title */
+                color: #800080;
+                font-size: 28px;
                 font-weight: bold;
                 margin: 0;
                 text-transform: uppercase;
@@ -533,7 +535,7 @@ export const generateCompletionCertificatePdf = asyncHandler(
             }
             .highlight {
                 padding: 2px 6px;
-                background-color: #f0f8ff; /* Light blue background */
+                background-color: #f0f8ff;
                 border-radius: 3px;
                 font-weight: 600;
             }
@@ -541,10 +543,10 @@ export const generateCompletionCertificatePdf = asyncHandler(
                 width: 100%;
                 border-collapse: collapse;
                 margin: 12px 0;
-                font-size: 11pt; /* Better table font size */
+                font-size: 11pt;
             }
             td {
-                padding: 8px 10px; /* More padding */
+                padding: 8px 10px;
                 vertical-align: top;
                 line-height: 1.4;
             }
@@ -557,32 +559,32 @@ export const generateCompletionCertificatePdf = asyncHandler(
             }
             .bold {
                 font-weight: bold;
-                color: #2c3e50; /* Darker color for better readability */
+                color: #2c3e50;
             }
             .section-title {
                 margin: 20px 0 8px 0;
                 font-weight: bold;
-                font-size: 14pt; /* Larger section titles */
+                font-size: 14pt;
                 color: #2c3e50;
                 border-bottom: 1px solid #94d7f4;
                 padding-bottom: 5px;
             }
             .signature-img {
-                height: 50px; /* Larger signature images */
+                height: 50px;
                 max-width: 180px;
                 object-fit: contain;
             }
             .green-text {
-                color: #228B22; /* Forest green */
+                color: #228B22;
                 font-weight: bold;
                 font-size: 11pt;
             }
             .blue-bg {
-                background-color: #94d7f4; /* Consistent with other PDFs */
+                background-color: #94d7f4;
                 color: #000;
                 font-weight: bold;
                 padding: 8px 12px;
-                font-size: 12pt; /* Larger header text */
+                font-size: 12pt;
                 text-align: center;
             }
             .image-container {
@@ -597,11 +599,11 @@ export const generateCompletionCertificatePdf = asyncHandler(
                 flex-direction: column;
                 align-items: center;
                 flex-grow: 1;
-                max-width: 200px; /* Slightly larger images */
+                max-width: 200px;
                 margin-bottom: 15px;
             }
             .image-item img {
-                height: 120px; /* Larger images */
+                height: 120px;
                 width: 100%;
                 border: 1px solid #ddd;
                 object-fit: cover;
@@ -609,7 +611,7 @@ export const generateCompletionCertificatePdf = asyncHandler(
                 border-radius: 4px;
             }
             .image-title {
-                font-size: 10.5pt; /* Better font size */
+                font-size: 10.5pt;
                 font-weight: 600;
                 text-align: center;
                 color: #333;
@@ -621,21 +623,18 @@ export const generateCompletionCertificatePdf = asyncHandler(
             }
             .footer-container {
                 margin-top: 25px;
-                width: 96%;
-                margin-left: auto;
-                margin-right: auto;
                 page-break-inside: avoid;
             }
             .tagline {
                 text-align: center;
                 font-weight: bold;
-                font-size: 13pt; /* Consistent with other PDFs */
+                font-size: 13pt;
                 margin: 15px 0 10px 0;
                 color: #2c3e50;
             }
             .footer {
                 text-align: center;
-                font-size: 10pt; /* Better footer font size */
+                font-size: 10pt;
                 color: #555;
                 border-top: 2px solid #ddd;
                 padding-top: 12px;
@@ -655,7 +654,7 @@ export const generateCompletionCertificatePdf = asyncHandler(
                 background-color: #f8f9fa;
                 border-left: 4px solid #94d7f4;
                 border-radius: 4px;
-                font-size: 11.5pt; /* Better text size */
+                font-size: 11.5pt;
                 line-height: 1.6;
                 color: #333;
             }
@@ -677,25 +676,13 @@ export const generateCompletionCertificatePdf = asyncHandler(
                 color: #999;
                 font-size: 10pt;
             }
-            /* Improved table row styling */
             .bordered tr:nth-child(even) {
                 background-color: #f8f9fa;
-            }
-            .bordered tr:hover {
-                background-color: #e9f7fe;
-            }
-            /* Certificate border styling */
-            body {
-                border: 2px solid #800080; /* Purple border to match title */
-                background: linear-gradient(white, white) padding-box,
-                            linear-gradient(135deg, #94d7f4, #800080) border-box;
-                border: 2px solid transparent;
-                background-clip: padding-box, border-box;
             }
         </style>
     </head>
     <body>
-        <div class="container">
+        <div class="certificate-wrapper">
             <div class="header">
                 <img src="https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg" alt="Company Logo" class="logo">
                 <div class="title-container">
@@ -848,15 +835,15 @@ export const generateCompletionCertificatePdf = asyncHandler(
                     : '<p style="text-align: center; width: 100%; font-size: 11pt; color: #666; padding: 20px;">No site pictures available</p>'
                 }
             </div>
-        </div>
 
-        <div class="footer-container">
-            <div class="tagline">We work U Relax</div>
-            <div class="footer">
-                <p><strong>AL GHAZAL AL ABYAD TECHNICAL SERVICES</strong></p>
-                <p>Office No:04, R09-France Cluster, International City-Dubai | P.O.Box:262760, Dubai-U.A.E</p>
-                <p>Tel: 044102555 | <a href="http://www.alghazalgroup.com/" style="color: #0074cc; text-decoration: none;">www.alghazalgroup.com</a></p>
-                <p>Generated on ${formatDate(new Date())}</p>
+            <div class="footer-container">
+                <div class="tagline">We work U Relax</div>
+                <div class="footer">
+                    <p><strong>AL GHAZAL AL ABYAD TECHNICAL SERVICES</strong></p>
+                    <p>Office No:04, R09-France Cluster, International City-Dubai | P.O.Box:262760, Dubai-U.A.E</p>
+                    <p>Tel: 044102555 | <a href="http://www.alghazalgroup.com/" style="color: #0074cc; text-decoration: none;">www.alghazalgroup.com</a></p>
+                    <p>Generated on ${formatDate(new Date())}</p>
+                </div>
             </div>
         </div>
     </body>
@@ -872,7 +859,6 @@ export const generateCompletionCertificatePdf = asyncHandler(
     try {
       const page = await browser.newPage();
       
-      // Set viewport for consistent rendering
       await page.setViewport({ width: 1200, height: 1600 });
       
       await page.setContent(htmlContent, {
@@ -884,10 +870,10 @@ export const generateCompletionCertificatePdf = asyncHandler(
         format: "A4",
         printBackground: true,
         margin: {
-          top: "0.5in",
-          right: "0.5in",
-          bottom: "0.5in",
-          left: "0.5in",
+          top: "0.1in",
+          right: "0.1in",
+          bottom: "0.1in",
+          left: "0.1in",
         },
         preferCSSPageSize: true,
         displayHeaderFooter: false,

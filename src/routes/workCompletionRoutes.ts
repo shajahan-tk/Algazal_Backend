@@ -13,6 +13,7 @@ import {
 } from "../controllers/workCompletionController";
 import { authenticate, authorize } from "../middlewares/authMiddleware";
 import { upload } from "../config/multer";
+import { sendWorkCompletionEmail } from "@/controllers/sendMailPdfController";
 
 const router = express.Router();
 
@@ -39,6 +40,13 @@ router.get(
   authorize(["engineer", "admin", "super_admin"]),
   generateCompletionCertificatePdf
 );
+
+router.post(
+  "/project/:projectId/send-email",
+  authorize(["engineer", "admin", "super_admin"]),
+  sendWorkCompletionEmail
+);
+
 
 // New routes for date updates
 router.put(

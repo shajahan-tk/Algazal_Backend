@@ -7,10 +7,14 @@ import { asyncHandler } from "../utils/asyncHandler";
 import { mailer } from "../utils/mailer";
 import { Request, Response } from "express";
 import puppeteer from "puppeteer";
+import { WorkCompletion } from "../models/workCompletionModel";
+import { LPO } from "../models/lpoModel";
+
 
 export const sendQuotationEmail = asyncHandler(
   async (req: Request, res: Response) => {
     const { id } = req.params;
+    const { cc } = req.body;
 
     const quotation = await Quotation.findById(id)
       .populate<{ project: IProject & { client: IClient } }>({
@@ -36,15 +40,21 @@ export const sendQuotationEmail = asyncHandler(
     const preparedBy = quotation.preparedBy as IUser;
     const project = quotation.project;
 
-    // Check if client has email
     if (!client.email) {
       throw new ApiError(400, "Client email not found");
     }
 
-    // Generate PDF first
+    if (cc && Array.isArray(cc) && cc.length > 0) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const invalidEmails = cc.filter((email: string) => !emailRegex.test(email));
+      
+      if (invalidEmails.length > 0) {
+        throw new ApiError(400, `Invalid CC email addresses: ${invalidEmails.join(', ')}`);
+      }
+    }
+
     const pdfBuffer = await generateQuotationPdfBuffer(quotation, client, preparedBy, project);
 
-    // Create email HTML content
     const emailHtmlContent = createQuotationEmailTemplate(
       quotation,
       client,
@@ -53,9 +63,9 @@ export const sendQuotationEmail = asyncHandler(
     );
 
     try {
-      // Send email with PDF attachment
       await mailer.sendEmail({
         to: client.email,
+        cc: cc && cc.length > 0 ? cc : undefined,
         subject: `Quotation ${quotation.quotationNumber} - ${project.projectName}`,
         html: emailHtmlContent,
         attachments: [
@@ -67,8 +77,9 @@ export const sendQuotationEmail = asyncHandler(
         ]
       });
 
+      const ccMessage = cc && cc.length > 0 ? ` with CC to ${cc.length} recipient(s)` : '';
       res.status(200).json(
-        new ApiResponse(200, null, "Quotation email sent successfully")
+        new ApiResponse(200, null, `Quotation email sent successfully${ccMessage}`)
       );
     } catch (error) {
       console.error("Error sending quotation email:", error);
@@ -77,7 +88,6 @@ export const sendQuotationEmail = asyncHandler(
   }
 );
 
-// Helper function to generate PDF buffer
 const generateQuotationPdfBuffer = async (
   quotation: any,
   client: IClient,
@@ -86,7 +96,6 @@ const generateQuotationPdfBuffer = async (
 ) => {
   const site = `${project.location} ${project.building} ${project.apartmentNumber}`;
   
-  // Calculate totals
   const subtotal = quotation.items.reduce((sum: number, item: any) => sum + item.totalPrice, 0);
   const vatAmount = subtotal * (quotation.vatPercentage / 100);
   const netAmount = subtotal + vatAmount;
@@ -108,7 +117,6 @@ const generateQuotationPdfBuffer = async (
     return daysRemaining > 0 ? `${daysRemaining} days` : "Expired";
   };
 
-  // Function to clean up description - remove extra blank lines
   const cleanDescription = (description: string) => {
     return description.replace(/\n\n+/g, '\n').trim();
   };
@@ -144,31 +152,53 @@ const generateQuotationPdfBuffer = async (
 
     .header {
       display: flex;
-      align-items: flex-start;
-      margin-bottom: 10px;
-      gap: 15px;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 15px;
+      gap: 20px;
       page-break-after: avoid;
+      padding: 10px 0;
+      border-bottom: 3px solid #94d7f4;
+      position: relative;
     }
 
     .logo {
-      height: 55px;
+      height: 50px;
       width: auto;
-      max-width: 180px;
+      max-width: 150px;
+      object-fit: contain;
+      position: absolute;
+      left: 0;
+      top:-12px;
     }
 
-    .header-content {
-      flex-grow: 1;
+    .company-names {
       display: flex;
       flex-direction: column;
+      align-items: center;
       justify-content: center;
-      align-items: flex-end;
+      text-align: center;
+      flex-grow: 1;
     }
 
-    .document-title {
-      font-size: 16pt;
+    .company-name-arabic {
+      font-size: 20pt;
       font-weight: bold;
-      margin: 0;
-      color: #000;
+      color: #1a1a1a;
+      line-height: 1.3;
+      direction: rtl;
+      unicode-bidi: bidi-override;
+      letter-spacing: 0;
+      margin-bottom: 5px;
+    }
+
+    .company-name-english {
+      font-size: 10pt;
+      font-weight: bold;
+      color: #1a1a1a;
+      line-height: 1.3;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
     }
 
     .client-info-container {
@@ -358,7 +388,6 @@ const generateQuotationPdfBuffer = async (
       border-top: 2px solid #333;
     }
 
-    /* Compact Images Section */
     .images-section {
       margin-top: 10px;
       page-break-inside: avoid;
@@ -366,8 +395,8 @@ const generateQuotationPdfBuffer = async (
 
     .images-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 6px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
       margin-top: 4px;
     }
 
@@ -376,21 +405,23 @@ const generateQuotationPdfBuffer = async (
       flex-direction: column;
       align-items: center;
       page-break-inside: avoid;
-      border: 1px solid #e0e0e0;
-      border-radius: 4px;
-      padding: 4px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 8px;
       background: #fafafa;
       min-height: 0;
     }
 
     .image-container {
       width: 100%;
-      height: 60px;
+      height: 140px;
       display: flex;
       align-items: center;
       justify-content: center;
       overflow: hidden;
-      margin-bottom: 3px;
+      margin-bottom: 6px;
+      background: #fff;
+      border-radius: 4px;
     }
 
     .image-container img {
@@ -400,17 +431,30 @@ const generateQuotationPdfBuffer = async (
     }
 
     .image-title {
-      font-size: 7pt;
+      font-size: 8.5pt;
       font-weight: 600;
       text-align: center;
       color: #2c3e50;
-      line-height: 1.1;
+      line-height: 1.2;
       margin: 0;
       word-break: break-word;
-      max-height: 28px;
+      max-height: 32px;
       overflow: hidden;
       display: -webkit-box;
-      -webkit-line-amp: 2;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+
+    .image-description {
+      font-size: 7.5pt;
+      text-align: center;
+      color: #666;
+      line-height: 1.2;
+      margin: 2px 0 0 0;
+      max-height: 20px;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
     }
 
@@ -593,8 +637,9 @@ const generateQuotationPdfBuffer = async (
       <div class="header-section">
         <div class="header">
           <img class="logo" src="https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/sample-spmc/logo+(1).png" alt="Company Logo">
-          <div class="header-content">
-            <div class="document-title">QUOTE</div>
+          <div class="company-names">
+            <div class="company-name-arabic">الغزال الأبيض للخدمات الفنية</div>
+            <div class="company-name-english">AL GHAZAL AL ABYAD TECHNICAL SERVICES</div>
           </div>
         </div>
 
@@ -688,7 +733,7 @@ const generateQuotationPdfBuffer = async (
               </div>
               <div class="image-title">${image.title}</div>
             </div>
-            `).join('')}
+          `).join('')}
         </div>
       </div>
       ` : ''}
@@ -777,7 +822,6 @@ const generateQuotationPdfBuffer = async (
   }
 };
 
-// Email template function
 const createQuotationEmailTemplate = (
   quotation: any,
   client: IClient,
@@ -786,7 +830,6 @@ const createQuotationEmailTemplate = (
 ): string => {
   const site = `${project.location} ${project.building} ${project.apartmentNumber}`;
   
-  // Calculate totals
   const subtotal = quotation.items.reduce((sum: number, item: any) => sum + item.totalPrice, 0);
   const vatAmount = subtotal * (quotation.vatPercentage / 100);
   const netAmount = subtotal + vatAmount;
@@ -983,6 +1026,697 @@ const createQuotationEmailTemplate = (
           <strong>Phone:</strong> ${preparedBy.phoneNumbers.join(", ")}
         </div>
         ` : ''}
+      </div>
+    </div>
+    
+    <div class="footer">
+      <p><strong>AL GHAZAL AL ABYAD TECHNICAL SERVICES</strong></p>
+      <p>Office No:04, R09-France Cluster, International City-Dubai | P.O.Box:262760, Dubai-U.A.E</p>
+      <p>Tel: 044102555 | <a href="http://www.alghazalgroup.com/">www.alghazalgroup.com</a></p>
+    </div>
+  </div>
+</body>
+</html>`;
+};
+
+
+
+
+export const sendWorkCompletionEmail = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { projectId } = req.params;
+    const { cc } = req.body; // Extract CC from request body
+
+    // Get project with populated data
+    const project = await Project.findById(projectId)
+      .populate<{ client: IClient }>("client", "clientName clientAddress mobileNumber telephoneNumber email")
+      .populate<{ assignedTo: IUser }>("assignedTo", "firstName lastName signatureImage")
+      .populate<{ createdBy: IUser }>("createdBy", "firstName lastName signatureImage");
+
+    if (!project) {
+      throw new ApiError(404, "Project not found");
+    }
+
+    const client = project.client as IClient;
+    
+    // Check if client has email
+    if (!client.email) {
+      throw new ApiError(400, "Client email not found");
+    }
+
+    // Validate CC emails if provided
+    if (cc && Array.isArray(cc) && cc.length > 0) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const invalidEmails = cc.filter((email: string) => !emailRegex.test(email));
+      
+      if (invalidEmails.length > 0) {
+        throw new ApiError(400, `Invalid CC email addresses: ${invalidEmails.join(', ')}`);
+      }
+    }
+
+    // Get work completion data
+    const workCompletion = await WorkCompletion.findOne({ project: projectId })
+      .populate("createdBy", "firstName lastName signatureImage");
+
+    const lpo = await LPO.findOne({ project: projectId })
+      .sort({ createdAt: -1 })
+      .limit(1);
+
+    // Generate PDF first
+    const pdfBuffer = await generateWorkCompletionPdfBuffer(
+      project,
+      client,
+      workCompletion,
+      lpo
+    );
+
+    // Create email HTML content
+    const emailHtmlContent = createWorkCompletionEmailTemplate(
+      project,
+      client,
+      workCompletion
+    );
+
+    try {
+      // Send email with PDF attachment and CC
+      await mailer.sendEmail({
+        to: client.email,
+        cc: cc && cc.length > 0 ? cc : undefined,
+        subject: `Work Completion Certificate - ${project.projectName}`,
+        html: emailHtmlContent,
+        attachments: [
+          {
+            filename: `Work-Completion-${project.projectNumber}.pdf`,
+            content: pdfBuffer as any,
+            contentType: 'application/pdf'
+          }
+        ]
+      });
+
+      const ccMessage = cc && cc.length > 0 ? ` with CC to ${cc.length} recipient(s)` : '';
+      res.status(200).json(
+        new ApiResponse(200, null, `Work completion email sent successfully${ccMessage}`)
+      );
+    } catch (error) {
+      console.error("Error sending work completion email:", error);
+      throw new ApiError(500, "Failed to send work completion email");
+    }
+  }
+);
+
+// Helper function to generate PDF buffer
+const generateWorkCompletionPdfBuffer = async (
+  project: any,
+  client: IClient,
+  workCompletion: any,
+  lpo: any
+) => {
+  const engineer: any = project.assignedTo;
+  const preparedBy: any = workCompletion?.createdBy;
+
+  const formatDate = (date: Date | string | undefined) => {
+    if (!date) return "";
+    const dateObj = typeof date === "string" ? new Date(date) : date;
+    return dateObj
+      .toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+      .replace(/ /g, "-");
+  };
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Completion Certificate</title>
+        <style>
+            @page {
+              size: A4;
+              margin: 0.5in;
+            }
+            body {
+                font-family: Arial, sans-serif;
+                margin: 0;
+                padding: 0;
+                color: #000;
+                border: 2px solid #800080;
+                font-size: 11pt;
+                line-height: 1.5;
+            }
+            .container {
+                width: 96%;
+                margin: 0 auto;
+                padding: 15px;
+                padding-bottom: 60px;
+            }
+            .header {
+                display: flex;
+                align-items: center;
+                margin-bottom: 15px;
+                border-bottom: 2px solid #94d7f4;
+                padding-bottom: 15px;
+            }
+            .logo {
+                max-height: 70px;
+                margin-right: 25px;
+            }
+            .title-container {
+                flex-grow: 1;
+                text-align: end;
+            }
+            h1 {
+                color: #800080;
+                font-size: 28px;
+                font-weight: bold;
+                margin: 0;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+            }
+            .highlight {
+                padding: 2px 6px;
+                background-color: #f0f8ff;
+                border-radius: 3px;
+                font-weight: 600;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 12px 0;
+                font-size: 11pt;
+            }
+            td {
+                padding: 8px 10px;
+                vertical-align: top;
+                line-height: 1.4;
+            }
+            .bordered {
+                border: 1px solid #000;
+                margin: 15px 0;
+            }
+            .bordered td {
+                border: 1px solid #000;
+            }
+            .bold {
+                font-weight: bold;
+                color: #2c3e50;
+            }
+            .section-title {
+                margin: 20px 0 8px 0;
+                font-weight: bold;
+                font-size: 14pt;
+                color: #2c3e50;
+                border-bottom: 1px solid #94d7f4;
+                padding-bottom: 5px;
+            }
+            .signature-img {
+                height: 50px;
+                max-width: 180px;
+                object-fit: contain;
+            }
+            .green-text {
+                color: #228B22;
+                font-weight: bold;
+                font-size: 11pt;
+            }
+            .blue-bg {
+                background-color: #94d7f4;
+                color: #000;
+                font-weight: bold;
+                padding: 8px 12px;
+                font-size: 12pt;
+                text-align: center;
+            }
+            .image-container {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 12px;
+                margin: 15px 0 10px 0;
+                justify-content: center;
+            }
+            .image-item {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                flex-grow: 1;
+                max-width: 200px;
+                margin-bottom: 15px;
+            }
+            .image-item img {
+                height: 120px;
+                width: 100%;
+                border: 1px solid #ddd;
+                object-fit: cover;
+                margin-bottom: 8px;
+                border-radius: 4px;
+            }
+            .image-title {
+                font-size: 10.5pt;
+                font-weight: 600;
+                text-align: center;
+                color: #333;
+                word-wrap: break-word;
+                width: 100%;
+                padding: 4px 6px;
+                background-color: #f8f9fa;
+                border-radius: 3px;
+            }
+            .footer-container {
+                margin-top: 25px;
+                width: 96%;
+                margin-left: auto;
+                margin-right: auto;
+                page-break-inside: avoid;
+            }
+            .tagline {
+                text-align: center;
+                font-weight: bold;
+                font-size: 13pt;
+                margin: 15px 0 10px 0;
+                color: #2c3e50;
+            }
+            .footer {
+                text-align: center;
+                font-size: 10pt;
+                color: #555;
+                border-top: 2px solid #ddd;
+                padding-top: 12px;
+                margin-top: 10px;
+                line-height: 1.6;
+            }
+            .footer p {
+                margin: 6px 0;
+            }
+            .footer strong {
+                color: #2c3e50;
+                font-size: 10.5pt;
+            }
+            .certification-text {
+                margin: 15px 0;
+                padding: 12px 15px;
+                background-color: #f8f9fa;
+                border-left: 4px solid #94d7f4;
+                border-radius: 4px;
+                font-size: 11.5pt;
+                line-height: 1.6;
+                color: #333;
+            }
+            .signature-section {
+                margin: 5px 0;
+            }
+            .signature-name {
+                font-weight: 600;
+                color: #2c3e50;
+                margin-top: 5px;
+            }
+            .empty-signature {
+                height: 50px;
+                border: 1px dashed #ccc;
+                background-color: #f9f9f9;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: #999;
+                font-size: 10pt;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <img src="https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg" alt="Company Logo" class="logo">
+                <div class="title-container">
+                    <h1>Completion Certificate</h1>
+                </div>
+            </div>
+
+            <table>
+                <tr>
+                    <td class="bold" style="width: 30%">Reference</td>
+                    <td>: <span class="highlight">${`QTN${project.projectNumber.slice(3, 40)}`}</span></td>
+                </tr>
+                <tr>
+                    <td class="bold">FM CONTRACTOR</td>
+                    <td>: ${client.clientName}</td>
+                </tr>
+                <tr>
+                    <td class="bold">SUB CONTRACTOR</td>
+                    <td>: AL GHAZAL ALABYAD TECHNICAL SERVICES</td>
+                </tr>
+                <tr>
+                    <td class="bold">PROJECT DESCRIPTION</td>
+                    <td>: <span class="highlight">${project.projectName}</span></td>
+                </tr>
+                <tr>
+                    <td class="bold">LOCATION (Bldg.)</td>
+                    <td>: <span class="highlight">${project.location}${project.building ? `, ${project.building}` : ""}</span></td>
+                </tr>
+            </table>
+
+            <div class="certification-text">
+                This is to certify that the work described above in the project description has been cleared out and completed to the required standards and specifications.
+            </div>
+
+            <table>
+                <tr>
+                    <td class="bold" style="width: 30%">Completion Date</td>
+                    <td>: <span class="highlight">${formatDate(project.completionDate)}</span></td>
+                </tr>
+                <tr>
+                    <td class="bold">LPO Number</td>
+                    <td>: ${lpo?.lpoNumber || "N/A"}</td>
+                </tr>
+                <tr>
+                    <td class="bold">LPO Date</td>
+                    <td>: ${formatDate(lpo?.lpoDate)}</td>
+                </tr>
+            </table>
+
+            <table class="bordered">
+                <tr>
+                    <td colspan="2" class="blue-bg">Hand over by:</td>
+                    <td colspan="2" class="blue-bg">AL GHAZAL AL ABYAD TECHNICAL SERVICES</td>
+                </tr>
+                <tr>
+                    <td class="bold" style="width: 25%">Name:</td>
+                    <td style="width: 25%" class="signature-name">${engineer?.firstName} ${engineer?.lastName || ""}</td>
+                    <td class="bold" style="width: 25%">Signature:</td>
+                    <td style="width: 25%" class="signature-section">
+                        ${engineer?.signatureImage ? `<img src="${engineer.signatureImage}" class="signature-img" />` : '<div class="empty-signature">Signature</div>'}
+                    </td>
+                </tr>
+                <tr>
+                    <td class="bold">Date:</td>
+                    <td><span class="green-text">${formatDate(project.handoverDate)}</span></td>
+                    <td></td>
+                    <td></td>
+                </tr>
+            </table>
+
+            <table class="bordered">
+                <tr>
+                    <td colspan="2" class="blue-bg">Accepted by:</td>
+                    <td colspan="2" class="blue-bg">Client side</td>
+                </tr>
+                <tr>
+                    <td class="bold" style="width: 25%">Name:</td>
+                    <td style="width: 25%" class="signature-name">${client.clientName}</td>
+                    <td class="bold" style="width: 25%">Signature:</td>
+                    <td style="width: 25%" class="signature-section">
+                        <div class="empty-signature">Client Signature</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="bold">Date:</td>
+                    <td>${formatDate(project.acceptanceDate)}</td>
+                    <td></td>
+                    <td></td>
+                </tr>
+            </table>
+
+            <table class="bordered">
+                <tr>
+                    <td colspan="2" class="blue-bg">Prepared by:</td>
+                    <td colspan="2" class="blue-bg">AL GHAZAL AL ABYAD TECHNICAL SERVICES</td>
+                </tr>
+                <tr>
+                    <td class="bold" style="width: 25%">Name:</td>
+                    <td style="width: 25%" class="signature-name">${preparedBy?.firstName || ""} ${preparedBy?.lastName || ""}</td>
+                    <td class="bold" style="width: 25%">Signature:</td>
+                    <td style="width: 25%" class="signature-section">
+                        ${preparedBy?.signatureImage ? `<img src="${preparedBy.signatureImage}" class="signature-img" />` : '<div class="empty-signature">Signature</div>'}
+                    </td>
+                </tr>
+                <tr>
+                    <td class="bold">Date:</td>
+                    <td><span class="green-text">${formatDate(project.handoverDate)}</span></td>
+                    <td></td>
+                    <td></td>
+                </tr>
+            </table>
+
+            <div class="section-title">Site Pictures:</div>
+            <div class="image-container">
+                ${workCompletion?.images && workCompletion.images.length > 0
+                  ? workCompletion.images.map((image: any) => 
+                      `<div class="image-item">
+                         <img src="${image.imageUrl}" alt="${image.title || "Site picture"}" />
+                         <div class="image-title">${image.title || "Site Image"}</div>
+                       </div>`
+                    ).join("")
+                  : '<p style="text-align: center; width: 100%; font-size: 11pt; color: #666; padding: 20px;">No site pictures available</p>'
+                }
+            </div>
+        </div>
+
+        <div class="footer-container">
+            <div class="tagline">We work U Relax</div>
+            <div class="footer">
+                <p><strong>AL GHAZAL AL ABYAD TECHNICAL SERVICES</strong></p>
+                <p>Office No:04, R09-France Cluster, International City-Dubai | P.O.Box:262760, Dubai-U.A.E</p>
+                <p>Tel: 044102555 | <a href="http://www.alghazalgroup.com/" style="color: #0074cc; text-decoration: none;">www.alghazalgroup.com</a></p>
+                <p>Generated on ${formatDate(new Date())}</p>
+            </div>
+        </div>
+    </body>
+    </html>
+  `;
+
+  const browser = await puppeteer.launch({
+    headless: "shell",
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--font-render-hinting=none"],
+  });
+
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1200, height: 1600 });
+    await page.setContent(htmlContent, {
+      waitUntil: ["load", "networkidle0", "domcontentloaded"],
+      timeout: 30000,
+    });
+
+    const pdfBuffer = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      margin: {
+        top: "0.5in",
+        right: "0.5in",
+        bottom: "0.5in",
+        left: "0.5in",
+      },
+      displayHeaderFooter: false,
+      preferCSSPageSize: true,
+    });
+
+    return pdfBuffer;
+  } catch (error) {
+    console.error("PDF generation error:", error);
+    throw new ApiError(500, "Failed to generate PDF");
+  } finally {
+    await browser.close();
+  }
+};
+
+// Email template function
+const createWorkCompletionEmailTemplate = (
+  project: any,
+  client: IClient,
+  workCompletion: any
+): string => {
+  const formatDate = (date: Date | string | undefined) => {
+    if (!date) return "N/A";
+    const dateObj = typeof date === "string" ? new Date(date) : date;
+    return dateObj.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  const preparedBy: any = workCompletion?.createdBy;
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Work Completion Certificate</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #333;
+      margin: 0;
+      padding: 20px;
+      background-color: #f9f9f9;
+    }
+    
+    .email-container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+    
+    .email-header {
+      background: linear-gradient(135deg, #800080, #9b30ff);
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+    
+    .email-body {
+      padding: 30px;
+    }
+    
+    .greeting {
+      margin-bottom: 20px;
+      font-size: 16px;
+    }
+    
+    .client-name {
+      background-color: #ffeb3b;
+      padding: 2px 6px;
+      font-weight: bold;
+      color: #333;
+    }
+    
+    .content-section {
+      margin-bottom: 25px;
+    }
+    
+    .content-line {
+      margin-bottom: 12px;
+      font-size: 14px;
+    }
+    
+    .attachment-notice {
+      background: #e3f2fd;
+      border-left: 4px solid #2196f3;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    
+    .signature {
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 2px solid #e0e0e0;
+    }
+    
+    .sender-name {
+      font-weight: bold;
+      font-size: 16px;
+      color: #2c3e50;
+    }
+    
+    .company-name {
+      font-weight: bold;
+      color: #800080;
+      margin-top: 5px;
+    }
+    
+    .completion-details {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 6px;
+      margin: 20px 0;
+    }
+    
+    .detail-row {
+      display: flex;
+      margin-bottom: 8px;
+    }
+    
+    .detail-label {
+      font-weight: bold;
+      min-width: 150px;
+      color: #2c3e50;
+    }
+    
+    .footer {
+      background: #2c3e50;
+      color: white;
+      padding: 20px;
+      text-align: center;
+      font-size: 12px;
+    }
+    
+    .footer a {
+      color: #9b30ff;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="email-header">
+      <h1>Work Completion Certificate</h1>
+      <p>${project.projectName}</p>
+    </div>
+    
+    <div class="email-body">
+      <div class="greeting">
+        Dear <span class="client-name">${client.clientName}</span>,
+      </div>
+      
+      <div class="content-section">
+        <div class="content-line">
+          We are pleased to inform you that the work on the project <strong>"${project.projectName}"</strong> has been successfully completed.
+        </div>
+        
+        <div class="completion-details">
+          <div class="detail-row">
+            <span class="detail-label">Project:</span>
+            <span>${project.projectName}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Location:</span>
+            <span>${project.location}${project.building ? `, ${project.building}` : ""}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Completion Date:</span>
+            <span>${formatDate(project.completionDate)}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Handover Date:</span>
+            <span>${formatDate(project.handoverDate)}</span>
+          </div>
+        </div>
+        
+        <div class="content-line">
+          The attached Work Completion Certificate contains complete details including:
+        </div>
+        <ul>
+          <li>Project reference and description</li>
+          <li>Handover and acceptance information</li>
+          <li>LPO details</li>
+          ${workCompletion?.images && workCompletion.images.length > 0 ? '<li>Site completion pictures</li>' : ''}
+          <li>Official signatures and stamps</li>
+        </ul>
+      </div>
+      
+      <div class="attachment-notice">
+        <strong>📎 Attachment:</strong> Work-Completion-${project.projectNumber}.pdf
+      </div>
+      
+      <div class="content-line">
+        All work has been completed as per the agreed specifications and requirements. We hope you are satisfied with the quality of work delivered.
+      </div>
+      
+      <div class="content-line">
+        Should you have any questions or require further information, please feel free to contact us.
+      </div>
+      
+      <div class="signature">
+        <div>Best regards,</div>
+        <div class="sender-name">${preparedBy?.firstName || ""} ${preparedBy?.lastName || ""}</div>
+        <div class="company-name">AL GHAZAL AL ABYAD TECHNICAL SERVICES</div>
       </div>
     </div>
     
