@@ -135,11 +135,7 @@ export const updateClient = asyncHandler(
       throw new ApiError(404, "Client not found");
     }
 
-    // Validate pincode format if provided
-    if (pincode && !/^[0-9]{6}$/.test(pincode)) {
-      throw new ApiError(400, "Pincode must be 6 digits");
-    }
-
+    
     // Check if TRN is being updated and conflicts with other clients
     if (trnNumber && trnNumber !== client.trnNumber) {
       const existingClient = await Client.findOne({
