@@ -490,48 +490,115 @@ export const generateCompletionCertificatePdf = asyncHandler(
         <style>
             @page {
               size: A4;
-              margin: 0.5in;
+              margin: 0.5cm;
             }
             * {
                 box-sizing: border-box;
             }
             body {
-                font-family: Arial, sans-serif;
-                margin: 0;
-               
-                color: #000;
+                font-family: 'Arial', sans-serif;
                 font-size: 11pt;
-                line-height: 1.5;
-                background-color: #fff;
+                line-height: 1.4;
+                color: #333;
+                margin: 0;
+                padding: 0;
             }
-            .certificate-wrapper {
-                border: 1px solid #000;
-                padding: 25px;
-                min-height: 95vh;
-                background-color: #fff;
+            .container {
+                display: block;
+                width: 100%;
+                max-width: 100%;
+            }
+            .content {
+                margin-bottom: 15px;
             }
             .header {
                 display: flex;
                 align-items: center;
+                justify-content: center;
                 margin-bottom: 15px;
-                border-bottom: 2px solid #94d7f4;
-                padding-bottom: 15px;
+                gap: 20px;
+                page-break-after: avoid;
+                padding: 10px 0;
+                border-bottom: 3px solid #94d7f4;
+                position: relative;
             }
             .logo {
-                max-height: 70px;
-                margin-right: 25px;
+                height: 50px;
+                width: auto;
+                max-width: 150px;
+                object-fit: contain;
+                position: absolute;
+                left: 0;
+                top: -12px;
             }
-            .title-container {
+            .company-names {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                text-align: center;
                 flex-grow: 1;
-                text-align: end;
             }
-            h1 {
-                color: #800080;
-                font-size: 28px;
+            .company-name-arabic {
+                font-size: 20pt;
                 font-weight: bold;
-                margin: 0;
+                color: #1a1a1a;
+                line-height: 1.3;
+                direction: rtl;
+                unicode-bidi: bidi-override;
+                letter-spacing: 0;
+                margin-bottom: 5px;
+            }
+            .company-name-english {
+                font-size: 10pt;
+                font-weight: bold;
+                color: #1a1a1a;
+                line-height: 1.3;
+                letter-spacing: 0.08em;
                 text-transform: uppercase;
-                letter-spacing: 1px;
+            }
+            .certificate-title {
+                text-align: center;
+                font-size: 20pt;
+                font-weight: bold;
+                color: #2c3e50;
+                margin: 20px 0 15px 0;
+                text-transform: uppercase;
+                letter-spacing: 1.5px;
+                padding: 12px;
+                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+                border-radius: 6px;
+                border-left: 4px solid #94d7f4;
+                border-right: 4px solid #94d7f4;
+            }
+            .section {
+                margin-bottom: 12px;
+                page-break-inside: avoid;
+            }
+            .section-title {
+                font-size: 11pt;
+                font-weight: bold;
+                padding: 4px 0;
+                margin: 12px 0 8px 0;
+                border-bottom: 2px solid #94d7f4;
+                page-break-after: avoid;
+                color: #2c3e50;
+            }
+            .info-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 10px 0;
+                font-size: 10pt;
+            }
+            .info-table td {
+                padding: 6px 8px;
+                vertical-align: top;
+                line-height: 1.4;
+            }
+            .info-table .label {
+                font-weight: bold;
+                color: #2c3e50;
+                width: 30%;
             }
             .highlight {
                 padding: 2px 6px;
@@ -539,132 +606,59 @@ export const generateCompletionCertificatePdf = asyncHandler(
                 border-radius: 3px;
                 font-weight: 600;
             }
-            table {
-                width: 100%;
-                border-collapse: collapse;
-                margin: 12px 0;
-                font-size: 11pt;
-            }
-            td {
-                padding: 8px 10px;
-                vertical-align: top;
-                line-height: 1.4;
-            }
-            .bordered {
-                border: 1px solid #000;
-                margin: 15px 0;
-            }
-            .bordered td {
-                border: 1px solid #000;
-            }
-            .bold {
-                font-weight: bold;
-                color: #2c3e50;
-            }
-            .section-title {
-                margin: 20px 0 8px 0;
-                font-weight: bold;
-                font-size: 14pt;
-                color: #2c3e50;
-                border-bottom: 1px solid #94d7f4;
-                padding-bottom: 5px;
-            }
-            .signature-img {
-                height: 50px;
-                max-width: 180px;
-                object-fit: contain;
-            }
-            .green-text {
-                color: #228B22;
-                font-weight: bold;
-                font-size: 11pt;
-            }
-            .blue-bg {
-                background-color: #94d7f4;
-                color: #000;
-                font-weight: bold;
-                padding: 8px 12px;
-                font-size: 12pt;
-                text-align: center;
-            }
-            .image-container {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 12px;
-                margin: 15px 0 10px 0;
-                justify-content: center;
-            }
-            .image-item {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                flex-grow: 1;
-                max-width: 200px;
-                margin-bottom: 15px;
-            }
-            .image-item img {
-                height: 120px;
-                width: 100%;
-                border: 1px solid #ddd;
-                object-fit: cover;
-                margin-bottom: 8px;
-                border-radius: 4px;
-            }
-            .image-title {
-                font-size: 10.5pt;
-                font-weight: 600;
-                text-align: center;
-                color: #333;
-                word-wrap: break-word;
-                width: 100%;
-                padding: 4px 6px;
-                background-color: #f8f9fa;
-                border-radius: 3px;
-            }
-            .footer-container {
-                margin-top: 25px;
-                page-break-inside: avoid;
-            }
-            .tagline {
-                text-align: center;
-                font-weight: bold;
-                font-size: 13pt;
-                margin: 15px 0 10px 0;
-                color: #2c3e50;
-            }
-            .footer {
-                text-align: center;
-                font-size: 10pt;
-                color: #555;
-                border-top: 2px solid #ddd;
-                padding-top: 12px;
-                margin-top: 10px;
-                line-height: 1.6;
-            }
-            .footer p {
-                margin: 6px 0;
-            }
-            .footer strong {
-                color: #2c3e50;
-                font-size: 10.5pt;
-            }
             .certification-text {
                 margin: 15px 0;
                 padding: 12px 15px;
                 background-color: #f8f9fa;
                 border-left: 4px solid #94d7f4;
+                border-right: 4px solid #94d7f4;
                 border-radius: 4px;
-                font-size: 11.5pt;
+                font-size: 10.5pt;
                 line-height: 1.6;
                 color: #333;
             }
-            .signature-section {
-                margin: 5px 0;
+            table.signature-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 10px 0;
+                font-size: 10pt;
             }
-            .signature-name {
-                font-weight: 600;
+            .signature-table td {
+                padding: 10px 12px;
+                border: 1px solid #ddd;
+                vertical-align: middle;
+            }
+            .signature-table .header-row {
+                background-color: #94d7f4;
+                color: #000;
+                font-weight: bold;
+                text-align: center;
+                padding: 8px 12px;
+            }
+            .signature-table .label-row {
+                background-color: #f8f9fa;
+                font-weight: bold;
                 color: #2c3e50;
-                margin-top: 5px;
+                text-align: center;
+                padding: 8px 12px;
+            }
+            .signature-table .value-row {
+                text-align: center;
+                padding: 12px;
+            }
+            .signature-table td:nth-child(1) {
+                width: 30%;
+            }
+            .signature-table td:nth-child(2) {
+                width: 40%;
+            }
+            .signature-table td:nth-child(3) {
+                width: 30%;
+            }
+            .signature-img {
+                height: 50px;
+                max-width: 180px;
+                object-fit: contain;
             }
             .empty-signature {
                 height: 50px;
@@ -674,176 +668,234 @@ export const generateCompletionCertificatePdf = asyncHandler(
                 align-items: center;
                 justify-content: center;
                 color: #999;
-                font-size: 10pt;
+                font-size: 9pt;
             }
-            .bordered tr:nth-child(even) {
-                background-color: #f8f9fa;
+            .signature-name {
+                font-weight: 600;
+                color: #2c3e50;
+            }
+            .green-text {
+                color: #228B22;
+                font-weight: bold;
+            }
+            .images-section {
+                margin-top: 15px;
+                page-break-inside: avoid;
+            }
+            .images-grid {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 12px;
+                margin-top: 8px;
+            }
+            .image-item {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                page-break-inside: avoid;
+                border: 1px solid #ddd;
+                border-radius: 6px;
+                padding: 8px;
+                background: #fafafa;
+            }
+            .image-container {
+                width: 100%;
+                height: 140px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                overflow: hidden;
+                margin-bottom: 6px;
+                background: #fff;
+                border-radius: 4px;
+            }
+            .image-container img {
+                max-height: 100%;
+                max-width: 100%;
+                object-fit: contain;
+            }
+            .image-title {
+                font-size: 8.5pt;
+                font-weight: 600;
+                text-align: center;
+                color: #2c3e50;
+                line-height: 1.2;
+                margin: 0;
+                word-break: break-word;
+            }
+            .tagline {
+                text-align: center;
+                font-weight: bold;
+                font-size: 11pt;
+               
+                color: #2c3e50;
+                border-top: 2px solid #ddd;
+                padding-top: 10px;
+                page-break-before: avoid;
+            }
+            .footer {
+                font-size: 8.5pt;
+                color: #555;
+                text-align: center;
+                margin-top: 8px;
+                page-break-inside: avoid;
+                line-height: 1.3;
+            }
+            .footer p {
+                margin: 4px 0;
+            }
+            .footer strong {
+                color: #2c3e50;
+            }
+            @media print {
+                body {
+                    font-size: 10pt;
+                }
             }
         </style>
     </head>
     <body>
-        <div class="certificate-wrapper">
-            <div class="header">
-                <img src="https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg" alt="Company Logo" class="logo">
-                <div class="title-container">
-                    <h1>Completion Certificate</h1>
+        <div class="container">
+            <div class="content">
+                <div class="header">
+                    <img class="logo" src="https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/sample-spmc/logo+(1).png" alt="Company Logo">
+                    <div class="company-names">
+                        <div class="company-name-arabic">الغزال الأبيض للخدمات الفنية</div>
+                        <div class="company-name-english">AL GHAZAL AL ABYAD TECHNICAL SERVICES</div>
+                    </div>
                 </div>
-            </div>
 
-            <table>
-                <tr>
-                    <td class="bold" style="width: 30%">Reference</td>
-                    <td>: <span class="highlight">${
-                      `QTN${project.projectNumber.slice(3,40)}`
-                    }</span></td>
-                </tr>
-                <tr>
-                    <td class="bold">FM CONTRACTOR</td>
-                    <td>: ${client.clientName}</td>
-                </tr>
-                <tr>
-                    <td class="bold">SUB CONTRACTOR</td>
-                    <td>: AL GHAZAL ALABYAD TECHNICAL SERVICES</td>
-                </tr>
-                <tr>
-                    <td class="bold">PROJECT DESCRIPTION</td>
-                    <td>: <span class="highlight">${
-                      project.projectName
-                    }</span></td>
-                </tr>
-                <tr>
-                    <td class="bold">LOCATION (Bldg.)</td>
-                    <td>: <span class="highlight">${project.location}${
-      project.building ? `, ${project.building}` : ""
-    }</span></td>
-                </tr>
-            </table>
+                <div class="certificate-title">Completion Certificate</div>
 
-            <div class="certification-text">
-                This is to certify that the work described above in the project description has been cleared out and completed to the required standards and specifications.
-            </div>
+                <div class="section">
+                    <table class="info-table">
+                        <tr>
+                            <td class="label">Reference</td>
+                            <td>: <span class="highlight">${`QTNAGA${project.projectNumber.slice(3,40)}`}</span></td>
+                        </tr>
+                        <tr>
+                            <td class="label">FM CONTRACTOR</td>
+                            <td>:&nbsp;${client.clientName}</td>
+                        </tr>
+                        <tr>
+                            <td class="label">SUB CONTRACTOR</td>
+                            <td>:&nbsp; AL GHAZAL ALABYAD TECHNICAL SERVICES</td>
+                        </tr>
+                        <tr>
+                            <td class="label">PROJECT DESCRIPTION</td>
+                            <td>: <span class="highlight">${project.projectName}</span></td>
+                        </tr>
+                        <tr>
+                            <td class="label">LOCATION (Bldg.)</td>
+                            <td>: <span class="highlight">${project.location}${project.building ? `, ${project.building}` : ""}</span></td>
+                        </tr>
+                    </table>
+                </div>
 
-            <table>
-                <tr>
-                    <td class="bold" style="width: 30%">Completion Date</td>
-                    <td>: <span class="highlight">${formatDate(
-                      project.completionDate
-                    )}</span></td>
-                </tr>
-                <tr>
-                    <td class="bold">LPO Number</td>
-                    <td>: ${lpo?.lpoNumber || "N/A"}</td>
-                </tr>
-                <tr>
-                    <td class="bold">LPO Date</td>
-                    <td>: ${formatDate(lpo?.lpoDate)}</td>
-                </tr>
-            </table>
+                <div class="certification-text">
+                    This is to certify that the work described above in the project description has been cleared out and completed to the required standards and specifications.
+                </div>
 
-            <table class="bordered">
-                <tr>
-                    <td colspan="2" class="blue-bg">Hand over by:</td>
-                    <td colspan="2" class="blue-bg">AL GHAZAL AL ABYAD TECHNICAL SERVICES</td>
-                </tr>
-                <tr>
-                    <td class="bold" style="width: 25%">Name:</td>
-                    <td style="width: 25%" class="signature-name">${engineer?.firstName} ${
-      engineer?.lastName || ""
-    }</td>
-                    <td class="bold" style="width: 25%">Signature:</td>
-                    <td style="width: 25%" class="signature-section">
-                        ${
-                          engineer?.signatureImage
-                            ? `<img src="${engineer.signatureImage}" class="signature-img" />`
-                            : '<div class="empty-signature">Signature</div>'
-                        }
-                    </td>
-                </tr>
-                <tr>
-                    <td class="bold">Date:</td>
-                    <td><span class="green-text">${formatDate(
-                      project.handoverDate
-                    )}</span></td>
-                    <td></td>
-                    <td></td>
-                </tr>
-            </table>
+                <div class="section">
+                    <table class="info-table">
+                        <tr>
+                            <td class="label">Completion Date</td>
+                            <td>: <span class="highlight">${formatDate(project.completionDate)}</span></td>
+                        </tr>
+                        <tr>
+                            <td class="label">LPO Number</td>
+                            <td>: ${lpo?.lpoNumber || "N/A"}</td>
+                        </tr>
+                        <tr>
+                            <td class="label">LPO Date</td>
+                            <td>: ${formatDate(lpo?.lpoDate)}</td>
+                        </tr>
+                    </table>
+                </div>
 
-            <table class="bordered">
-                <tr>
-                    <td colspan="2" class="blue-bg">Accepted by:</td>
-                    <td colspan="2" class="blue-bg">Client side</td>
-                </tr>
-                <tr>
-                    <td class="bold" style="width: 25%">Name:</td>
-                    <td style="width: 25%" class="signature-name">${client.clientName}</td>
-                    <td class="bold" style="width: 25%">Signature:</td>
-                    <td style="width: 25%" class="signature-section">
-                        <div class="empty-signature">Client Signature</div>
-                    </td>
-                </tr>
-                <tr>
-                    <td class="bold">Date:</td>
-                    <td>${formatDate(project.acceptanceDate)}</td>
-                    <td></td>
-                    <td></td>
-                </tr>
-            </table>
+                <div class="section">
+                    <table class="signature-table">
+                        <tr>
+                            <td colspan="3" class="header-row">Hand over by: AL GHAZAL AL ABYAD TECHNICAL SERVICES</td>
+                        </tr>
+                        <tr class="label-row">
+                            <td>Name</td>
+                            <td>Signature</td>
+                            <td>Date</td>
+                        </tr>
+                        <tr class="value-row">
+                            <td>${engineer?.firstName} ${engineer?.lastName || ""}</td>
+                            <td>
+                                ${engineer?.signatureImage ? `<img src="${engineer.signatureImage}" class="signature-img" />` : '<div class="empty-signature">Signature</div>'}
+                            </td>
+                            <td><span class="green-text">${formatDate(project.handoverDate)}</span></td>
+                        </tr>
+                    </table>
+                </div>
 
-            <table class="bordered">
-                <tr>
-                    <td colspan="2" class="blue-bg">Prepared by:</td>
-                    <td colspan="2" class="blue-bg">AL GHAZAL AL ABYAD TECHNICAL SERVICES</td>
-                </tr>
-                <tr>
-                    <td class="bold" style="width: 25%">Name:</td>
-                    <td style="width: 25%" class="signature-name">${preparedBy?.firstName || ""} ${
-      preparedBy?.lastName || ""
-    }</td>
-                    <td class="bold" style="width: 25%">Signature:</td>
-                    <td style="width: 25%" class="signature-section">
-                        ${
-                          preparedBy?.signatureImage
-                            ? `<img src="${preparedBy.signatureImage}" class="signature-img" />`
-                            : '<div class="empty-signature">Signature</div>'
-                        }
-                    </td>
-                </tr>
-                <tr>
-                    <td class="bold">Date:</td>
-                    <td><span class="green-text">${formatDate(
-                      project.handoverDate
-                    )}</span></td>
-                    <td></td>
-                    <td></td>
-                </tr>
-            </table>
+                <div class="section">
+                    <table class="signature-table">
+                        <tr>
+                            <td colspan="3" class="header-row">Accepted by: Client side</td>
+                        </tr>
+                        <tr class="label-row">
+                            <td>Name</td>
+                            <td>Signature</td>
+                            <td>Date</td>
+                        </tr>
+                        <tr class="value-row">
+                            <td>${client.clientName}</td>
+                            <td>
+                                <div class="empty-signature">Client Signature</div>
+                            </td>
+                            <td>${formatDate(project.acceptanceDate)}</td>
+                        </tr>
+                    </table>
+                </div>
 
-            <div class="section-title">Site Pictures:</div>
-            <div class="image-container">
-                ${
-                  workCompletion?.images && workCompletion.images.length > 0
-                    ? workCompletion.images
-                        .map(
-                          (image) =>
+                <div class="section">
+                    <table class="signature-table">
+                        <tr>
+                            <td colspan="3" class="header-row">Prepared by: AL GHAZAL AL ABYAD TECHNICAL SERVICES</td>
+                        </tr>
+                        <tr class="label-row">
+                            <td>Name</td>
+                            <td>Signature</td>
+                            <td>Date</td>
+                        </tr>
+                        <tr class="value-row">
+                            <td>${preparedBy?.firstName || ""} ${preparedBy?.lastName || ""}</td>
+                            <td>
+                                ${preparedBy?.signatureImage ? `<img src="${preparedBy.signatureImage}" class="signature-img" />` : '<div class="empty-signature">Signature</div>'}
+                            </td>
+                            <td><span class="green-text">${formatDate(project.handoverDate)}</span></td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div class="section images-section">
+                    <div class="section-title">Site Pictures</div>
+                    ${workCompletion?.images && workCompletion.images.length > 0 ? `
+                    <div class="images-grid">
+                        ${workCompletion.images.map((image) => 
                             `<div class="image-item">
-                               <img src="${image.imageUrl}" alt="${image.title || "Site picture"}" />
+                               <div class="image-container">
+                                   <img src="${image.imageUrl}" alt="${image.title || "Site picture"}" />
+                               </div>
                                <div class="image-title">${image.title || "Site Image"}</div>
                              </div>`
-                        )
-                        .join("")
-                    : '<p style="text-align: center; width: 100%; font-size: 11pt; color: #666; padding: 20px;">No site pictures available</p>'
-                }
+                        ).join("")}
+                    </div>
+                    ` : '<p style="text-align: center; font-size: 10pt; color: #666; padding: 20px;">No site pictures available</p>'}
+                </div>
             </div>
 
-            <div class="footer-container">
-                <div class="tagline">We work U Relax</div>
-                <div class="footer">
-                    <p><strong>AL GHAZAL AL ABYAD TECHNICAL SERVICES</strong></p>
-                    <p>Office No:04, R09-France Cluster, International City-Dubai | P.O.Box:262760, Dubai-U.A.E</p>
-                    <p>Tel: 044102555 | <a href="http://www.alghazalgroup.com/" style="color: #0074cc; text-decoration: none;">www.alghazalgroup.com</a></p>
-                    <p>Generated on ${formatDate(new Date())}</p>
-                </div>
+            <div class="tagline">We work U Relax</div>
+            <div class="footer">
+                <p><strong>AL GHAZAL AL ABYAD TECHNICAL SERVICES</strong></p>
+                <p>Office No:04, R09-France Cluster, International City-Dubai | P.O.Box:262760, Dubai-U.A.E</p>
+                <p>Tel: 044102555 | <a href="http://www.alghazalgroup.com/">www.alghazalgroup.com</a></p>
+                <p>Generated on ${formatDate(new Date())}</p>
             </div>
         </div>
     </body>
@@ -870,10 +922,10 @@ export const generateCompletionCertificatePdf = asyncHandler(
         format: "A4",
         printBackground: true,
         margin: {
-          top: "0.1in",
-          right: "0.1in",
-          bottom: "0.1in",
-          left: "0.1in",
+          top: "0.5cm",
+          right: "0.5cm",
+          bottom: "0.5cm",
+          left: "0.5cm",
         },
         preferCSSPageSize: true,
         displayHeaderFooter: false,
@@ -890,5 +942,3 @@ export const generateCompletionCertificatePdf = asyncHandler(
     }
   }
 );
-
-///ads

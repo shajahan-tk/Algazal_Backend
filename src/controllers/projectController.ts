@@ -757,6 +757,8 @@ function getDaysLeft(validUntil?: Date): string {
         firstName: createdByData?.firstName || "N/A",
         lastName: createdByData?.lastName || "N/A",
       },
+      projectName:project.projectName,
+      location:project.location,
     };
 
     res
@@ -1145,7 +1147,6 @@ export const getDriverProjects = asyncHandler(
     );
   }
 );
-
 export const generateInvoicePdf = asyncHandler(
   async (req: Request, res: Response) => {
     const { projectId } = req.params;
@@ -1276,141 +1277,191 @@ export const generateInvoicePdf = asyncHandler(
   <style type="text/css">
     @page {
       size: A4;
-      margin: 1cm;
+      margin: 0.5cm;
     }
     body {
       font-family: 'Arial', sans-serif;
-      font-size: 11pt; /* Increased from 10pt for better readability */
-      line-height: 1.5; /* Increased line height for better readability */
+      font-size: 11pt;
+      line-height: 1.4;
       color: #333;
       margin: 0;
       padding: 0;
     }
+    .container {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+    }
+    .content {
+      margin-bottom: 15px;
+    }
     .header {
       display: flex;
-      align-items: flex-start;
-      margin-bottom: 20px; /* Increased spacing */
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 15px;
       gap: 20px;
+      page-break-after: avoid;
+      padding: 10px 0;
+      border-bottom: 3px solid #94d7f4;
+      position: relative;
     }
     .logo {
-      height: 60px; /* Slightly larger logo */
+      height: 50px;
       width: auto;
-      max-width: 200px;
+      max-width: 150px;
+      object-fit: contain;
+      position: absolute;
+      left: 0;
+      top: -12px;
     }
-    .header-content {
-      flex-grow: 1;
+    .company-names {
       display: flex;
       flex-direction: column;
+      align-items: center;
       justify-content: center;
+      text-align: center;
+      flex-grow: 1;
     }
-    .document-title {
-      font-size: 18pt; /* Larger and more prominent */
+    .company-name-arabic {
+      font-size: 20pt;
       font-weight: bold;
-      margin: 0;
-      text-align: right;
-      color: #000;
-      padding-top: 5px;
+      color: #1a1a1a;
+      line-height: 1.3;
+      direction: rtl;
+      unicode-bidi: bidi-override;
+      letter-spacing: 0;
+      margin-bottom: 5px;
+    }
+    .company-name-english {
+      font-size: 10pt;
+      font-weight: bold;
+      color: #1a1a1a;
+      line-height: 1.3;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .invoice-title {
+      text-align: center;
+      font-size: 20pt;
+      font-weight: bold;
+      color: #2c3e50;
+      margin: 20px 0 15px 0;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      padding: 12px;
+      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+      border-radius: 6px;
+      border-left: 4px solid #94d7f4;
+      border-right: 4px solid #94d7f4;
     }
     .invoice-header {
       display: flex;
       justify-content: space-between;
-      margin-bottom: 20px;
-      padding-bottom: 15px;
-      border-bottom: 2px solid #94d7f4;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #eee;
       align-items: flex-start;
     }
     .invoice-info {
       text-align: right;
-      font-size: 10pt; /* Consistent font size */
+      font-size: 10pt;
     }
     .invoice-info p {
-      margin: 3px 0; /* Tighter paragraph spacing */
+      margin: 3px 0;
     }
     .service-period {
-      margin: 10px 0 15px 0;
-      padding: 8px 0;
-      font-weight: bold;
-      font-size: 10.5pt; /* Slightly larger than body text */
-      border-bottom: 1px solid #eee;
-      background-color: #f8f9fa;
+      margin: 8px 0;
       padding: 8px 12px;
+      font-weight: bold;
+      font-size: 10pt;
+      background-color: #f8f9fa;
+      border-left: 4px solid #94d7f4;
+      border-right: 4px solid #94d7f4;
       border-radius: 4px;
     }
     .client-info-container {
       display: flex;
-      margin-bottom: 25px;
-      gap: 25px;
+      margin-bottom: 15px;
+      gap: 15px;
     }
     .client-info, .company-info {
       flex: 1;
-      padding: 12px 15px;
+      padding: 10px 12px;
       border: 1px solid #ddd;
-      border-radius: 5px;
-      font-size: 10.5pt; /* Slightly larger for better readability */
+      border-radius: 4px;
+      font-size: 10pt;
+      background-color: #f8f9fa;
     }
     .client-info h3, .company-info h3 {
-      font-size: 12pt; /* Larger section headers */
-      margin: 0 0 10px 0;
+      font-size: 11pt;
+      margin: 0 0 8px 0;
       color: #2c3e50;
       border-bottom: 1px solid #94d7f4;
-      padding-bottom: 5px;
+      padding-bottom: 4px;
+    }
+    .client-info p, .company-info p {
+      margin: 4px 0;
+      line-height: 1.3;
     }
     .section {
-      margin-bottom: 20px;
+      margin-bottom: 12px;
       page-break-inside: avoid;
     }
     .section-title {
-      font-size: 13pt; /* Larger section titles */
+      font-size: 11pt;
       font-weight: bold;
-      padding: 8px 0;
-      margin: 15px 0 8px 0;
+      padding: 4px 0;
+      margin: 12px 0 8px 0;
       border-bottom: 2px solid #94d7f4;
       color: #2c3e50;
+      page-break-after: avoid;
     }
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 20px;
+      margin-bottom: 10px;
       page-break-inside: avoid;
-      font-size: 10.5pt; /* Better table font size */
+      font-size: 9.5pt;
     }
     th {
       background-color: #94d7f4;
       color: #000;
       font-weight: bold;
-      padding: 8px 10px; /* More padding for better readability */
-      text-align: left;
+      padding: 6px 8px;
+      text-align: center;
       border: 1px solid #ddd;
-      font-size: 10.5pt;
+      font-size: 9.5pt;
+      vertical-align: middle;
     }
     td {
-      padding: 8px 10px; /* More padding for better readability */
+      padding: 6px 8px;
       border: 1px solid #ddd;
       vertical-align: top;
-      font-size: 10.5pt;
+      font-size: 9.5pt;
     }
     .amount-summary {
-      margin-top: 15px;
+      margin-top: 10px;
       width: 100%;
       text-align: right;
-      font-size: 11pt;
+      font-size: 10pt;
     }
     .amount-summary-row {
       display: flex;
       justify-content: flex-end;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
     .amount-label {
-      width: 180px; /* Slightly wider for better alignment */
+      width: 140px;
       font-weight: bold;
       text-align: right;
-      padding-right: 15px;
-      font-size: 10.5pt;
+      padding-right: 10px;
+      font-size: 9.5pt;
     }
     .amount-value {
-      width: 120px; /* Slightly wider for better alignment */
+      width: 100px;
       text-align: right;
-      font-size: 10.5pt;
+      font-size: 9.5pt;
     }
     .net-amount-row {
       display: flex;
@@ -1418,32 +1469,29 @@ export const generateInvoicePdf = asyncHandler(
       background-color: #94d7f4;
       color: #000;
       font-weight: bold;
-      font-size: 12pt; /* Larger for emphasis */
-      margin-top: 8px;
-      padding: 8px 0;
+      font-size: 10pt;
+      margin-top: 4px;
+      padding: 6px 0;
       border-top: 2px solid #333;
     }
-    .terms-box {
-      border: 1px solid #000;
-      padding: 12px;
-      margin-top: 20px;
-      display: inline-block;
-      width: auto;
-      min-width: 50%;
-      font-size: 10.5pt;
-    }
     .bank-details {
-      margin-top: 25px;
-      padding: 15px;
+      margin-top: 15px;
+      padding: 12px 15px;
       border: 1px solid #ddd;
-      border-radius: 5px;
+      border-radius: 4px;
       background-color: #f8f9fa;
-      font-size: 10.5pt;
+      font-size: 10pt;
     }
     .bank-details h3 {
-      font-size: 12pt;
-      margin: 0 0 12px 0;
+      font-size: 11pt;
+      margin: 0 0 8px 0;
       color: #2c3e50;
+      border-bottom: 1px solid #94d7f4;
+      padding-bottom: 4px;
+    }
+    .bank-details p {
+      margin: 4px 0;
+      line-height: 1.3;
     }
     .text-center {
       text-align: center;
@@ -1451,152 +1499,167 @@ export const generateInvoicePdf = asyncHandler(
     .text-right {
       text-align: right;
     }
-    .terms-page {
-      page-break-before: always;
-      padding-top: 20px;
-    }
-    .footer {
-      font-size: 9.5pt; /* Slightly larger footer */
-      color: #555;
-      text-align: center;
-      border-top: 2px solid #ddd;
-      padding-top: 15px;
-      margin-top: 35px;
-      line-height: 1.6;
+    .footer-container {
+      page-break-inside: avoid;
+      margin-top: 20px;
     }
     .tagline {
       text-align: center;
       font-weight: bold;
-      font-size: 13pt; /* More prominent tagline */
-      margin: 25px 0 15px 0;
+      font-size: 11pt;
+      color: #2c3e50;
+      border-top: 2px solid #ddd;
+      padding-top: 10px;
+      page-break-inside: avoid;
+    }
+    .footer {
+      font-size: 8.5pt;
+      color: #555;
+      text-align: center;
+      padding-top: 8px;
+      line-height: 1.3;
+      page-break-inside: avoid;
+    }
+    .footer p {
+      margin: 4px 0;
+    }
+    .footer strong {
       color: #2c3e50;
     }
     p {
-      margin: 6px 0; /* Consistent paragraph spacing */
-      line-height: 1.5;
-    }
-    h3 {
-      margin: 0 0 12px 0;
-      color: #2c3e50;
-      font-size: 12pt;
+      margin: 4px 0;
+      line-height: 1.3;
     }
     strong {
-      font-weight: 600; /* Slightly bolder strong text */
+      font-weight: 600;
     }
-    /* Ensure no text is too small */
-    .no-small-text {
-      font-size: 10pt !important;
-      min-font-size: 10pt;
+    @media print {
+      body {
+        font-size: 10pt;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="header">
-    <img class="logo" src="https://agats.s3.ap-south-1.amazonaws.com/logo/logo.jpeg" alt="Company Logo">
-    <div class="header-content">
-      <div class="document-title">TAX INVOICE</div>
-    </div>
-  </div>
+  <div class="container">
+    <div class="content">
+      <div class="header">
+        <img class="logo" src="https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/sample-spmc/logo+(1).png" alt="Company Logo">
+        <div class="company-names">
+          <div class="company-name-arabic">الغزال الأبيض للخدمات الفنية</div>
+          <div class="company-name-english">AL GHAZAL AL ABYAD TECHNICAL SERVICES</div>
+        </div>
+      </div>
 
-  <div class="invoice-header">
-    <div class="no-small-text">
-      <p><strong>Invoice #:</strong> ${invoiceNumber}</p>
-      <p><strong>Date:</strong> ${formatDate(new Date())}</p>
-      ${lpo ? `<p><strong>LPO #:</strong> ${lpo.lpoNumber}</p>` : ''}
-      ${project.grnNumber ? `<p><strong>GRN #:</strong> ${project.grnNumber}</p>` : ''}
-    </div>
-    <div class="invoice-info no-small-text">
-      <p><strong>Project:</strong> ${project.projectName || "N/A"}</p>
-      <!-- Service Period moved to top below project name -->
+      <div class="invoice-title">Tax Invoice</div>
+
+      <div class="invoice-header">
+        <div>
+          <p><strong>Invoice #:</strong> ${invoiceNumber}</p>
+          <p><strong>Date:</strong> ${formatDate(new Date())}</p>
+          ${lpo ? `<p><strong>LPO #:</strong> ${lpo.lpoNumber}</p>` : ''}
+          ${project.grnNumber ? `<p><strong>GRN #:</strong> ${project.grnNumber}</p>` : ''}
+        </div>
+        <div class="invoice-info">
+          <p><strong>Service Period:</strong> ${formatDate(project.workStartDate)} to ${formatDate(project.workEndDate || new Date())}</p>
+        </div>
+      </div>
+
       <div class="service-period">
-        <strong>Service Period:</strong> ${formatDate(project.workStartDate)} - ${formatDate(project.workEndDate || new Date())}
+        <strong>Project:</strong> ${project.projectName || "N/A"}
+      </div>
+
+      <div class="client-info-container">
+        <div class="client-info">
+          <h3>BILL TO</h3>
+          <p><strong>CLIENT:</strong> ${client.clientName || "N/A"}</p>
+          <p><strong>ADDRESS:</strong> ${client.clientAddress || "N/A"}</p>
+          <p><strong>CONTACT:</strong> ${client.mobileNumber || client.telephoneNumber || "N/A"}</p>
+          <p><strong>EMAIL:</strong> ${client.email || "N/A"}</p>
+          <p><strong>TRN:</strong> ${client.trnNumber || "N/A"}</p>
+        </div>
+
+        <div class="company-info">
+          <h3>COMPANY DETAILS</h3>
+          <p><strong>Name:</strong> AL GHAZAL AL ABYAD TECHNICAL SERVICES</p>
+          <p><strong>Address:</strong> Office No:04, R09-France Cluster</p>
+          <p>International City-Dubai</p>
+          <p>P.O.Box:262760, Dubai-U.A.E</p>
+          <p><strong>Tel:</strong> 044102555</p>
+          <p><strong>TRN:</strong> 104037793700003</p>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">INVOICE ITEMS</div>
+        <table>
+          <thead>
+            <tr>
+              <th width="5%">No.</th>
+              <th width="45%">Description</th>
+              <th width="10%">UOM</th>
+              <th width="10%">Qty</th>
+              <th width="15%">Unit Price (AED)</th>
+              <th width="15%" class="text-right">Total (AED)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${quotation.items.map((item, index) => `
+              <tr>
+                <td class="text-center">${index + 1}</td>
+                <td>${item.description}</td>
+                <td class="text-center">${item.uom || "NOS"}</td>
+                <td class="text-center">${item.quantity.toFixed(2)}</td>
+                <td class="text-right">${item.unitPrice.toFixed(2)}</td>
+                <td class="text-right">${item.totalPrice.toFixed(2)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+
+        <div class="amount-summary">
+          <div class="amount-summary-row">
+            <div class="amount-label">SUBTOTAL:</div>
+            <div class="amount-value">${subtotal.toFixed(2)} AED&nbsp;</div>
+          </div>
+          <div class="amount-summary-row">
+            <div class="amount-label">VAT ${quotation.vatPercentage}%:</div>
+            <div class="amount-value">${vatAmount.toFixed(2)} AED&nbsp;</div>
+          </div>
+          <div class="net-amount-row">
+            <div class="amount-label">TOTAL AMOUNT:</div>
+            <div class="amount-value">${totalAmount.toFixed(2)} AED&nbsp;</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <p><strong>Amount in words:</strong> ${convertToWords(totalAmount)} AED only</p>
+      </div>
+
+      <div class="bank-details">
+        <h3>BANK DETAILS</h3>
+        <p><strong>Bank Name:</strong> Emirates NBD</p>
+        <p><strong>Account Name:</strong> AL GHAZAL AL ABYAD TECHNICAL SERVICES</p>
+        <p><strong>Account Number:</strong> 1015489374101</p>
+        <p><strong>IBAN:</strong> AE580260001015489374101</p>
+        <p><strong>Swift Code:</strong> EBILAEAD</p>
+      </div>
+
+      <div class="section">
+        <p><strong>Payment Terms:</strong> 30 days from invoice date</p>
       </div>
     </div>
-  </div>
 
-  <div class="client-info-container">
-    <div class="client-info">
-      <h3>BILL TO:</h3>
-      <p><strong>CLIENT:</strong> ${client.clientName || "N/A"}</p>
-      <p><strong>ADDRESS:</strong> ${client.clientAddress || "N/A"}</p>
-      <p><strong>CONTACT:</strong> ${client.mobileNumber || client.telephoneNumber || "N/A"}</p>
-      <p><strong>EMAIL:</strong> ${client.email || "N/A"}</p>
-      <p><strong>TRN:</strong> ${client.trnNumber || "N/A"}</p>
-    </div>
-
-    <div class="company-info">
-      <h3>AL GHAZAL AL ABYAD TECHNICAL SERVICES</h3>
-      <p>Office No:04, R09-France Cluster</p>
-      <p>International City-Dubai</p>
-      <p>P.O.Box:262760, Dubai-U.A.E</p>
-      <p>Tel: 044102555</p>
-      <p>TRN: 104037793700003</p>
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">INVOICE ITEMS</div>
-    <table>
-      <thead>
-        <tr>
-          <th width="5%">No.</th>
-          <th width="45%">Description</th>
-          <th width="10%">UOM</th>
-          <th width="10%">Qty</th>
-          <th width="15%">Unit Price (AED)</th>
-          <th width="15%" class="text-right">Total (AED)</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${quotation.items.map((item, index) => `
-          <tr>
-            <td class="text-center">${index + 1}</td>
-            <td>${item.description}</td>
-            <td class="text-center">${item.uom || "NOS"}</td>
-            <td class="text-center">${item.quantity.toFixed(2)}</td>
-            <td class="text-right">${item.unitPrice.toFixed(2)}</td>
-            <td class="text-right">${item.totalPrice.toFixed(2)}</td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>
-
-    <div class="amount-summary">
-      <div class="amount-summary-row">
-        <div class="amount-label">SUBTOTAL:</div>
-        <div class="amount-value">${subtotal.toFixed(2)} AED</div>
-      </div>
-      <div class="amount-summary-row">
-        <div class="amount-label">VAT ${quotation.vatPercentage}%:</div>
-        <div class="amount-value">${vatAmount.toFixed(2)} AED</div>
-      </div>
-      <div class="net-amount-row">
-        <div class="amount-label">TOTAL AMOUNT:</div>
-        <div class="amount-value">${totalAmount.toFixed(2)} AED</div>
+    <div class="footer-container">
+      <div class="tagline">We work U Relax</div>
+      <div class="footer">
+        <p><strong>AL GHAZAL AL ABYAD TECHNICAL SERVICES</strong></p>
+        <p>Office No:04, R09-France Cluster, International City-Dubai | P.O.Box:262760, Dubai-U.A.E</p>
+        <p>Tel: 044102555 | <a href="http://www.alghazalgroup.com/">www.alghazalgroup.com</a></p>
+        <p>Generated on ${formatDate(new Date())}</p>
       </div>
     </div>
-  </div>
-
-  <div class="bank-details">
-    <h3>BANK DETAILS</h3>
-    <p><strong>Bank Name:</strong> Emirates NBD</p>
-    <p><strong>Account Name:</strong> AL GHAZAL AL ABYAD TECHNICAL SERVICES</p>
-    <p><strong>Account Number:</strong> 1015489374101</p>
-    <p><strong>IBAN:</strong> AE580260001015489374101</p>
-    <p><strong>Swift Code:</strong> EBILAEAD</p>
-  </div>
-
-  <div class="section">
-    <p><strong>Amount in words:</strong> ${convertToWords(totalAmount)} AED only</p>
-    <p><strong>Payment Terms:</strong> ${"30 days from invoice date"}</p>
-  </div>
-    
-  <div class="footer">
-    <div class="tagline">We work U Relax</div>
-    <p><strong>AL GHAZAL AL ABYAD TECHNICAL SERVICES</strong></p>
-    <p>Office No:04, R09-France Cluster, International City-Dubai | P.O.Box:262760, Dubai-U.A.E</p>
-    <p>Tel: 044102555 | <a href="http://www.alghazalgroup.com/">www.alghazalgroup.com</a></p>
-    <p>Generated on ${formatDate(new Date())}</p>
   </div>
 </body>
 </html>
@@ -1610,7 +1673,6 @@ export const generateInvoicePdf = asyncHandler(
     try {
       const page = await browser.newPage();
       
-      // Set viewport for consistent rendering
       await page.setViewport({ width: 1200, height: 1600 });
       
       await page.setContent(htmlContent, {
@@ -1622,10 +1684,10 @@ export const generateInvoicePdf = asyncHandler(
         format: "A4",
         printBackground: true,
         margin: {
-          top: "1cm",
-          right: "1cm",
-          bottom: "1cm",
-          left: "1cm",
+          top: "0.5cm",
+          right: "0.5cm",
+          bottom: "0.5cm",
+          left: "0.5cm",
         },
         displayHeaderFooter: false,
         preferCSSPageSize: true,

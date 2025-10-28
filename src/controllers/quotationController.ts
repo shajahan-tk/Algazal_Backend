@@ -719,9 +719,10 @@ export const generateQuotationPdf = asyncHandler(
       color: #000;
       font-weight: bold;
       padding: 5px 6px;
-      text-align: left;
+      text-align: center;
       border: 1px solid #ddd;
       font-size: 9.5pt;
+      vertical-align: middle;
     }
 
     td {
@@ -1083,7 +1084,7 @@ export const generateQuotationPdf = asyncHandler(
                 <th class="col-uom">UOM</th>
                 <th class="col-qty">Qty</th>
                 <th class="col-unit">Unit Price (AED)</th>
-                <th class="col-total text-right">Total (AED)</th>
+                <th class="col-total">Total (AED)</th>
               </tr>
             </thead>
             <tbody>
@@ -1104,15 +1105,15 @@ export const generateQuotationPdf = asyncHandler(
         <div class="amount-summary">
           <div class="amount-summary-row">
             <div class="amount-label">SUBTOTAL:</div>
-            <div class="amount-value">${subtotal.toFixed(2)} AED</div>
+            <div class="amount-value">${subtotal.toFixed(2)} AED&nbsp;</div>
           </div>
           <div class="amount-summary-row">
             <div class="amount-label">VAT ${quotation.vatPercentage}%:</div>
-            <div class="amount-value">${vatAmount.toFixed(2)} AED</div>
+            <div class="amount-value">${vatAmount.toFixed(2)} AED&nbsp;</div>
           </div>
           <div class="net-amount-row">
             <div class="amount-label">NET AMOUNT:</div>
-            <div class="amount-value">${netAmount.toFixed(2)} AED</div>
+            <div class="amount-value">${netAmount.toFixed(2)} AED&nbsp;</div>
           </div>
         </div>
       </div>
