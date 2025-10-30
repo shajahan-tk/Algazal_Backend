@@ -652,6 +652,7 @@ export const generateQuotationPdf = asyncHandler(
       background-color: #f8f9fa;
       border-radius: 4px;
       page-break-after: avoid;
+      page-break-inside: avoid;
     }
 
     .subject-title {
@@ -669,7 +670,7 @@ export const generateQuotationPdf = asyncHandler(
 
     .section {
       margin-bottom: 12px;
-      page-break-inside: avoid;
+      page-break-inside: auto;
     }
 
     .section-title {
@@ -748,6 +749,7 @@ export const generateQuotationPdf = asyncHandler(
       width: 100%;
       text-align: right;
       page-break-before: avoid;
+      page-break-inside: avoid;
       font-size: 10pt;
     }
 
@@ -783,20 +785,27 @@ export const generateQuotationPdf = asyncHandler(
       border-top: 2px solid #333;
     }
 
-    /* Enhanced Images Section */
+    /* Enhanced Images Section - ALLOWS BREAKING */
     .images-section {
       margin-top: 10px;
-      page-break-inside: avoid;
+      page-break-inside: auto;
     }
 
     .images-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 12px;
+      display: block;
       margin-top: 4px;
     }
 
+    .images-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 12px;
+      page-break-inside: avoid;
+    }
+
     .image-item {
+      flex: 1;
+      max-width: calc(33.333% - 8px);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -856,7 +865,7 @@ export const generateQuotationPdf = asyncHandler(
 
     .terms-prepared-section {
       margin-top: 12px;
-      page-break-inside: avoid;
+      page-break-inside: auto;
     }
 
     .terms-prepared-header {
@@ -988,6 +997,10 @@ export const generateQuotationPdf = asyncHandler(
         break-after: auto;
       }
 
+      tbody tr {
+        page-break-inside: avoid;
+      }
+
       .subject-section {
         page-break-after: avoid;
         page-break-inside: avoid;
@@ -995,6 +1008,7 @@ export const generateQuotationPdf = asyncHandler(
 
       .items-section {
         page-break-before: auto;
+        page-break-inside: auto;
       }
 
       body {
@@ -1012,8 +1026,13 @@ export const generateQuotationPdf = asyncHandler(
         page-break-inside: avoid;
       }
 
-      .images-grid {
+      .images-row {
+        page-break-inside: avoid;
         break-inside: avoid;
+      }
+
+      .images-grid {
+        break-inside: auto;
       }
     }
 
@@ -1024,6 +1043,11 @@ export const generateQuotationPdf = asyncHandler(
     .header-section {
       page-break-after: avoid;
       page-break-inside: avoid;
+    }
+
+    .items-section {
+      page-break-before: auto;
+      page-break-inside: auto;
     }
   </style>
 </head>
@@ -1122,14 +1146,25 @@ export const generateQuotationPdf = asyncHandler(
       <div class="section images-section">
         <div class="section-title">QUOTATION IMAGES</div>
         <div class="images-grid">
-          ${quotation.images.map(image => `
-            <div class="image-item">
-              <div class="image-container">
-                <img src="${image.imageUrl}" alt="${image.title}" />
-              </div>
-              <div class="image-title">${image.title}</div>
-            </div>
-          `).join('')}
+          ${(() => {
+            let html = '';
+            for (let i = 0; i < quotation.images.length; i += 3) {
+              const rowImages = quotation.images.slice(i, i + 3);
+              html += '<div class="images-row">';
+              rowImages.forEach(image => {
+                html += `
+                  <div class="image-item">
+                    <div class="image-container">
+                      <img src="${image.imageUrl}" alt="${image.title}" />
+                    </div>
+                    <div class="image-title">${image.title}</div>
+                  </div>
+                `;
+              });
+              html += '</div>';
+            }
+            return html;
+          })()}
         </div>
       </div>
       ` : ''}
