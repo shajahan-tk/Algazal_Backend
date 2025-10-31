@@ -12,7 +12,7 @@ import { Request, Response } from "express";
 // Create or Update attendance record
 export const createOrUpdateAttendance = asyncHandler(async (req:Request, res:Response) => {
   const { userId, date, type = "normal" } = req.body;
-  let { present, workingHours = 0, overtimeHours = 0, projectId } = req.body;
+  let { present, workingHours = 0, overtimeHours = 0, projectId, isPaidLeave = false } = req.body;
 
   console.log('Create/Update Attendance Request:', req.body);
 
@@ -25,19 +25,22 @@ export const createOrUpdateAttendance = asyncHandler(async (req:Request, res:Res
     throw new ApiError(400, "Invalid attendance type");
   }
 
-  // For project attendance, validate project
-  if (type === "project") {
+  // NEW: Validate paid leave cannot have project
+  if (isPaidLeave && projectId) {
+    throw new ApiError(400, "Paid leave cannot be associated with a project");
+  }
+
+  // For project attendance, validate project (unless it's paid leave)
+  if (type === "project" && !isPaidLeave) {
     if (!projectId) {
       throw new ApiError(400, "Project ID is required for project attendance");
     }
     
-    // Validate project exists
     const project = await Project.findById(projectId);
     if (!project) {
       throw new ApiError(404, "Project not found");
     }
 
-    // Check if user is assigned to project
     const isAssigned =
       (project.assignedWorkers?.some((w) => w.equals(userId)) ?? false) ||
       (project.assignedDriver?.equals(userId) ?? false);
@@ -47,13 +50,11 @@ export const createOrUpdateAttendance = asyncHandler(async (req:Request, res:Res
     }
   }
 
-  // Ensure markedBy exists
   if (!req.user?.userId) {
     throw new ApiError(401, "Unauthorized - User not authenticated");
   }
   const markedBy = new Types.ObjectId(req.user.userId);
 
-  // Parse and validate date
   const attendanceDate = new Date(date);
   if (isNaN(attendanceDate.getTime())) {
     throw new ApiError(400, "Invalid date format");
@@ -63,37 +64,37 @@ export const createOrUpdateAttendance = asyncHandler(async (req:Request, res:Res
   const nextDay = new Date(attendanceDate);
   nextDay.setDate(attendanceDate.getDate() + 1);
 
-  // Validate user exists
   const user = await User.findById(userId);
   if (!user) {
     throw new ApiError(404, "User not found");
   }
 
-  // Convert working hours - FIXED: Handle both string and number properly
+  // Convert working hours
   let workingHoursValue = 0;
   let overtimeHoursValue = 0;
 
-  if (present) {
-    // Handle working hours
+  // NEW: For paid leave (day off), force hours to 0
+  if (isPaidLeave) {
+    workingHoursValue = 0;
+    overtimeHoursValue = 0;
+    present = false; // Paid leave is technically absent but paid
+  } else if (present) {
+    // Handle working hours (existing code)
     if (typeof workingHours === 'string') {
       if (workingHours.includes(':')) {
-        // Convert time string like "8:30" to hours
         const [hours, minutes] = workingHours.split(':').map(Number);
         workingHoursValue = hours + (minutes / 60);
       } else {
-        // Convert string number to float
         workingHoursValue = parseFloat(workingHours);
       }
     } else if (typeof workingHours === 'number') {
       workingHoursValue = workingHours;
     }
     
-    // Validate working hours
     if (isNaN(workingHoursValue) || workingHoursValue < 0 || workingHoursValue > 24) {
       throw new ApiError(400, "Working hours must be between 0 and 24");
     }
 
-    // Round to 2 decimal places
     workingHoursValue = Math.round(workingHoursValue * 100) / 100;
 
     // Handle overtime hours
@@ -108,29 +109,28 @@ export const createOrUpdateAttendance = asyncHandler(async (req:Request, res:Res
       overtimeHoursValue = overtimeHours;
     }
 
-    // Validate overtime hours
     if (isNaN(overtimeHoursValue) || overtimeHoursValue < 0) {
       throw new ApiError(400, "Overtime hours cannot be negative");
     }
 
-    // Round to 2 decimal places
     overtimeHoursValue = Math.round(overtimeHoursValue * 100) / 100;
   } else {
-    // If absent, set both to 0
+    // If absent (and not paid leave), set both to 0
     workingHoursValue = 0;
     overtimeHoursValue = 0;
   }
 
-  console.log('Processed hours - Working:', workingHoursValue, 'Overtime:', overtimeHoursValue);
+  console.log('Processed hours - Working:', workingHoursValue, 'Overtime:', overtimeHoursValue, 'PaidLeave:', isPaidLeave);
 
   // Find existing attendance record
   const query = {
     user: userId,
     date: { $gte: attendanceDate, $lt: nextDay },
     type,
-  }as any;
+  } as any;
 
-  if (type === "project") {
+  // Only include project in query if not paid leave
+  if (type === "project" && !isPaidLeave) {
     query.project = projectId;
   }
 
@@ -142,12 +142,17 @@ export const createOrUpdateAttendance = asyncHandler(async (req:Request, res:Res
     attendance.workingHours = workingHoursValue;
     attendance.overtimeHours = overtimeHoursValue;
     attendance.markedBy = markedBy;
+    attendance.isPaidLeave = isPaidLeave;
+    // Remove project if it's paid leave
+    if (isPaidLeave) {
+      attendance.project = undefined;
+    }
     await attendance.save();
     console.log('Updated existing attendance record');
   } else {
     // Create new record
     attendance = await Attendance.create({
-      project: type === "project" ? projectId : undefined,
+      project: (type === "project" && !isPaidLeave) ? projectId : undefined,
       user: userId,
       present,
       workingHours: workingHoursValue,
@@ -155,6 +160,7 @@ export const createOrUpdateAttendance = asyncHandler(async (req:Request, res:Res
       markedBy,
       date: attendanceDate,
       type,
+      isPaidLeave,
     });
     console.log('Created new attendance record');
   }
@@ -169,6 +175,7 @@ export const createOrUpdateAttendance = asyncHandler(async (req:Request, res:Res
     .status(200)
     .json(new ApiResponse(200, populatedAttendance, "Attendance saved successfully"));
 });
+
 
 
 // Delete attendance record

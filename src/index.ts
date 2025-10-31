@@ -102,7 +102,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 //   res.sendFile("/var/www/kmcc-frontend/dist/index.html");
 // });
 connectDb().then(() => {
-  app.listen(4001, () => {
+  app.listen(4002, () => {
     console.log(`Server is running on port ${process.env.PORT}`);
   });
 });

@@ -1,10 +1,11 @@
 import { Document, Schema, model, Types } from "mongoose";
 
 export interface IAttendance extends Document {
-  project?: Types.ObjectId; // Make optional for normal type
+  project?: Types.ObjectId; // Make optional for normal type and day off
   user: Types.ObjectId;
   date: Date;
   present: boolean;
+  isPaidLeave: boolean; // NEW: Flag for day off/paid leave
   markedBy: Types.ObjectId;
   type: "project" | "normal";
   workingHours: number;
@@ -18,8 +19,19 @@ const attendanceSchema = new Schema<IAttendance>(
       type: Schema.Types.ObjectId,
       ref: "Project",
       required: function () {
-        return this.type === "project";
+        // Project is required only for project type AND when not a paid leave
+        return this.type === "project" && !this.isPaidLeave;
       },
+      validate: {
+        validator: function(value: Types.ObjectId | undefined) {
+          // Project must NOT exist when isPaidLeave is true
+          if (this.isPaidLeave && value) {
+            return false;
+          }
+          return true;
+        },
+        message: "Paid leave cannot be associated with a project"
+      }
     },
     user: {
       type: Schema.Types.ObjectId,
@@ -33,6 +45,11 @@ const attendanceSchema = new Schema<IAttendance>(
     },
     present: {
       type: Boolean,
+      required: true,
+    },
+    isPaidLeave: {
+      type: Boolean,
+      default: false,
       required: true,
     },
     markedBy: {
@@ -65,15 +82,19 @@ const attendanceSchema = new Schema<IAttendance>(
 
 // Calculate overtime before saving
 attendanceSchema.pre<IAttendance>("save", function (next) {
-  if (this.isModified("workingHours")) {
+  // For paid leave (day off), set hours to 0 and no project
+  if (this.isPaidLeave) {
+    this.workingHours = 0;
+    this.overtimeHours = 0;
+    this.project = undefined;
+  } else if (this.isModified("workingHours")) {
     const basicHours = 10;
     this.overtimeHours = Math.max(0, this.workingHours - basicHours);
   }
   next();
 });
 
-// FIXED: Separate compound indexes for different attendance types
-// Index for project attendance (project + user + date must be unique)
+// Indexes remain the same
 attendanceSchema.index(
   { project: 1, user: 1, date: 1, type: 1 },
   {
@@ -83,7 +104,6 @@ attendanceSchema.index(
   }
 );
 
-// Index for normal attendance (user + date must be unique for normal type)
 attendanceSchema.index(
   { user: 1, date: 1, type: 1 },
   {
@@ -93,7 +113,6 @@ attendanceSchema.index(
   }
 );
 
-// Additional indexes for query optimization
 attendanceSchema.index({ user: 1, date: 1 }, { name: "user_date_lookup" });
 attendanceSchema.index({ user: 1, type: 1, date: 1 }, { name: "user_type_date_lookup" });
 attendanceSchema.index({ project: 1, date: 1 }, { name: "project_date_lookup" });
