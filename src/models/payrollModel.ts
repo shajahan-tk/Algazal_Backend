@@ -4,11 +4,23 @@ export interface IPayroll extends Document {
   employee: Types.ObjectId;
   labourCard: string;
   labourCardPersonalNo: string;
-  period: string; // Format like "01-2023" or "January 2023"
+  period: string;
+
+  // Earnings
   allowance: number;
-  deduction: number;
-  mess: number;
-  advance: number;
+  transport: number;
+  overtime: number;
+  specialOT: number;
+  medical: number;
+  bonus: number;
+
+  // Deductions
+  mess: number; // Food Allowance
+  salaryAdvance: number;
+  loanDeduction: number;
+  fineAmount: number;
+  visaDeduction: number; // NEW FIELD
+
   net: number;
   remark?: string;
   createdBy: Types.ObjectId;
@@ -18,65 +30,114 @@ export interface IPayroll extends Document {
 
 const payrollSchema = new Schema<IPayroll>(
   {
-    employee: { 
-      type: Schema.Types.ObjectId, 
+    employee: {
+      type: Schema.Types.ObjectId,
       ref: "User",
-      required: true 
+      required: true
     },
-    labourCard: { 
-      type: String, 
+    labourCard: {
+      type: String,
       required: true,
       trim: true
     },
-    labourCardPersonalNo: { 
-      type: String, 
+    labourCardPersonalNo: {
+      type: String,
       required: true,
       trim: true
     },
-    period: { 
-      type: String, 
+    period: {
+      type: String,
       required: true,
       trim: true
     },
-    allowance: { 
-      type: Number, 
-      required: true, 
-      min: 0 
+
+    // Earnings
+    allowance: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0
     },
-    deduction: { 
-      type: Number, 
-      required: true, 
-      min: 0 
+    transport: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0
     },
-    mess: { 
-      type: Number, 
-      required: true, 
-      min: 0 
+    overtime: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0
     },
-    advance: { 
-      type: Number, 
-      required: true, 
-      min: 0 
+    specialOT: {
+      type: Number,
+      default: 0,
     },
-    net: { 
-      type: Number, 
-      required: true 
+    medical: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0
     },
-    remark: { 
+    bonus: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0
+    },
+
+    // Deductions
+    mess: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0
+    },
+    salaryAdvance: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0
+    },
+    loanDeduction: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0
+    },
+    fineAmount: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0
+    },
+    visaDeduction: { // NEW FIELD
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0
+    },
+
+    net: {
+      type: Number,
+      required: true
+    },
+    remark: {
       type: String,
       trim: true
     },
-    createdBy: { 
-      type: Schema.Types.ObjectId, 
+    createdBy: {
+      type: Schema.Types.ObjectId,
       ref: "User",
-      required: true 
+      required: true
     }
   },
-  { 
+  {
     timestamps: true,
     toJSON: {
       virtuals: true,
-      transform: function(doc, ret) {
+      transform: function (doc, ret) {
         delete ret.__v;
         return ret;
       }

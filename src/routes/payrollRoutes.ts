@@ -5,8 +5,11 @@ import {
   getPayroll,
   updatePayroll,
   deletePayroll,
-  exportPayrollsToExcel
+  exportPayrollsToExcel,
+  generatePayslipPDF, 
+  getPayslipData 
 } from "../controllers/payrollController";
+
 import { authenticate, authorize } from "../middlewares/authMiddleware";
 
 const router = express.Router();
@@ -26,6 +29,20 @@ router.get("/", getPayrolls);
 
 // Export payrolls to Excel
 router.get("/export/excel", exportPayrollsToExcel);
+
+// Generate payslip PDF (must come before /:id routes)
+router.get(
+  "/:id/pdf",
+  authorize(["super_admin", "admin", "accountant", "finance"]),
+  generatePayslipPDF
+);
+
+// Get payslip data (preview) (must come before /:id routes)
+router.get(
+  "/:id/data",
+  authorize(["super_admin", "admin", "accountant", "finance"]),
+  getPayslipData
+);
 
 // Get single payroll record
 router.get("/:id", getPayroll);

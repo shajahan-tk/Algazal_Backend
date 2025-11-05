@@ -57,7 +57,7 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use(morgan("dev")); // Logging
+app.use(morgan("common")); // Logging
 app.get("/", (req, res) => {
   console.log("Test log route hit"); // This should appear in console
   res.send("Test log");
@@ -102,7 +102,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 //   res.sendFile("/var/www/kmcc-frontend/dist/index.html");
 // });
 connectDb().then(() => {
-  app.listen(4002, () => {
+  app.listen(4001, () => {
     console.log(`Server is running on port ${process.env.PORT}`);
   });
 });

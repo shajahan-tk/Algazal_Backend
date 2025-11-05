@@ -887,6 +887,11 @@ const generateQuotationPdfBuffer = async (
     return description.replace(/\n\n+/g, '\n').trim();
   };
 
+  // Function to format currency with proper spacing
+  const formatCurrency = (amount: number) => {
+    return amount.toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,');
+  };
+
   let htmlContent = `<!DOCTYPE html>
 <html>
 <head>
@@ -894,13 +899,13 @@ const generateQuotationPdfBuffer = async (
   <style type="text/css">
     @page {
       size: A4;
-      margin: 0.5cm;
+      margin: 0.3cm;
     }
     
     body {
       font-family: 'Arial', sans-serif;
-      font-size: 11pt;
-      line-height: 1.4;
+      font-size: 10pt;
+      line-height: 1.3;
       color: #333;
       margin: 0;
       padding: 0;
@@ -913,29 +918,28 @@ const generateQuotationPdfBuffer = async (
     }
 
     .content {
-      margin-bottom: 15px;
+      margin-bottom: 10px;
     }
 
     .header {
       display: flex;
       align-items: center;
       justify-content: center;
-      margin-bottom: 15px;
-      gap: 20px;
+      margin-bottom: 10px;
+      gap: 15px;
       page-break-after: avoid;
-      padding: 10px 0;
-      border-bottom: 3px solid #94d7f4;
+      padding: 8px 0;
+      border-bottom: 2px solid #94d7f4;
       position: relative;
     }
 
     .logo {
-      height: 50px;
+      height: 40px;
       width: auto;
-      max-width: 150px;
+      max-width: 120px;
       object-fit: contain;
       position: absolute;
       left: 0;
-      top:-12px;
     }
 
     .company-names {
@@ -948,44 +952,44 @@ const generateQuotationPdfBuffer = async (
     }
 
     .company-name-arabic {
-      font-size: 20pt;
+      font-size: 16pt;
       font-weight: bold;
       color: #1a1a1a;
-      line-height: 1.3;
+      line-height: 1.2;
       direction: rtl;
       unicode-bidi: bidi-override;
       letter-spacing: 0;
-      margin-bottom: 5px;
+      margin-bottom: 3px;
     }
 
     .company-name-english {
-      font-size: 10pt;
+      font-size: 9pt;
       font-weight: bold;
       color: #1a1a1a;
-      line-height: 1.3;
-      letter-spacing: 0.08em;
+      line-height: 1.2;
+      letter-spacing: 0.06em;
       text-transform: uppercase;
     }
 
     .client-info-container {
       display: flex;
-      margin-bottom: 8px;
-      gap: 15px;
+      margin-bottom: 6px;
+      gap: 12px;
       page-break-after: avoid;
     }
 
     .client-info {
       flex: 1;
-      padding: 8px 10px;
+      padding: 6px 8px;
       border: 1px solid #ddd;
-      border-radius: 4px;
-      font-size: 9.5pt;
+      border-radius: 3px;
+      font-size: 9pt;
       background-color: #f8f9fa;
     }
 
     .client-info p {
-      margin: 4px 0;
-      line-height: 1.3;
+      margin: 3px 0;
+      line-height: 1.2;
     }
 
     .client-info strong {
@@ -994,13 +998,13 @@ const generateQuotationPdfBuffer = async (
     }
 
     .quotation-info {
-      width: 220px;
+      width: 200px;
     }
 
     .quotation-details {
       width: 100%;
       border-collapse: collapse;
-      font-size: 9.5pt;
+      font-size: 9pt;
     }
 
     .quotation-details tr:not(:last-child) {
@@ -1008,7 +1012,7 @@ const generateQuotationPdfBuffer = async (
     }
 
     .quotation-details td {
-      padding: 6px 8px;
+      padding: 4px 6px;
       vertical-align: top;
     }
 
@@ -1019,52 +1023,59 @@ const generateQuotationPdfBuffer = async (
     }
 
     .subject-section {
-      margin: 8px 0;
-      padding: 8px 10px;
+      margin: 6px 0;
+      padding: 6px 12px;
       background-color: #f8f9fa;
-      border-radius: 4px;
+      border-radius: 3px;
       page-break-after: avoid;
+      page-break-inside: avoid;
+      border-left: 4px solid #94d7f4;
+      border-right: 4px solid #94d7f4;
+      background: linear-gradient(to right, #f0f8ff 0%, #f8f9fa 50%, #f0f8ff 100%);
     }
 
     .subject-title {
       font-weight: bold;
-      font-size: 10.5pt;
-      margin-bottom: 4px;
-      color: #2c3e50;
+      font-size: 9.5pt;
+      margin-bottom: 3px;
+      color: #2c5aa0;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
     .subject-content {
-      font-size: 10pt;
+      font-size: 9pt;
       color: #333;
       font-weight: 500;
+      padding-left: 4px;
     }
 
     .section {
-      margin-bottom: 12px;
+      margin-bottom: 8px;
       page-break-inside: avoid;
     }
 
     .section-title {
-      font-size: 11pt;
+      font-size: 10pt;
       font-weight: bold;
-      padding: 4px 0;
-      margin: 8px 0 6px 0;
-      border-bottom: 2px solid #94d7f4;
+      padding: 3px 0;
+      margin: 6px 0 4px 0;
+      border-bottom: 1px solid #94d7f4;
       page-break-after: avoid;
       color: #2c3e50;
     }
 
     .table-container {
-      page-break-inside: auto;
+      page-break-inside: avoid;
       overflow: visible;
     }
 
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 10px;
-      page-break-inside: auto;
-      font-size: 9.5pt;
+      margin-bottom: 8px;
+      page-break-inside: avoid;
+      font-size: 9pt;
       table-layout: fixed;
     }
 
@@ -1078,34 +1089,33 @@ const generateQuotationPdfBuffer = async (
 
     tr {
       page-break-inside: avoid;
-      page-break-after: auto;
     }
 
     th, td {
       page-break-inside: avoid;
-      page-break-before: auto;
     }
 
     th {
       background-color: #94d7f4;
       color: #000;
       font-weight: bold;
-      padding: 5px 6px;
+      padding: 4px 5px;
       text-align: center;
       border: 1px solid #ddd;
-      font-size: 9.5pt;
+      font-size: 9pt;
       vertical-align: middle;
     }
 
     td {
-      padding: 5px 6px;
+      padding: 4px 5px;
       border: 1px solid #ddd;
       vertical-align: top;
-      font-size: 9.5pt;
+      font-size: 9pt;
     }
 
     .col-desc {
       white-space: pre-wrap;
+      line-height: 1.2;
     }
 
     .col-no { width: 5%; }
@@ -1116,79 +1126,96 @@ const generateQuotationPdfBuffer = async (
     .col-total { width: 15%; }
 
     .amount-summary {
-      margin-top: 8px;
+      margin-top: 6px;
       width: 100%;
       text-align: right;
-      page-break-before: avoid;
-      font-size: 10pt;
+      page-break-inside: avoid;
+      font-size: 9.5pt;
     }
 
     .amount-summary-row {
       display: flex;
-      justify-content: flex-end;
-      margin-bottom: 4px;
+      justify-content: space-between;
+      margin-bottom: 3px;
+      align-items: center;
     }
 
     .amount-label {
-      width: 120px;
       font-weight: bold;
-      text-align: right;
-      padding-right: 10px;
-      font-size: 9.5pt;
+      text-align: left;
+      font-size: 9pt;
+      min-width: 120px;
     }
 
     .amount-value {
-      width: 90px;
       text-align: right;
-      font-size: 9.5pt;
+      font-size: 9pt;
+      font-weight: normal;
+      font-family: 'Arial', sans-serif;
+      min-width: 150px;
+      white-space: nowrap;
     }
 
     .net-amount-row {
       display: flex;
-      justify-content: flex-end;
+      justify-content: space-between;
       background-color: #94d7f4;
       color: #000;
       font-weight: bold;
-      font-size: 10pt;
-      margin-top: 4px;
-      padding: 4px 0;
-      border-top: 2px solid #333;
+      font-size: 9.5pt;
+      margin-top: 3px;
+      padding: 4px 8px;
+      border-top: 1px solid #333;
+      border-radius: 3px;
     }
 
+    .net-amount-row .amount-value {
+      font-weight: bold;
+      font-family: 'Arial', sans-serif;
+    }
+
+    /* Enhanced Images Section */
     .images-section {
-      margin-top: 10px;
+      margin-top: 8px;
       page-break-inside: avoid;
     }
 
     .images-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 12px;
+      display: block;
       margin-top: 4px;
     }
 
+    .images-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+      page-break-inside: avoid;
+    }
+
     .image-item {
+      flex: 1;
+      max-width: calc(33.333% - 6px);
       display: flex;
       flex-direction: column;
       align-items: center;
       page-break-inside: avoid;
       border: 1px solid #ddd;
-      border-radius: 6px;
-      padding: 8px;
+      border-radius: 4px;
+      padding: 6px;
       background: #fafafa;
       min-height: 0;
     }
 
     .image-container {
       width: 100%;
-      height: 140px;
+      height: 100px;
       display: flex;
       align-items: center;
       justify-content: center;
       overflow: hidden;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
       background: #fff;
-      border-radius: 4px;
+      border-radius: 3px;
     }
 
     .image-container img {
@@ -1198,27 +1225,14 @@ const generateQuotationPdfBuffer = async (
     }
 
     .image-title {
-      font-size: 8.5pt;
+      font-size: 8pt;
       font-weight: 600;
       text-align: center;
       color: #2c3e50;
-      line-height: 1.2;
+      line-height: 1.1;
       margin: 0;
       word-break: break-word;
-      max-height: 32px;
-      overflow: hidden;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-    }
-
-    .image-description {
-      font-size: 7.5pt;
-      text-align: center;
-      color: #666;
-      line-height: 1.2;
-      margin: 2px 0 0 0;
-      max-height: 20px;
+      max-height: 28px;
       overflow: hidden;
       display: -webkit-box;
       -webkit-line-clamp: 2;
@@ -1226,7 +1240,7 @@ const generateQuotationPdfBuffer = async (
     }
 
     .terms-prepared-section {
-      margin-top: 12px;
+      margin-top: 8px;
       page-break-inside: avoid;
     }
 
@@ -1234,14 +1248,14 @@ const generateQuotationPdfBuffer = async (
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding-bottom: 4px;
-      border-bottom: 2px solid #94d7f4;
-      margin-bottom: 8px;
+      padding-bottom: 3px;
+      border-bottom: 1px solid #94d7f4;
+      margin-bottom: 6px;
       page-break-after: avoid;
     }
 
     .terms-title, .prepared-title {
-      font-size: 10pt;
+      font-size: 9.5pt;
       font-weight: bold;
       margin: 0;
       color: #2c3e50;
@@ -1249,7 +1263,7 @@ const generateQuotationPdfBuffer = async (
 
     .terms-prepared-content {
       display: flex;
-      gap: 15px;
+      gap: 12px;
       align-items: flex-start;
     }
 
@@ -1258,41 +1272,41 @@ const generateQuotationPdfBuffer = async (
     }
 
     .prepared-content {
-      width: 200px;
+      width: 180px;
       flex-shrink: 0;
       display: flex;
       flex-direction: column;
       align-items: flex-end;
-      font-size: 9.5pt;
+      font-size: 9pt;
     }
 
     .terms-box {
       border: 1px solid #000;
-      padding: 8px 10px;
+      padding: 6px 8px;
       width: 100%;
       box-sizing: border-box;
-      font-size: 9.5pt;
-      line-height: 1.4;
+      font-size: 9pt;
+      line-height: 1.3;
     }
 
     .terms-box ol {
       margin: 0;
-      padding-left: 15px;
+      padding-left: 12px;
     }
 
     .terms-box li {
-      margin-bottom: 4px;
+      margin-bottom: 3px;
     }
 
     .prepared-by-name {
       font-weight: bold;
-      margin-top: 4px;
-      font-size: 10pt;
+      margin-top: 3px;
+      font-size: 9.5pt;
       color: #2c3e50;
     }
 
     .prepared-by-title {
-      font-size: 9pt;
+      font-size: 8.5pt;
       color: #555;
       margin-top: 2px;
     }
@@ -1300,25 +1314,25 @@ const generateQuotationPdfBuffer = async (
     .tagline {
       text-align: center;
       font-weight: bold;
-      font-size: 11pt;
-      margin: 15px 0 8px 0;
+      font-size: 10pt;
+      margin: 10px 0 6px 0;
       color: #2c3e50;
-      border-top: 2px solid #ddd;
-      padding-top: 8px;
+      border-top: 1px solid #ddd;
+      padding-top: 6px;
       page-break-before: avoid;
     }
 
     .footer {
-      font-size: 8.5pt;
+      font-size: 8pt;
       color: #555;
       text-align: center;
-      margin-top: 8px;
+      margin-top: 6px;
       page-break-inside: avoid;
-      line-height: 1.3;
+      line-height: 1.2;
     }
 
     .footer p {
-      margin: 4px 0;
+      margin: 3px 0;
     }
 
     .footer strong {
@@ -1334,8 +1348,8 @@ const generateQuotationPdfBuffer = async (
     }
 
     p {
-      margin: 4px 0;
-      line-height: 1.3;
+      margin: 3px 0;
+      line-height: 1.2;
     }
 
     strong {
@@ -1351,12 +1365,15 @@ const generateQuotationPdfBuffer = async (
       }
       
       table {
-        page-break-inside: auto;
+        page-break-inside: avoid;
       }
       
       tr {
         break-inside: avoid;
-        break-after: auto;
+      }
+
+      tbody tr {
+        page-break-inside: avoid;
       }
 
       .subject-section {
@@ -1364,12 +1381,8 @@ const generateQuotationPdfBuffer = async (
         page-break-inside: avoid;
       }
 
-      .items-section {
-        page-break-before: auto;
-      }
-
       body {
-        font-size: 10pt;
+        font-size: 9pt;
         margin: 0;
         padding: 0;
       }
@@ -1383,25 +1396,25 @@ const generateQuotationPdfBuffer = async (
         page-break-inside: avoid;
       }
 
-      .images-grid {
+      .images-row {
+        page-break-inside: avoid;
         break-inside: avoid;
       }
     }
 
-    .page-break {
-      page-break-before: always;
+    .no-break {
+      page-break-inside: avoid;
     }
 
-    .header-section {
-      page-break-after: avoid;
-      page-break-inside: avoid;
+    .compact {
+      margin-bottom: 6px;
     }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="content">
-      <div class="header-section">
+      <div class="header-section no-break">
         <div class="header">
           <img class="logo" src="https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/sample-spmc/logo+(1).png" alt="Company Logo">
           <div class="company-names">
@@ -1444,7 +1457,7 @@ const generateQuotationPdfBuffer = async (
         </div>
       </div>
 
-      <div class="section items-section">
+      <div class="section no-break">
         <div class="section-title">ITEMS</div>
         <div class="table-container">
           <table>
@@ -1465,8 +1478,8 @@ const generateQuotationPdfBuffer = async (
                   <td class="col-desc">${cleanDescription(item.description)}</td>
                   <td class="text-center col-uom">${item.uom || "NOS"}</td>
                   <td class="text-center col-qty">${item.quantity.toFixed(2)}</td>
-                  <td class="text-right col-unit">${item.unitPrice.toFixed(2)}</td>
-                  <td class="text-right col-total">${item.totalPrice.toFixed(2)}</td>
+                  <td class="text-right col-unit">${formatCurrency(item.unitPrice)}</td>
+                  <td class="text-right col-total">${formatCurrency(item.totalPrice)}</td>
                 </tr>
               `).join("")}
             </tbody>
@@ -1476,37 +1489,48 @@ const generateQuotationPdfBuffer = async (
         <div class="amount-summary">
           <div class="amount-summary-row">
             <div class="amount-label">SUBTOTAL:</div>
-            <div class="amount-value">${subtotal.toFixed(2)} AED&nbsp;</div>
+            <div class="amount-value">${formatCurrency(subtotal)} AED</div>
           </div>
           <div class="amount-summary-row">
             <div class="amount-label">VAT ${quotation.vatPercentage}%:</div>
-            <div class="amount-value">${vatAmount.toFixed(2)} AED&nbsp;</div>
+            <div class="amount-value">${formatCurrency(vatAmount)} AED</div>
           </div>
           <div class="net-amount-row">
             <div class="amount-label">NET AMOUNT:</div>
-            <div class="amount-value">${netAmount.toFixed(2)} AED&nbsp;</div>
+            <div class="amount-value">${formatCurrency(netAmount)} AED</div>
           </div>
         </div>
       </div>
 
       ${quotation.images && quotation.images.length > 0 ? `
-      <div class="section images-section">
+      <div class="section images-section no-break">
         <div class="section-title">QUOTATION IMAGES</div>
         <div class="images-grid">
-          ${quotation.images.map((image: any) => `
-            <div class="image-item">
-              <div class="image-container">
-                <img src="${image.imageUrl}" alt="${image.title}" />
-              </div>
-              <div class="image-title">${image.title}</div>
-            </div>
-          `).join('')}
+          ${(() => {
+            let html = '';
+            for (let i = 0; i < quotation.images.length; i += 3) {
+              const rowImages = quotation.images.slice(i, i + 3);
+              html += '<div class="images-row">';
+              rowImages.forEach((image:any) => {
+                html += `
+                  <div class="image-item">
+                    <div class="image-container">
+                      <img src="${image.imageUrl}" alt="${image.title}" />
+                    </div>
+                    <div class="image-title">${image.title}</div>
+                  </div>
+                `;
+              });
+              html += '</div>';
+            }
+            return html;
+          })()}
         </div>
       </div>
       ` : ''}
 
       ${quotation.termsAndConditions && quotation.termsAndConditions.length > 0 ? `
-      <div class="terms-prepared-section">
+      <div class="terms-prepared-section no-break">
         <div class="terms-prepared-header">
           <div class="terms-title">TERMS & CONDITIONS</div>
           <div class="prepared-title">PREPARED BY</div>
@@ -1528,7 +1552,7 @@ const generateQuotationPdfBuffer = async (
         </div>
       </div>
       ` : `
-      <div class="section">
+      <div class="section no-break">
         <div class="section-title">PREPARED BY</div>
         <div class="prepared-content">
           <div class="prepared-by-name">${preparedBy?.firstName || "N/A"} ${preparedBy?.lastName || ""}</div>
@@ -1571,10 +1595,10 @@ const generateQuotationPdfBuffer = async (
       format: "A4",
       printBackground: true,
       margin: {
-        top: "0.5cm",
-        right: "0.5cm",
-        bottom: "0.5cm",
-        left: "0.5cm",
+        top: "0.3cm",
+        right: "0.3cm",
+        bottom: "0.3cm",
+        left: "0.3cm",
       },
       displayHeaderFooter: false,
       preferCSSPageSize: true,

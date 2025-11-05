@@ -1,23 +1,193 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../utils/asyncHandler";
-import { ApiResponse } from "../utils/apiHandlerHelpers";
-import { ApiError } from "../utils/apiHandlerHelpers";
+import { ApiResponse, ApiError } from "../utils/apiHandlerHelpers";
 import { ProjectProfit } from "../models/projectProfitModel";
+import { Project } from "../models/projectModel";
+import { LPO } from "../models/lpoModel";
+import { IUser } from "../models/userModel";
+import ExcelJS from "exceljs";
 import {
   handleMultipleFileUploads,
   deleteFileFromS3,
   getS3KeyFromUrl,
 } from "../utils/uploadConf";
-import ExcelJS from "exceljs";
-import { IUser } from "../models/userModel";
+
+export const getProjects = asyncHandler(async (req: Request, res: Response) => {
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+  const skip = (page - 1) * limit;
+
+  // Build filter
+  const filter: any = {};
+
+  if (req.query.status) filter.status = req.query.status;
+  if (req.query.client) filter.client = req.query.client;
+
+  if (req.query.search) {
+    const searchTerm = req.query.search as string;
+    filter.$or = [
+      { projectName: { $regex: searchTerm, $options: "i" } },
+      { projectDescription: { $regex: searchTerm, $options: "i" } },
+      { location: { $regex: searchTerm, $options: "i" } },
+      { building: { $regex: searchTerm, $options: "i" } },
+      { apartmentNumber: { $regex: searchTerm, $options: "i" } },
+      { projectNumber: { $regex: searchTerm, $options: "i" } },
+    ];
+  }
+
+  // Count total
+  const total = await Project.countDocuments(filter);
+
+  // Use aggregation to fetch projects + LPO number + Quotation amount
+  const projects = await Project.aggregate([
+    { $match: filter },
+
+    // Sort by latest created
+    { $sort: { createdAt: -1 } },
+
+    // Pagination
+    { $skip: skip },
+    { $limit: limit },
+
+    // Lookup client info
+    {
+      $lookup: {
+        from: "clients",
+        localField: "client",
+        foreignField: "_id",
+        as: "client",
+      },
+    },
+    { $unwind: "$client" },
+
+    // Lookup LPO info (for each project)
+    {
+      $lookup: {
+        from: "lpos",
+        localField: "_id",
+        foreignField: "project",
+        as: "lpoData",
+      },
+    },
+
+    // Lookup Quotation info (for each project)
+    {
+      $lookup: {
+        from: "quotations",
+        localField: "_id",
+        foreignField: "project",
+        as: "quotationData",
+      },
+    },
+
+    // Add LPO and Quotation fields
+    {
+      $addFields: {
+        lpoNumber: { $arrayElemAt: ["$lpoData.lpoNumber", 0] },
+        quotationAmount: { $arrayElemAt: ["$quotationData.netAmount", 0] },
+        quotationNumber: { $arrayElemAt: ["$quotationData.quotationNumber", 0] },
+      },
+    },
+
+    // Optionally remove extra fields
+    {
+      $project: {
+        lpoData: 0, // hide full LPO data
+        quotationData: 0, // hide full quotation data
+      },
+    },
+  ]);
+
+  res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        projects,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+          hasNextPage: page * limit < total,
+          hasPreviousPage: page > 1,
+        },
+      },
+      "Projects retrieved successfully"
+    )
+  );
+});
+
 export const createProjectProfit = asyncHandler(
   async (req: Request, res: Response) => {
-    const { projectName, poNumber, startDate, budget, expenses, description } = req.body;
+    let projectId: string;
+    let reportPeriodStart: string;
+    let reportPeriodEnd: string;
+    let budget: string | number;
+    let expenses: string | number;
+    let description: string;
+    let lpoId: string;
 
-    if (!projectName || !poNumber || !startDate || budget === undefined) {
-      throw new ApiError(400, "Required fields are missing");
+    try {
+      console.log("=== CREATE PROJECT PROFIT ===");
+      console.log("Request body:", req.body);
+      console.log("Request files:", req.files);
+      console.log("User:", req.user);
+      
+      // Destructure and assign to outer variables
+      ({ 
+        projectId, 
+        reportPeriodStart, 
+        reportPeriodEnd, 
+        budget, 
+        expenses, 
+        description,
+        lpoId 
+      } = req.body);
+
+      // Detailed validation with specific error messages
+      if (!projectId) {
+        console.error("Validation failed: Project ID is missing");
+        throw new ApiError(400, "Project ID is required");
+      }
+      
+      if (!reportPeriodStart) {
+        console.error("Validation failed: Report period start date is missing");
+        throw new ApiError(400, "Report period start date is required");
+      }
+      
+      if (!reportPeriodEnd) {
+        console.error("Validation failed: Report period end date is missing");
+        throw new ApiError(400, "Report period end date is required");
+      }
+      
+      if (budget === undefined || budget === null || budget === '') {
+        console.error("Validation failed: Budget is missing or invalid:", budget);
+        throw new ApiError(400, "Budget is required");
+      }
+      
+      // Validate that budget is a valid number
+      const budgetNum = Number(budget);
+      if (isNaN(budgetNum)) {
+        console.error("Validation failed: Budget is not a valid number:", budget);
+        throw new ApiError(400, "Budget must be a valid number");
+      }
+      
+      console.log("Validation passed, fetching project...");
+    } catch (error) {
+      console.error("Error in createProjectProfit:", error);
+      throw error;
     }
 
+    // Fetch project with populated client
+    const project = await Project.findById(projectId).populate("client");
+    if (!project) {
+      throw new ApiError(404, "Project not found");
+    }
+
+    // Don't store LPO number in project profit - just reference the LPO ID
+    // We'll fetch the LPO data when needed
+
+    // Handle file uploads
     let attachments: Array<{ fileName: string; fileType: string; filePath: string }> = [];
     const files = Array.isArray(req.files) ? req.files : req.files ? Object.values(req.files).flat() : [];
 
@@ -33,12 +203,27 @@ export const createProjectProfit = asyncHandler(
       })) || [];
     }
 
+    // Calculate report month (first day of the month)
+    const reportMonth = new Date(reportPeriodStart);
+    reportMonth.setDate(1);
+    reportMonth.setHours(0, 0, 0, 0);
+
+    // Create project profit WITHOUT storing LPO number
     const projectProfit = await ProjectProfit.create({
-      projectName,
-      poNumber,
-      startDate: new Date(startDate),
-      budget,
-      expenses: expenses || 0,
+      project: projectId,
+      projectName: project.projectName,
+      projectNumber: project.projectNumber,
+      clientName: (project.client as any).clientName,
+      location: project.location,
+      building: project.building,
+      apartmentNumber: project.apartmentNumber,
+      // Only store lpoId reference, not lpoNumber
+      lpoId: lpoId || undefined,
+      reportMonth,
+      reportPeriodStart: new Date(reportPeriodStart),
+      reportPeriodEnd: new Date(reportPeriodEnd),
+      budget: Number(budget),
+      expenses: Number(expenses) || 0,
       description,
       attachments,
       createdBy: req.user?.userId,
@@ -50,7 +235,6 @@ export const createProjectProfit = asyncHandler(
   }
 );
 
-
 export const getProjectProfits = asyncHandler(
   async (req: Request, res: Response) => {
     const { 
@@ -60,7 +244,8 @@ export const getProjectProfits = asyncHandler(
       startDate, 
       endDate, 
       minProfit, 
-      maxProfit, 
+      maxProfit,
+      projectId,
       page = 1, 
       limit = 10 
     } = req.query;
@@ -68,19 +253,25 @@ export const getProjectProfits = asyncHandler(
 
     const filter: any = {};
 
+    // Project filter
+    if (projectId) {
+      filter.project = projectId;
+    }
+
     // Search filter
     if (search) {
       const searchRegex = new RegExp(search as string, "i");
       filter.$or = [
         { projectName: searchRegex },
-        { poNumber: searchRegex },
+        { projectNumber: searchRegex },
         { description: searchRegex },
+        { clientName: searchRegex },
       ];
     }
 
     // Date range filter (takes precedence over year/month)
     if (startDate && endDate) {
-      filter.startDate = {
+      filter.reportMonth = {
         $gte: new Date(startDate as string),
         $lte: new Date(endDate as string),
       };
@@ -91,7 +282,7 @@ export const getProjectProfits = asyncHandler(
         if (isNaN(yearNum)) {
           throw new ApiError(400, "Invalid year value");
         }
-        filter.startDate = {
+        filter.reportMonth = {
           $gte: new Date(yearNum, 0, 1),
           $lte: new Date(yearNum + 1, 0, 1),
         };
@@ -104,24 +295,22 @@ export const getProjectProfits = asyncHandler(
           throw new ApiError(400, "Invalid month value (1-12)");
         }
 
-        if (!filter.startDate) {
-          // If no year specified, use current year
+        if (!filter.reportMonth) {
           const currentYear = new Date().getFullYear();
-          filter.startDate = {
+          filter.reportMonth = {
             $gte: new Date(currentYear, monthNum - 1, 1),
             $lt: new Date(currentYear, monthNum, 1),
           };
         } else {
-          // Adjust existing year filter to specific month
-          const startDate = new Date(filter.startDate.$gte);
+          const startDate = new Date(filter.reportMonth.$gte);
           startDate.setMonth(monthNum - 1);
           startDate.setDate(1);
 
           const endDate = new Date(startDate);
           endDate.setMonth(monthNum);
 
-          filter.startDate.$gte = startDate;
-          filter.startDate.$lte = endDate;
+          filter.reportMonth.$gte = startDate;
+          filter.reportMonth.$lte = endDate;
         }
       }
     }
@@ -150,17 +339,44 @@ export const getProjectProfits = asyncHandler(
       },
     ]);
 
-    const projects = await ProjectProfit.find(filter)
-      .skip(skip)
-      .limit(Number(limit))
-      .sort({ startDate: -1 })
-      .populate("createdBy", "firstName lastName");
+    // Get project profits with populated LPO data
+    const projects = await ProjectProfit.aggregate([
+      { $match: filter },
+      { $skip: skip },
+      { $limit: Number(limit) },
+      { $sort: { reportMonth: -1 } },
+      // Lookup LPO data to get lpoNumber
+      {
+        $lookup: {
+          from: "lpos",
+          localField: "lpoId",
+          foreignField: "_id",
+          as: "lpoData",
+        },
+      },
+      {
+        $addFields: {
+          lpoNumber: { $arrayElemAt: ["$lpoData.lpoNumber", 0] },
+        },
+      },
+      {
+        $project: {
+          lpoData: 0, // Remove the full LPO data array
+        },
+      },
+    ]);
+
+    // Populate createdBy and project separately
+    const populatedProjects = await ProjectProfit.populate(projects, [
+      { path: "createdBy", select: "firstName lastName" },
+      { path: "project", select: "projectName projectNumber" },
+    ]);
 
     res.status(200).json(
       new ApiResponse(
         200,
         {
-          projects,
+          projects: populatedProjects,
           totals: totals[0] || { totalBudget: 0, totalExpenses: 0, totalProfit: 0 },
           pagination: {
             total,
@@ -181,10 +397,10 @@ export const getProjectProfit = asyncHandler(
   async (req: Request, res: Response) => {
     const { id } = req.params;
 
-    const project = await ProjectProfit.findById(id).populate(
-      "createdBy",
-      "firstName lastName"
-    );
+    const project = await ProjectProfit.findById(id)
+      .populate("createdBy", "firstName lastName")
+      .populate("project", "projectName projectNumber")
+      .populate("lpoId", "lpoNumber"); // Populate LPO to get lpoNumber
 
     if (!project) {
       throw new ApiError(404, "Project profit record not found");
@@ -205,8 +421,8 @@ export const updateProjectProfit = asyncHandler(
     const { id } = req.params;
     const updateData = req.body;
 
-    const project = await ProjectProfit.findById(id);
-    if (!project) {
+    const projectProfit = await ProjectProfit.findById(id);
+    if (!projectProfit) {
       throw new ApiError(404, "Project profit record not found");
     }
 
@@ -236,24 +452,18 @@ export const updateProjectProfit = asyncHandler(
         })) || [];
     }
 
-    // Handle attachment deletions if specified
-    if (
-      updateData.deletedAttachments &&
-      updateData.deletedAttachments.length > 0
-    ) {
+    // Handle attachment deletions
+    if (updateData.deletedAttachments && updateData.deletedAttachments.length > 0) {
       await Promise.all(
         updateData.deletedAttachments.map(async (attachmentId: string) => {
-          const attachment = project.attachments.id(attachmentId);
+          const attachment = projectProfit.attachments.id(attachmentId);
           if (attachment) {
             try {
               const key = getS3KeyFromUrl(attachment.filePath);
               await deleteFileFromS3(key);
-              project.attachments.pull(attachmentId);
+              projectProfit.attachments.pull(attachmentId);
             } catch (error) {
-              console.error(
-                `Failed to delete file from S3: ${attachment.filePath}`,
-                error
-              );
+              console.error(`Failed to delete file from S3: ${attachment.filePath}`, error);
             }
           }
         })
@@ -266,30 +476,44 @@ export const updateProjectProfit = asyncHandler(
       $push: { attachments: { $each: newAttachments } },
     };
 
-    // Convert dates if they exist in updateData
-    if (updateData.startDate) {
-      updatePayload.startDate = new Date(updateData.startDate);
+    // Convert dates if they exist
+    if (updateData.reportPeriodStart) {
+      updatePayload.reportPeriodStart = new Date(updateData.reportPeriodStart);
+      
+      const reportMonth = new Date(updateData.reportPeriodStart);
+      reportMonth.setDate(1);
+      reportMonth.setHours(0, 0, 0, 0);
+      updatePayload.reportMonth = reportMonth;
+    }
+    if (updateData.reportPeriodEnd) {
+      updatePayload.reportPeriodEnd = new Date(updateData.reportPeriodEnd);
     }
 
-    // Update the project
+    // Convert numbers
+    if (updateData.budget !== undefined) {
+      updatePayload.budget = Number(updateData.budget);
+    }
+    if (updateData.expenses !== undefined) {
+      updatePayload.expenses = Number(updateData.expenses);
+    }
+
+    // Remove lpoNumber from update payload - we don't store it anymore
+    delete updatePayload.lpoNumber;
+
     const updatedProject = await ProjectProfit.findByIdAndUpdate(
       id,
       updatePayload,
-      {
-        new: true,
-      }
-    ).populate("createdBy", "firstName lastName");
+      { new: true }
+    )
+      .populate("createdBy", "firstName lastName")
+      .populate("lpoId", "lpoNumber"); // Populate LPO to get lpoNumber
 
     if (!updatedProject) {
       throw new ApiError(500, "Failed to update project profit record");
     }
 
     res.status(200).json(
-      new ApiResponse(
-        200,
-        updatedProject,
-        "Project profit updated successfully"
-      )
+      new ApiResponse(200, updatedProject, "Project profit updated successfully")
     );
   }
 );
@@ -342,8 +566,8 @@ export const getProfitSummary = asyncHandler(
         groupStage = {
           $group: {
             _id: {
-              year: { $year: "$startDate" },
-              month: { $month: "$startDate" },
+              year: { $year: "$reportMonth" },
+              month: { $month: "$reportMonth" },
             },
             totalBudget: { $sum: "$budget" },
             totalExpenses: { $sum: "$expenses" },
@@ -356,7 +580,7 @@ export const getProfitSummary = asyncHandler(
         groupStage = {
           $group: {
             _id: {
-              year: { $year: "$startDate" },
+              year: { $year: "$reportMonth" },
             },
             totalBudget: { $sum: "$budget" },
             totalExpenses: { $sum: "$expenses" },
@@ -394,23 +618,27 @@ export const getProfitSummary = asyncHandler(
 
 export const exportProjectProfitsToExcel = asyncHandler(
   async (req: Request, res: Response) => {
-    const { search, month, year, minProfit, maxProfit } = req.query;
+    const { search, month, year, minProfit, maxProfit, projectId } = req.query;
     
     const filter: any = {};
+
+    // Project filter
+    if (projectId) {
+      filter.project = projectId;
+    }
 
     // Search filter
     if (search) {
       const searchRegex = new RegExp(search as string, "i");
       filter.$or = [
         { projectName: searchRegex },
-        { poNumber: searchRegex },
         { description: searchRegex },
+        { clientName: searchRegex },
       ];
     }
 
-    // Date range filter - Fixed implementation
+    // Date filter using reportMonth
     if (month && year) {
-      // Both month and year provided
       const monthNum = parseInt(month as string);
       const yearNum = parseInt(year as string);
       
@@ -421,41 +649,23 @@ export const exportProjectProfitsToExcel = asyncHandler(
         throw new ApiError(400, "Invalid year value");
       }
 
-      // Create start and end dates for the specific month
-      const startDate = new Date(yearNum, monthNum - 1, 1); // First day of month
-      const endDate = new Date(yearNum, monthNum, 0); // Last day of month
+      const startDate = new Date(yearNum, monthNum - 1, 1);
+      const endDate = new Date(yearNum, monthNum, 0);
       
-      filter.startDate = {
+      filter.reportMonth = {
         $gte: startDate,
         $lte: endDate
       };
     } else if (year && !month) {
-      // Only year provided
       const yearNum = parseInt(year as string);
       if (isNaN(yearNum)) {
         throw new ApiError(400, "Invalid year value");
       }
 
-      const startDate = new Date(yearNum, 0, 1); // January 1st of the year
-      const endDate = new Date(yearNum, 11, 31); // December 31st of the year
+      const startDate = new Date(yearNum, 0, 1);
+      const endDate = new Date(yearNum, 11, 31);
       
-      filter.startDate = {
-        $gte: startDate,
-        $lte: endDate
-      };
-    } else if (month && !year) {
-      // Only month provided, use current year
-      const monthNum = parseInt(month as string);
-      const currentYear = new Date().getFullYear();
-      
-      if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
-        throw new ApiError(400, "Invalid month value (1-12)");
-      }
-
-      const startDate = new Date(currentYear, monthNum - 1, 1);
-      const endDate = new Date(currentYear, monthNum, 0);
-      
-      filter.startDate = {
+      filter.reportMonth = {
         $gte: startDate,
         $lte: endDate
       };
@@ -474,34 +684,61 @@ export const exportProjectProfitsToExcel = asyncHandler(
       }
     }
 
-    // Get projects with populated createdBy
-    const projects = await ProjectProfit.find(filter)
-      .sort({ startDate: -1 })
-      .populate<{ createdBy: IUser }>("createdBy", "firstName lastName");
+    // Get projects with populated LPO data
+    const projects = await ProjectProfit.aggregate([
+      { $match: filter },
+      { $sort: { reportMonth: -1 } },
+      // Lookup LPO data to get lpoNumber
+      {
+        $lookup: {
+          from: "lpos",
+          localField: "lpoId",
+          foreignField: "_id",
+          as: "lpoData",
+        },
+      },
+      {
+        $addFields: {
+          lpoNumber: { $arrayElemAt: ["$lpoData.lpoNumber", 0] },
+        },
+      },
+      {
+        $project: {
+          lpoData: 0, // Remove the full LPO data array
+        },
+      },
+    ]);
+
+    // Populate createdBy
+    const populatedProjects = await ProjectProfit.populate(projects, [
+      { path: "createdBy", select: "firstName lastName" },
+    ]);
 
     // Create Excel workbook
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("Project Profits");
 
-    // Define columns with SNO and all required fields
     worksheet.columns = [
       { header: "SNO", key: "sno", width: 5 },
-      { header: "DATE", key: "startDate", width: 12, style: { numFmt: "dd-mm-yyyy" }},
+      { header: "REPORT MONTH", key: "reportMonth", width: 12 },
       { header: "PROJECT NAME", key: "projectName", width: 25 },
-      { header: "PO NUMBER", key: "poNumber", width: 15 },
-      { header: "BUDGET", key: "budget", width: 12, style: { numFmt: "#,##0.00" }},
-      { header: "EXPENSES", key: "expenses", width: 12, style: { numFmt: "#,##0.00" }},
-      { header: "PROFIT", key: "profit", width: 12, style: { numFmt: "#,##0.00" }},
+      { header: "PROJECT NO", key: "projectNumber", width: 15 },
+      { header: "CLIENT", key: "clientName", width: 20 },
+      { header: "LPO NUMBER", key: "lpoNumber", width: 15 },
+      { header: "BUDGET", key: "budget", width: 12 },
+      { header: "EXPENSES", key: "expenses", width: 12 },
+      { header: "PROFIT", key: "profit", width: 12 },
       { header: "REMARKS", key: "description", width: 30 },
     ];
 
-    // Add data rows with SNO
-    projects.forEach((project, index) => {
+    populatedProjects.forEach((project:any, index)  => {
       worksheet.addRow({
         sno: index + 1,
-        startDate: project.startDate,
+        reportMonth: project.reportMonth,
         projectName: project.projectName,
-        poNumber: project.poNumber,
+        projectNumber: project.projectNumber,
+        clientName: project.clientName,
+        lpoNumber: project.lpoNumber || "N/A",
         budget: project.budget,
         expenses: project.expenses,
         profit: project.profit,
@@ -517,18 +754,9 @@ export const exportProjectProfitsToExcel = asyncHandler(
         pattern: "solid",
         fgColor: { argb: "FFD3D3D3" },
       };
-      cell.border = {
-        top: { style: "thin" },
-        left: { style: "thin" },
-        bottom: { style: "thin" },
-        right: { style: "thin" },
-      };
     });
 
-    // Freeze the header row
-    worksheet.views = [{ state: "frozen", ySplit: 1 }];
-
-    // Add totals row
+    // Add totals
     const totals = await ProjectProfit.aggregate([
       { $match: filter },
       {
@@ -542,16 +770,14 @@ export const exportProjectProfitsToExcel = asyncHandler(
     ]);
 
     if (totals.length > 0) {
-      worksheet.addRow([]); // Empty row before totals
+      worksheet.addRow([]);
       const totalRow = worksheet.addRow({
-        sno: "", // Empty for totals row
         projectName: "TOTALS",
         budget: totals[0].totalBudget,
         expenses: totals[0].totalExpenses,
         profit: totals[0].totalProfit,
       });
       
-      // Style totals row
       totalRow.eachCell((cell) => {
         cell.font = { bold: true };
         cell.fill = {
@@ -562,7 +788,6 @@ export const exportProjectProfitsToExcel = asyncHandler(
       });
     }
 
-    // Set response headers
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -572,7 +797,6 @@ export const exportProjectProfitsToExcel = asyncHandler(
       `attachment; filename=project_profits_${new Date().toISOString().split("T")[0]}.xlsx`
     );
 
-    // Send Excel file
     await workbook.xlsx.write(res);
     res.end();
   }

@@ -7,7 +7,7 @@ import { Attendance } from "../models/attendanceModel";
 import { VisaExpense } from "../models/visaExpenseModel";
 import { startOfMonth, endOfMonth, subMonths, format } from "date-fns";
 import { EmployeeExpense } from "../models/employeeExpenseModel";
-import { calculateOvertime } from "./payrollController";
+import { calculatePreviousMonthOvertimeAmount } from "./payrollController";
 
 export const getEmployeeSummary = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
@@ -17,21 +17,23 @@ export const getEmployeeSummary = asyncHandler(async (req: Request, res: Respons
   const user = await User.findById(id).select("-password");
   if (!user) throw new ApiError(404, "User not found");
 
-  // Previous month as period string
-  const now = new Date();
-  const prevMonth = subMonths(now, 1);
-  const period = format(prevMonth, "MM-yyyy"); // "08-2025" for example
+  // Get employee expense details first (needed for overtime calculation)
+  const employeeExpense = await EmployeeExpense.findOne({ employee: user._id });
+  const basicSalary = Number(employeeExpense?.basicSalary) || 0;
+  const allowance = Number(employeeExpense?.allowance) || 0;
 
-  // ✅ Reuse the helper here
-  const totalOvertime = await calculateOvertime(user._id, period);
+  // ✅ Use the updated helper function that calculates overtime AMOUNT for previous month
+  const overtimeData = await calculatePreviousMonthOvertimeAmount(user._id, basicSalary);
 
   const visaExpense = await VisaExpense.findOne({ employee: user._id })
     .sort({ createdAt: -1 })
     .select("labourCardPersonalNumber workPermitNumber passportNumber emirateIdNumber iBan total")
     .lean();
 
-  const employeeExpense = await EmployeeExpense.findOne({ employee: user._id });
-  const basicSalary = Number(employeeExpense?.basicSalary) || 0;
+  // Get current period for display
+  const now = new Date();
+  const prevMonth = subMonths(now, 1);
+  const period = format(prevMonth, "MM-yyyy");
 
   const response = {
     employee: {
@@ -41,6 +43,7 @@ export const getEmployeeSummary = asyncHandler(async (req: Request, res: Respons
       email: user.email,
       role: user.role,
       basicSalary,
+      allowance,
       phoneNumbers: user.phoneNumbers,
       accountNumber: user.accountNumber,
       emiratesId: user.emiratesId,
@@ -49,7 +52,10 @@ export const getEmployeeSummary = asyncHandler(async (req: Request, res: Respons
       address: user.address,
     },
     overtime: {
-      previousMonthTotal: totalOvertime,
+      previousMonthAmount: overtimeData.overtimeAmount, // Amount in AED
+      previousMonthHours: overtimeData.overtimeHours,   // Hours for reference
+      hourlyRate: overtimeData.hourlyRate,              // Hourly rate for reference
+      daysInMonth: overtimeData.daysInMonth,            // Days in previous month
       period,
     },
     visaDetails: visaExpense
