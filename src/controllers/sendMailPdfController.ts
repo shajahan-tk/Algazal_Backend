@@ -10,6 +10,8 @@ import puppeteer from "puppeteer";
 import { WorkCompletion } from "../models/workCompletionModel";
 import { LPO } from "../models/lpoModel";
 
+
+
 export const generateQuotationPdf = asyncHandler(
   async (req: Request, res: Response) => {
     const { id } = req.params;
@@ -64,6 +66,11 @@ export const generateQuotationPdf = asyncHandler(
     // Function to clean up description - remove extra blank lines
     const cleanDescription = (description: string) => {
       return description.replace(/\n\n+/g, '\n').trim();
+    };
+
+    // Function to format currency with proper spacing
+    const formatCurrency = (amount: number) => {
+      return amount.toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,');
     };
 
     let htmlContent = `<!DOCTYPE html>
@@ -334,20 +341,28 @@ export const generateQuotationPdf = asyncHandler(
       border-top: 2px solid #333;
     }
 
-    /* Enhanced Images Section */
+    /* Enhanced Images Section - Fixed equal width */
     .images-section {
       margin-top: 10px;
       page-break-inside: avoid;
     }
 
     .images-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 12px;
+      display: block;
       margin-top: 4px;
     }
 
+    .images-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 12px;
+      page-break-inside: avoid;
+    }
+
     .image-item {
+      flex: 1;
+      min-width: calc(33.333% - 8px);
+      max-width: calc(33.333% - 8px);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -357,6 +372,7 @@ export const generateQuotationPdf = asyncHandler(
       padding: 8px;
       background: #fafafa;
       min-height: 0;
+      box-sizing: border-box;
     }
 
     .image-container {
@@ -563,7 +579,7 @@ export const generateQuotationPdf = asyncHandler(
         page-break-inside: avoid;
       }
 
-      .images-grid {
+      .images-row {
         break-inside: avoid;
       }
     }
@@ -645,8 +661,8 @@ export const generateQuotationPdf = asyncHandler(
                   <td class="col-desc">${cleanDescription(item.description)}</td>
                   <td class="text-center col-uom">${item.uom || "NOS"}</td>
                   <td class="text-center col-qty">${item.quantity.toFixed(2)}</td>
-                  <td class="text-right col-unit">${item.unitPrice.toFixed(2)}</td>
-                  <td class="text-right col-total">${item.totalPrice.toFixed(2)}</td>
+                  <td class="text-right col-unit">${formatCurrency(item.unitPrice)}</td>
+                  <td class="text-right col-total">${formatCurrency(item.totalPrice)}</td>
                 </tr>
               `).join("")}
             </tbody>
@@ -656,15 +672,15 @@ export const generateQuotationPdf = asyncHandler(
         <div class="amount-summary">
           <div class="amount-summary-row">
             <div class="amount-label">SUBTOTAL:</div>
-            <div class="amount-value">${subtotal.toFixed(2)} AED&nbsp;</div>
+            <div class="amount-value">${formatCurrency(subtotal)} AED&nbsp;</div>
           </div>
           <div class="amount-summary-row">
             <div class="amount-label">VAT ${quotation.vatPercentage}%:</div>
-            <div class="amount-value">${vatAmount.toFixed(2)} AED&nbsp;</div>
+            <div class="amount-value">${formatCurrency(vatAmount)} AED&nbsp;</div>
           </div>
           <div class="net-amount-row">
             <div class="amount-label">NET AMOUNT:</div>
-            <div class="amount-value">${netAmount.toFixed(2)} AED&nbsp;</div>
+            <div class="amount-value">${formatCurrency(netAmount)} AED&nbsp;</div>
           </div>
         </div>
       </div>
@@ -673,14 +689,38 @@ export const generateQuotationPdf = asyncHandler(
       <div class="section images-section">
         <div class="section-title">QUOTATION IMAGES</div>
         <div class="images-grid">
-          ${quotation.images.map(image => `
-            <div class="image-item">
-              <div class="image-container">
-                <img src="${image.imageUrl}" alt="${image.title}" />
-              </div>
-              <div class="image-title">${image.title}</div>
-            </div>
-          `).join('')}
+          ${(() => {
+            let html = '';
+            for (let i = 0; i < quotation.images.length; i += 3) {
+              const rowImages = quotation.images.slice(i, i + 3);
+              html += '<div class="images-row">';
+              
+              // Always create 3 image containers per row
+              for (let j = 0; j < 3; j++) {
+                if (j < rowImages.length) {
+                  const image = rowImages[j];
+                  html += `
+                    <div class="image-item">
+                      <div class="image-container">
+                        <img src="${image.imageUrl}" alt="${image.title}" />
+                      </div>
+                      <div class="image-title">${image.title}</div>
+                    </div>
+                  `;
+                } else {
+                  // Add empty placeholder to maintain equal width
+                  html += `
+                    <div class="image-item" style="visibility: hidden;">
+                      <div class="image-container"></div>
+                      <div class="image-title"></div>
+                    </div>
+                  `;
+                }
+              }
+              html += '</div>';
+            }
+            return html;
+          })()}
         </div>
       </div>
       ` : ''}
@@ -1174,7 +1214,7 @@ const generateQuotationPdfBuffer = async (
       font-family: 'Arial', sans-serif;
     }
 
-    /* Enhanced Images Section */
+    /* Enhanced Images Section - Fixed equal width */
     .images-section {
       margin-top: 8px;
       page-break-inside: avoid;
@@ -1194,6 +1234,7 @@ const generateQuotationPdfBuffer = async (
 
     .image-item {
       flex: 1;
+      min-width: calc(33.333% - 6px);
       max-width: calc(33.333% - 6px);
       display: flex;
       flex-direction: column;
@@ -1204,6 +1245,7 @@ const generateQuotationPdfBuffer = async (
       padding: 6px;
       background: #fafafa;
       min-height: 0;
+      box-sizing: border-box;
     }
 
     .image-container {
@@ -1416,7 +1458,7 @@ const generateQuotationPdfBuffer = async (
     <div class="content">
       <div class="header-section no-break">
         <div class="header">
-          <img class="logo" src="https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/sample-spmc/logo+(1).png" alt="Company Logo">
+          <img class="logo" src="https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg" alt="Company Logo">
           <div class="company-names">
             <div class="company-name-arabic">الغزال الأبيض للخدمات الفنية</div>
             <div class="company-name-english">AL GHAZAL AL ABYAD TECHNICAL SERVICES</div>
@@ -1511,16 +1553,29 @@ const generateQuotationPdfBuffer = async (
             for (let i = 0; i < quotation.images.length; i += 3) {
               const rowImages = quotation.images.slice(i, i + 3);
               html += '<div class="images-row">';
-              rowImages.forEach((image:any) => {
-                html += `
-                  <div class="image-item">
-                    <div class="image-container">
-                      <img src="${image.imageUrl}" alt="${image.title}" />
+              
+              // Always create 3 image containers per row
+              for (let j = 0; j < 3; j++) {
+                if (j < rowImages.length) {
+                  const image = rowImages[j];
+                  html += `
+                    <div class="image-item">
+                      <div class="image-container">
+                        <img src="${image.imageUrl}" alt="${image.title}" />
+                      </div>
+                      <div class="image-title">${image.title}</div>
                     </div>
-                    <div class="image-title">${image.title}</div>
-                  </div>
-                `;
-              });
+                  `;
+                } else {
+                  // Add empty placeholder to maintain equal width
+                  html += `
+                    <div class="image-item" style="visibility: hidden;">
+                      <div class="image-container"></div>
+                      <div class="image-title"></div>
+                    </div>
+                  `;
+                }
+              }
               html += '</div>';
             }
             return html;
@@ -2157,7 +2212,7 @@ export const generateCompletionCertificatePdf = asyncHandler(
         <div class="container">
             <div class="content">
                 <div class="header">
-                    <img class="logo" src="https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/sample-spmc/logo+(1).png" alt="Company Logo">
+                    <img class="logo" src="https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg" alt="Company Logo">
                     <div class="company-names">
                         <div class="company-name-arabic">الغزال الأبيض للخدمات الفنية</div>
                         <div class="company-name-english">AL GHAZAL AL ABYAD TECHNICAL SERVICES</div>
@@ -2723,7 +2778,7 @@ const generateWorkCompletionPdfBuffer = async (
         <div class="container">
             <div class="content">
                 <div class="header">
-                    <img class="logo" src="https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/sample-spmc/logo+(1).png" alt="Company Logo">
+                    <img class="logo" src="https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg" alt="Company Logo">
                     <div class="company-names">
                         <div class="company-name-arabic">الغزال الأبيض للخدمات الفنية</div>
                         <div class="company-name-english">AL GHAZAL AL ABYAD TECHNICAL SERVICES</div>
