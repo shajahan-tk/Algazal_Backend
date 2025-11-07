@@ -822,6 +822,7 @@ export const generateQuotationPdf = asyncHandler(
 
     .image-item {
       flex: 1;
+      min-width: calc(33.333% - 6px);
       max-width: calc(33.333% - 6px);
       display: flex;
       flex-direction: column;
@@ -832,6 +833,7 @@ export const generateQuotationPdf = asyncHandler(
       padding: 6px;
       background: #fafafa;
       min-height: 0;
+      box-sizing: border-box;
     }
 
     .image-container {
@@ -1139,16 +1141,29 @@ export const generateQuotationPdf = asyncHandler(
             for (let i = 0; i < quotation.images.length; i += 3) {
               const rowImages = quotation.images.slice(i, i + 3);
               html += '<div class="images-row">';
-              rowImages.forEach(image => {
-                html += `
-                  <div class="image-item">
-                    <div class="image-container">
-                      <img src="${image.imageUrl}" alt="${image.title}" />
+              
+              // Always create 3 image containers per row
+              for (let j = 0; j < 3; j++) {
+                if (j < rowImages.length) {
+                  const image = rowImages[j];
+                  html += `
+                    <div class="image-item">
+                      <div class="image-container">
+                        <img src="${image.imageUrl}" alt="${image.title}" />
+                      </div>
+                      <div class="image-title">${image.title}</div>
                     </div>
-                    <div class="image-title">${image.title}</div>
-                  </div>
-                `;
-              });
+                  `;
+                } else {
+                  // Add empty placeholder to maintain equal width
+                  html += `
+                    <div class="image-item" style="visibility: hidden;">
+                      <div class="image-container"></div>
+                      <div class="image-title"></div>
+                    </div>
+                  `;
+                }
+              }
               html += '</div>';
             }
             return html;
