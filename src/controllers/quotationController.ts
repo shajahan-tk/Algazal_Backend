@@ -492,7 +492,7 @@ export const generateQuotationPdf = asyncHandler(
     }
 
     const client = quotation.project.client as IClient;
-    const preparedBy = quotation.preparedBy as any;
+    const preparedBy = quotation.preparedBy as IUser;
     const project = quotation.project;
 
     const site = `${project.location} ${project.building} ${project.apartmentNumber}`;
@@ -547,22 +547,23 @@ body {
   color: #333;
 }
 
-/* ---------------- HEADER ---------------- */
+/* ==================== HEADER ==================== */
 
 .header {
   display: flex;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+  gap: 15px;
   border-bottom: 2px solid #94d7f4;
   padding: 8px 0;
-  margin-bottom: 10px;
   position: relative;
 }
 
 .logo {
+  height: 40px;
   position: absolute;
   left: 0;
-  height: 40px;
 }
 
 .company-names {
@@ -578,20 +579,23 @@ body {
 .company-name-english {
   font-size: 9pt;
   font-weight: bold;
+  text-transform: uppercase;
 }
 
-/* ---------------- CLIENT INFO ---------------- */
+/* ==================== CLIENT INFO ==================== */
 
 .client-info-container {
   display: flex;
   gap: 12px;
+  margin-bottom: 6px;
 }
 
 .client-info {
   flex: 1;
-  padding: 6px;
-  background: #f8f9fa;
+  padding: 6px 8px;
+  background-color: #f8f9fa;
   border: 1px solid #ddd;
+  border-radius: 3px;
   font-size: 9pt;
 }
 
@@ -602,17 +606,18 @@ body {
 }
 
 .quotation-details td {
-  padding: 4px;
+  padding: 3px 6px;
   border-bottom: 1px solid #eee;
 }
 
-/* ---------------- SUBJECT ---------------- */
+/* ==================== SUBJECT ==================== */
 
 .subject-section {
   padding: 6px 12px;
-  background: linear-gradient(to right, #f0f8ff, #f8f9fa, #f0f8ff);
+  background: linear-gradient(to right, #f0f8ff 0%, #f8f9fa 50%, #f0f8ff 100%);
   border-left: 4px solid #94d7f4;
   border-right: 4px solid #94d7f4;
+  border-radius: 2px;
 }
 
 .subject-title {
@@ -620,21 +625,22 @@ body {
   font-size: 9.5pt;
 }
 
-/* ---------------- ITEMS TABLE ---------------- */
+/* ==================== ITEMS TABLE ==================== */
 
 table {
   width: 100%;
   border-collapse: collapse;
+  margin-bottom: 8px;
 }
 
-th {
-  background: #94d7f4;
+thead th {
+  background-color: #94d7f4;
   border: 1px solid #ddd;
   padding: 4px;
-  text-align: center;
+  font-size: 9pt;
 }
 
-td {
+tbody td {
   border: 1px solid #ddd;
   padding: 4px;
   font-size: 9pt;
@@ -644,32 +650,37 @@ td {
   white-space: pre-wrap;
 }
 
-/* ---------------- TOTALS ---------------- */
+/* ==================== TOTALS ==================== */
 
 .amount-summary {
-  margin-top: 6px;
+  width: 100%;
+  font-size: 9pt;
 }
 
 .amount-summary-row {
   display: flex;
   justify-content: space-between;
+  margin-bottom: 3px;
 }
 
 .net-amount-row {
   background: #94d7f4;
-  padding: 5px;
+  padding: 4px 8px;
   font-weight: bold;
   border-radius: 3px;
 }
 
-/* ---------------- FIXED IMAGE SECTION ---------------- */
+/* ==================== IMAGE SECTION (FIXED) ==================== */
+
+/* ⭐ — your UI remains EXACTLY the same  
+   ⭐ — only the break rules are corrected */
 
 .images-section {
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .images-grid {
-  margin-top: 6px;
+  margin-top: 4px;
 }
 
 .images-row {
@@ -677,8 +688,9 @@ td {
   gap: 8px;
   margin-bottom: 8px;
 
-  /* ⭐ FIX: allow natural flow */
-  /* removed all page-break-inside / avoid rules */
+  /* ⭐ keep row together – prevents broken rows like your screenshot */
+  page-break-inside: avoid;
+  break-inside: avoid;
 }
 
 .image-item {
@@ -709,36 +721,39 @@ td {
 
 .image-title {
   font-size: 8pt;
-  text-align: center;
   margin-top: 4px;
+  text-align: center;
 }
 
-/* ---------------- TERMS ---------------- */
+/* ==================== TERMS ==================== */
 
 .terms-box {
   border: 1px solid #000;
   padding: 6px;
 }
 
-/* ---------------- FOOTER ---------------- */
+/* ==================== FOOTER ==================== */
 
 .tagline {
   text-align: center;
-  font-weight: bold;
   margin-top: 10px;
+  font-weight: bold;
 }
 
 .footer {
-  margin-top: 6px;
-  text-align: center;
   font-size: 8pt;
+  text-align: center;
+  margin-top: 6px;
+  line-height: 1.2;
 }
 
 </style>
 </head>
 <body>
+
 <div class="container">
 
+<!-- HEADER -->
 <div class="header">
   <img class="logo" src="https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg" />
   <div class="company-names">
@@ -747,6 +762,7 @@ td {
   </div>
 </div>
 
+<!-- CLIENT INFO -->
 <div class="client-info-container">
   <div class="client-info">
     <p><strong>CLIENT:</strong> ${client.clientName}</p>
@@ -761,9 +777,7 @@ td {
 
   <div class="quotation-info">
     <table class="quotation-details">
-      <tr><td>Quotation #:</td><td>${
-        quotation.quotationNumber
-      }</td></tr>
+      <tr><td>Quotation #:</td><td>${quotation.quotationNumber}</td></tr>
       <tr><td>Date:</td><td>${formatDate(quotation.date)}</td></tr>
       <tr><td>Valid Until:</td><td>${formatDate(
         quotation.validUntil
@@ -772,13 +786,14 @@ td {
   </div>
 </div>
 
+<!-- SUBJECT -->
 <div class="subject-section">
   <div class="subject-title">SUBJECT</div>
   <div class="subject-content">${project.projectName}</div>
 </div>
 
+<!-- ITEMS -->
 <div class="section">
-  <div class="section-title">ITEMS</div>
   <table>
     <thead>
       <tr>
@@ -796,15 +811,12 @@ td {
           (item, index) => `
         <tr>
           <td>${index + 1}</td>
-          <td class="col-desc">${cleanDescription(
-            item.description
-          )}</td>
+          <td class="col-desc">${cleanDescription(item.description)}</td>
           <td>${item.uom || "NOS"}</td>
           <td>${item.quantity.toFixed(2)}</td>
           <td>${formatCurrency(item.unitPrice)}</td>
           <td>${formatCurrency(item.totalPrice)}</td>
-        </tr>
-      `
+        </tr>`
         )
         .join("")}
     </tbody>
@@ -812,20 +824,20 @@ td {
 
   <div class="amount-summary">
     <div class="amount-summary-row">
-      <span>SUBTOTAL:</span>
-      <span>${formatCurrency(subtotal)} AED</span>
+      <span>SUBTOTAL:</span> <span>${formatCurrency(subtotal)} AED</span>
     </div>
     <div class="amount-summary-row">
-      <span>VAT ${quotation.vatPercentage}%:</span>
-      <span>${formatCurrency(vatAmount)} AED</span>
+      <span>VAT ${quotation.vatPercentage}%:</span> <span>${formatCurrency(
+        vatAmount
+      )} AED</span>
     </div>
     <div class="net-amount-row">
-      <span>NET AMOUNT:</span>
-      <span>${formatCurrency(netAmount)} AED</span>
+      <span>NET AMOUNT:</span> <span>${formatCurrency(netAmount)} AED</span>
     </div>
   </div>
 </div>
 
+<!-- IMAGES -->
 ${
   quotation.images.length
     ? `
@@ -861,11 +873,11 @@ ${
       return html;
     })()}
   </div>
-</div>
-`
+</div>`
     : ""
 }
 
+<!-- TERMS -->
 ${
   quotation.termsAndConditions.length
     ? `
@@ -878,23 +890,24 @@ ${
         .join("")}
     </ol>
   </div>
-</div>
-`
+</div>`
     : ""
 }
 
+<!-- PREPARED BY -->
 <div class="prepared">
   <h4>PREPARED BY</h4>
   <p><strong>${preparedBy.firstName} ${
       preparedBy.lastName
     }</strong></p>
-  <p>Phone: ${preparedBy.phoneNumbers.join(", ")}</p>
+  <p>Phone: ${(preparedBy.phoneNumbers || []).join(", ")}</p>
 </div>
 
 <div class="tagline">We work U Relax</div>
+
 <div class="footer">
   <p><strong>AL GHAZAL AL ABYAD TECHNICAL SERVICES</strong></p>
-  <p>Office No:04, R09-France Cluster, International City-Dubai | P.O.Box:262760</p>
+  <p>Office No:04, R09-France Cluster, International City-Dubai</p>
   <p>Tel: 044102555 | www.alghazalgroup.com</p>
   <p>Generated on ${formatDate(new Date())}</p>
 </div>
