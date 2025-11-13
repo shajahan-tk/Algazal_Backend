@@ -433,12 +433,33 @@ export const getActiveDrivers = asyncHandler(
       );
   }
 );
-
 export const getActiveWorkers = asyncHandler(
   async (req: Request, res: Response) => {
-    const workers = await User.find({ role: "worker", isActive: true }).select(
-      "-v -password"
-    );
+    const workers = await User.find({ 
+      role: { 
+        $in: [
+          "worker",
+          "plumber",
+          "electrician",
+          "mason",
+          "carpenter",
+          "painter",
+          "aluminium_fabricator",
+          "plasterer",
+          "ac_technician",
+          "ac_assistant",
+          "building_labourer",
+          "helper",
+          "cleaner",
+          "senior_plumber",
+          "mep_supervisor",
+          "electrical_supervisor",
+          "supervisor"
+        ]
+      }, 
+      isActive: true 
+    }).select("-v -password");
+
     res
       .status(200)
       .json(

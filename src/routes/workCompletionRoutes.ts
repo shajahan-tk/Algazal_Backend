@@ -10,10 +10,12 @@ import {
   updateCompletionDate,
   updateHandoverDate,
   updateAcceptanceDate,
+  replaceWorkCompletionImage,
+  updateWorkCompletionImage,
 } from "../controllers/workCompletionController";
 import { authenticate, authorize } from "../middlewares/authMiddleware";
 import { upload } from "../config/multer";
-import { sendWorkCompletionEmail } from "../controllers/sendMailPdfController";
+import {  sendWorkCompletionEmail } from "../controllers/sendMailPdfController";
 
 const router = express.Router();
 
@@ -46,8 +48,19 @@ router.post(
   authorize(["engineer", "admin", "super_admin"]),
   sendWorkCompletionEmail
 );
+// Add this route BEFORE the replace route
+router.patch(
+  "/project/:projectId/images/:imageId",
+  authorize(["engineer", "admin", "super_admin"]),
+  updateWorkCompletionImage
+);
 
-
+router.put(
+  "/project/:projectId/images/:imageId/replace",
+  authorize(["engineer", "admin", "super_admin"]),
+  upload.single("image"),
+  replaceWorkCompletionImage
+);
 // New routes for date updates
 router.put(
   "/project/:projectId/completion-date",

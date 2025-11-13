@@ -51,7 +51,7 @@ router.get(
   generateInvoiceData
 );
 router.get(
-  "/:projectId/invoice/pdf",
+  "/:projectId/invoice/pdf/:selectedBankId",
   authorize(["admin", "super_admin", "finance", "engineer"]),
   generateInvoicePdf
 );

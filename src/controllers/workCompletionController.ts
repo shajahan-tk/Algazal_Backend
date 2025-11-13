@@ -86,7 +86,8 @@ async function getCompletionDataForProject(projectId: string) {
     sitePictures:
       workCompletion?.images.map((img) => ({
         url: img.imageUrl,
-        caption: img.title,
+        title: img.title,
+        _id: img._id
       })) || [],
     project: {
       _id: populatedProject._id.toString(),
@@ -134,7 +135,66 @@ export const createWorkCompletion = asyncHandler(
       );
   }
 );
+export const replaceWorkCompletionImage = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { projectId, imageId } = req.params;
+    const file = req.file as Express.Multer.File;
 
+    if (!projectId || !imageId) {
+      throw new ApiError(400, "Project ID and image ID are required");
+    }
+
+    if (!file) {
+      throw new ApiError(400, "Image file is required");
+    }
+
+    const workCompletion = await WorkCompletion.findOne({ project: projectId });
+    if (!workCompletion) {
+      throw new ApiError(404, "Work completion not found");
+    }
+
+    // Check if user is authorized to update this work completion
+    if (workCompletion.createdBy.toString() !== req.user?.userId.toString()) {
+      throw new ApiError(403, "Not authorized to update this work completion");
+    }
+
+    const imageIndex = workCompletion.images.findIndex(
+      (img) => img._id.toString() === imageId
+    );
+
+    if (imageIndex === -1) {
+      throw new ApiError(404, "Image not found");
+    }
+
+    const oldImage = workCompletion.images[imageIndex];
+
+    // Upload new image
+    const uploadResult = await uploadWorkCompletionImagesToS3([file]);
+
+    if (!uploadResult.success || !uploadResult.uploadData?.[0]) {
+      throw new ApiError(500, "Failed to upload new image to S3");
+    }
+
+    const newImageData = uploadResult.uploadData[0];
+
+    // Delete old image from S3
+    if (oldImage.s3Key) {
+      await deleteFileFromS3(oldImage.s3Key);
+    }
+
+    // Update image with new file
+    workCompletion.images[imageIndex].imageUrl = newImageData.url;
+    workCompletion.images[imageIndex].s3Key = newImageData.key;
+    workCompletion.images[imageIndex].uploadedAt = new Date();
+
+    await workCompletion.save();
+    const updatedData = await getCompletionDataForProject(projectId);
+    
+    res.status(200).json(
+      new ApiResponse(200, updatedData, "Image replaced successfully")
+    );
+  }
+);
 export const uploadWorkCompletionImages = asyncHandler(
   async (req: Request, res: Response) => {
     const { projectId } = req.params;
@@ -207,7 +267,48 @@ export const uploadWorkCompletionImages = asyncHandler(
       .json(new ApiResponse(200, updatedData, "Images uploaded successfully"));
   }
 );
+export const updateWorkCompletionImage = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { projectId, imageId } = req.params;
+    const { title } = req.body;
 
+    if (!projectId || !imageId) {
+      throw new ApiError(400, "Project ID and image ID are required");
+    }
+
+    if (!title?.trim()) {
+      throw new ApiError(400, "Title is required and cannot be empty");
+    }
+
+    const workCompletion = await WorkCompletion.findOne({ project: projectId });
+    if (!workCompletion) {
+      throw new ApiError(404, "Work completion not found");
+    }
+
+    // Check if user is authorized to update this work completion
+    if (workCompletion.createdBy.toString() !== req.user?.userId.toString()) {
+      throw new ApiError(403, "Not authorized to update this work completion");
+    }
+
+    const imageIndex = workCompletion.images.findIndex(
+      (img) => img._id.toString() === imageId
+    );
+
+    if (imageIndex === -1) {
+      throw new ApiError(404, "Image not found");
+    }
+
+    // Update only the title
+    workCompletion.images[imageIndex].title = title.trim();
+    await workCompletion.save();
+
+    const updatedData = await getCompletionDataForProject(projectId);
+    
+    res.status(200).json(
+      new ApiResponse(200, updatedData, "Image title updated successfully")
+    );
+  }
+);
 export const getWorkCompletion = asyncHandler(
   async (req: Request, res: Response) => {
     const { projectId } = req.params;
@@ -253,8 +354,7 @@ export const deleteWorkCompletionImage = asyncHandler(
     if (!workCompletionId || !imageId) {
       throw new ApiError(400, "Work completion ID and image ID are required");
     }
-
-    const workCompletion = await WorkCompletion.findById(workCompletionId);
+    let workCompletion = await WorkCompletion.findOne({ project: workCompletionId });
     if (!workCompletion) {
       throw new ApiError(404, "Work completion not found");
     }
@@ -529,7 +629,7 @@ export const generateCompletionCertificatePdf = asyncHandler(
                 object-fit: contain;
                 position: absolute;
                 left: 0;
-                top: -12px;
+             
             }
             .company-names {
                 display: flex;
@@ -758,7 +858,7 @@ export const generateCompletionCertificatePdf = asyncHandler(
         <div class="container">
             <div class="content">
                 <div class="header">
-                    <img class="logo" src="https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/sample-spmc/logo+(1).png" alt="Company Logo">
+                    <img class="logo" src="https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg" alt="Company Logo">
                     <div class="company-names">
                         <div class="company-name-arabic">الغزال الأبيض للخدمات الفنية</div>
                         <div class="company-name-english">AL GHAZAL AL ABYAD TECHNICAL SERVICES</div>
@@ -771,7 +871,7 @@ export const generateCompletionCertificatePdf = asyncHandler(
                     <table class="info-table">
                         <tr>
                             <td class="label">Reference</td>
-                            <td>: <span class="highlight">${`QTNAGA${project.projectNumber.slice(3,40)}`}</span></td>
+                            <td>: <span class="">${`QTNAGA${project.projectNumber.slice(3, 40)}`}</span></td>
                         </tr>
                         <tr>
                             <td class="label">FM CONTRACTOR</td>
@@ -783,11 +883,11 @@ export const generateCompletionCertificatePdf = asyncHandler(
                         </tr>
                         <tr>
                             <td class="label">PROJECT DESCRIPTION</td>
-                            <td>: <span class="highlight">${project.projectName}</span></td>
+                            <td>: <span class="">${project.projectName}</span></td>
                         </tr>
                         <tr>
                             <td class="label">LOCATION (Bldg.)</td>
-                            <td>: <span class="highlight">${project.location}${project.building ? `, ${project.building}` : ""}</span></td>
+                            <td>: <span class="">${project.location}${project.building ? `, ${project.building}` : ""}</span></td>
                         </tr>
                     </table>
                 </div>
@@ -877,14 +977,14 @@ export const generateCompletionCertificatePdf = asyncHandler(
                     <div class="section-title">Site Pictures</div>
                     ${workCompletion?.images && workCompletion.images.length > 0 ? `
                     <div class="images-grid">
-                        ${workCompletion.images.map((image) => 
-                            `<div class="image-item">
+                        ${workCompletion.images.map((image) =>
+      `<div class="image-item">
                                <div class="image-container">
                                    <img src="${image.imageUrl}" alt="${image.title || "Site picture"}" />
                                </div>
                                <div class="image-title">${image.title || "Site Image"}</div>
                              </div>`
-                        ).join("")}
+    ).join("")}
                     </div>
                     ` : '<p style="text-align: center; font-size: 10pt; color: #666; padding: 20px;">No site pictures available</p>'}
                 </div>
@@ -910,9 +1010,9 @@ export const generateCompletionCertificatePdf = asyncHandler(
 
     try {
       const page = await browser.newPage();
-      
+
       await page.setViewport({ width: 1200, height: 1600 });
-      
+
       await page.setContent(htmlContent, {
         waitUntil: ["networkidle0", "domcontentloaded"],
         timeout: 30000,

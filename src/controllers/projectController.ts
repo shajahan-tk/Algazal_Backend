@@ -17,6 +17,7 @@ import { WorkProgressTemplateParams } from "../template/workProgressEmailTemplat
 import { Expense } from "../models/expenseModel";
 import puppeteer from "puppeteer";
 import { FRONTEND_URL } from "../config/constant";
+import { Bank } from "@/models/bankDetailsModel";
 
 // Status transition validation
 const validStatusTransitions: Record<string, string[]> = {
@@ -831,38 +832,61 @@ export const assignTeamAndDriver = asyncHandler(
     const project = await Project.findById(projectId);
     if (!project) throw new ApiError(404, "Project not found");
 
-    // Verify project is in correct state
-    if (project.status !== "lpo_received") {
-      throw new ApiError(400, "Project must be in 'lpo_received' status");
-    }
+  
 
-    // Verify all workers are engineers
+    // Define all valid worker roles (excluding management and admin roles)
+    const validWorkerRoles = [
+      "worker",
+      "plumber",
+      "electrician",
+      "mason",
+      "carpenter",
+      "painter",
+      "aluminium_fabricator",
+      "plasterer",
+      "ac_technician",
+      "ac_assistant",
+      "building_labourer",
+      "helper",
+      "cleaner",
+      "senior_plumber",
+      "mep_supervisor",
+      "electrical_supervisor",
+      "supervisor",
+    
+    ];
+
+    // Verify all workers have valid worker roles and are active
     const validWorkers = await User.find({
       _id: { $in: workers },
-      role: "worker",
+      role: { $in: validWorkerRoles },
+      isActive: true
     });
+
     if (validWorkers.length !== workers.length) {
-      throw new ApiError(400, "All workers must be engineers");
+      const foundIds = validWorkers.map(w => w._id.toString());
+      const invalidIds = workers.filter(id => !foundIds.includes(id));
+      throw new ApiError(400, `Invalid or inactive workers found: ${invalidIds.join(', ')}`);
     }
 
-    // Verify driver exists
+    // Verify driver exists and is active
     const driver = await User.findOne({
       _id: driverId,
       role: "driver",
+      isActive: true
     });
     if (!driver) {
-      throw new ApiError(400, "Valid driver ID is required");
+      throw new ApiError(400, "Valid active driver ID is required");
     }
 
     // Update project
     project.assignedWorkers = workers;
     project.assignedDriver = driverId;
-
     project.status = "team_assigned";
-
     project.updatedBy = req.user?.userId
       ? new mongoose.Types.ObjectId(req.user.userId)
       : undefined;
+
     await project.save();
 
     // Send notifications (implementation depends on your mailer service)
@@ -931,66 +955,125 @@ export const getAssignedTeam = asyncHandler(
 // Update only workers and driver assignments
 export const updateWorkersAndDriver = asyncHandler(
   async (req: Request, res: Response) => {
+    console.log('=== UPDATE WORKERS AND DRIVER CALLED ===');
+    console.log('Request Method:', req.method);
+    console.log('Request URL:', req.url);
+    console.log('Request Headers:', req.headers);
+    console.log('Request Params:', req.params);
+    console.log('Request Body:', req.body);
+    console.log('Request Body Type:', typeof req.body);
+    console.log('Content-Type Header:', req.headers['content-type']);
+    console.log('====================================');
+
     const { id } = req.params;
-    const { workers, driver } = req.body;
+    const { workers, driverId } = req.body;
 
     // Validation
     if (!id) {
       throw new ApiError(400, "Project ID is required");
     }
 
-    // At least one field should be provided
-    if (!workers && !driver) {
-      throw new ApiError(400, "Either workers or driver must be provided");
+    // Check if body is completely empty
+    if (Object.keys(req.body).length === 0) {
+      throw new ApiError(400, "Request body is empty. Please send workers and/or driverId");
     }
 
+    // At least one field should be provided
+    if (workers === undefined && driverId === undefined) {
+      throw new ApiError(400, "Either workers array or driverId must be provided");
+    }
+
+    // Rest of your existing code...
     // Find project
     const project = await Project.findById(id);
     if (!project) {
-      throw new ApiError(400, "Project not found");
+      throw new ApiError(404, "Project not found");
     }
+
+   
+    // Define all valid worker roles (same as assignTeamAndDriver)
+    const validWorkerRoles = [
+      "worker",
+      "plumber",
+      "electrician",
+      "mason",
+      "carpenter",
+      "painter",
+      "aluminium_fabricator",
+      "plasterer",
+      "ac_technician",
+      "ac_assistant",
+      "building_labourer",
+      "helper",
+      "cleaner",
+      "senior_plumber",
+      "mep_supervisor",
+      "electrical_supervisor",
+      "supervisor",
+      "civil_engineer",
+      "mep_engineer",
+      "engineer"
+    ];
 
     // Validate and update workers if provided
     if (workers !== undefined) {
-      // Explicit check for undefined (empty array is valid)
+      // Explicit check for undefined (empty array is valid to clear all workers)
       if (!Array.isArray(workers)) {
         throw new ApiError(400, "Workers must be an array");
       }
 
-      // If workers array is provided (even empty), validate all IDs
-      const workersExist = await User.find({
-        _id: { $in: workers },
-        role: "worker",
-      });
+      // If workers array is not empty, validate all IDs
+      if (workers.length > 0) {
+        // Verify all workers have valid worker roles and are active
+        const validWorkers = await User.find({
+          _id: { $in: workers },
+          role: { $in: validWorkerRoles },
+          isActive: true
+        });
 
-      if (workersExist.length !== workers.length) {
-        throw new ApiError(400, "One or more workers not found or not workers");
+        if (validWorkers.length !== workers.length) {
+          const foundIds = validWorkers.map(w => w._id.toString());
+          const invalidIds = workers.filter(id => !foundIds.includes(id));
+          throw new ApiError(400, `Invalid or inactive workers found: ${invalidIds.join(', ')}`);
+        }
+
+        project.assignedWorkers = workers;
+      } else {
+        // If workers array is empty, clear all workers
+        project.assignedWorkers = [];
       }
-
-      project.assignedWorkers = workers;
     }
 
     // Validate and update driver if provided
-    if (driver !== undefined) {
-      // Explicit check for undefined (null is valid to clear driver)
-      if (driver) {
-        const driverExists = await User.findOne({
-          _id: driver,
+    if (driverId !== undefined) {
+      // Explicit check for undefined (null/empty is valid to clear driver)
+      if (driverId) {
+        // Verify driver exists and is active
+        const driver = await User.findOne({
+          _id: driverId,
           role: "driver",
+          isActive: true
         });
-        if (!driverExists) {
-          throw new ApiError(400, "Driver not found or not a driver");
+        if (!driver) {
+          throw new ApiError(400, "Valid active driver ID is required");
         }
-        project.assignedDriver = driver;
+        project.assignedDriver = driverId;
       } else {
-        // If driver is explicitly set to null/empty, clear it
+        // If driverId is explicitly set to null/empty, clear it
         project.assignedDriver = undefined;
       }
     }
 
+    // Update the updatedBy field
+    project.updatedBy = req.user?.userId
+      ? new mongoose.Types.ObjectId(req.user.userId)
+      : undefined;
+
     const updatedProject = await project.save();
 
-    // Send notifications
+    console.log('=== UPDATE SUCCESSFUL ===');
+    console.log('Updated Project:', updatedProject);
+    console.log('====================================');
 
     res
       .status(200)
@@ -1003,7 +1086,6 @@ export const updateWorkersAndDriver = asyncHandler(
       );
   }
 );
-
 // Notification helper specifically for workers/driver updates
 // const sendWorkersDriverNotification = async (project: any) => {
 //   try {
@@ -1149,13 +1231,16 @@ export const getDriverProjects = asyncHandler(
 );
 export const generateInvoicePdf = asyncHandler(
   async (req: Request, res: Response) => {
-    const { projectId } = req.params;
+    const { projectId,selectedBankId } = req.params;
 
     // Validate projectId
-    if (!projectId || !Types.ObjectId.isValid(projectId)) {
+    if (!projectId || !Types.ObjectId.isValid(projectId) ) {
       throw new ApiError(400, "Valid project ID is required");
     }
-
+    if (!selectedBankId || !Types.ObjectId.isValid(selectedBankId) ) {
+      throw new ApiError(400, "Valid selectedBank ID is required");
+    }
+    
     // Get project data with populated fields
     const project = await Project.findById(projectId)
       .populate<{ client: IClient }>({
@@ -1166,7 +1251,11 @@ export const generateInvoicePdf = asyncHandler(
         "createdBy",
         "firstName lastName signatureImage"
       );
-
+      const bankDetails=await Bank.findById(selectedBankId);
+      if (!bankDetails) {
+      throw new ApiError(404, "Bank details not found");
+        
+      }
     if (!project) {
       throw new ApiError(404, "Project not found");
     }
@@ -1544,7 +1633,7 @@ export const generateInvoicePdf = asyncHandler(
   <div class="container">
     <div class="content">
       <div class="header">
-        <img class="logo" src="https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/sample-spmc/logo+(1).png" alt="Company Logo">
+        <img class="logo" src="https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg" alt="Company Logo">
         <div class="company-names">
           <div class="company-name-arabic">الغزال الأبيض للخدمات الفنية</div>
           <div class="company-name-english">AL GHAZAL AL ABYAD TECHNICAL SERVICES</div>
@@ -1555,10 +1644,10 @@ export const generateInvoicePdf = asyncHandler(
 
       <div class="invoice-header">
         <div>
-          <p><strong>Invoice #:</strong> ${invoiceNumber}</p>
+          <p><strong>Invoice :</strong> ${invoiceNumber}</p>
           <p><strong>Date:</strong> ${formatDate(new Date())}</p>
-          ${lpo ? `<p><strong>LPO #:</strong> ${lpo.lpoNumber}</p>` : ''}
-          ${project.grnNumber ? `<p><strong>GRN #:</strong> ${project.grnNumber}</p>` : ''}
+          ${lpo ? `<p><strong>LPO :</strong> ${lpo.lpoNumber}</p>` : ''}
+          ${project.grnNumber ? `<p><strong>GRN :</strong> ${project.grnNumber}</p>` : ''}
         </div>
         <div class="invoice-info">
           <p><strong>Service Period:</strong> ${formatDate(project.workStartDate)} to ${formatDate(project.workEndDate || new Date())}</p>
@@ -1639,11 +1728,11 @@ export const generateInvoicePdf = asyncHandler(
 
       <div class="bank-details">
         <h3>BANK DETAILS</h3>
-        <p><strong>Bank Name:</strong> Emirates NBD</p>
-        <p><strong>Account Name:</strong> AL GHAZAL AL ABYAD TECHNICAL SERVICES</p>
-        <p><strong>Account Number:</strong> 1015489374101</p>
-        <p><strong>IBAN:</strong> AE580260001015489374101</p>
-        <p><strong>Swift Code:</strong> EBILAEAD</p>
+        <p><strong>Bank Name:</strong> ${bankDetails.bankName}</p>
+        <p><strong>Account Name:</strong> ${bankDetails.accountName}</p>
+        <p><strong>Account Number:</strong> ${bankDetails.accountNumber}</p>
+        <p><strong>IBAN:</strong> ${bankDetails.iban}</p>
+        <p><strong>Swift Code:</strong> ${bankDetails.swiftCode}</p>
       </div>
 
       <div class="section">

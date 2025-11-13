@@ -33,6 +33,9 @@ import visaRouter from "./routes/visaExpenseRoutes";
 import reportTouter from "./routes/reportRoutes"
 import employeeSummaryRouter from "./routes/employeeSummaryRoutes";
 import attendanceManagementRouter from "./routes/attendanceManagementRoutes";
+import bankDetailsRouter from "./routes/bankDetailsRoutes";
+
+
 import { connectDb } from "./config/db";
 import { seedSuperAdmin } from "./utils/seeder";
 dotenv.config();
@@ -83,6 +86,7 @@ app.use("/api/vehicles", vehicleRouter);
 app.use("/api/bills", billsRouter);
 app.use("/api/categories", categoryRouter);
 app.use("/api/bank", bankRouter);
+app.use("/api/bank-details", bankDetailsRouter);
 app.use("/api/project-profit", projectProfitRouter);
 app.use("/api/employee-expenses", employeeExpenseRouter);
 app.use("/api/payroll", payrollRouter);
@@ -102,7 +106,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 //   res.sendFile("/var/www/kmcc-frontend/dist/index.html");
 // });
 connectDb().then(() => {
-  app.listen(4001, () => {
+  app.listen(40034, () => {
     console.log(`Server is running on port ${process.env.PORT}`);
   });
 });

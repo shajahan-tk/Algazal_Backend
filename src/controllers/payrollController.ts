@@ -470,6 +470,7 @@ export const getPayroll = asyncHandler(async (req: Request, res: Response) => {
 });
 
 // Update payroll record
+// Updated updatePayroll function in payrollController.ts
 export const updatePayroll = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const updateData = req.body;
@@ -479,9 +480,11 @@ export const updatePayroll = asyncHandler(async (req: Request, res: Response) =>
     throw new ApiError(404, "Payroll not found");
   }
 
+  // Don't allow period or overtime to be changed (overtime is auto-calculated)
   delete updateData.period;
   delete updateData.overtime;
 
+  // Validate if employee is being changed
   if (updateData.employee) {
     const employeeId = updateData.employee;
     const period = payroll.period;
@@ -497,6 +500,7 @@ export const updatePayroll = asyncHandler(async (req: Request, res: Response) =>
     }
   }
 
+  // Convert all numeric fields to numbers
   if (updateData.allowance !== undefined) updateData.allowance = Number(updateData.allowance) || 0;
   if (updateData.transport !== undefined) updateData.transport = Number(updateData.transport) || 0;
   if (updateData.specialOT !== undefined) updateData.specialOT = Number(updateData.specialOT) || 0;
@@ -506,31 +510,56 @@ export const updatePayroll = asyncHandler(async (req: Request, res: Response) =>
   if (updateData.salaryAdvance !== undefined) updateData.salaryAdvance = Number(updateData.salaryAdvance) || 0;
   if (updateData.loanDeduction !== undefined) updateData.loanDeduction = Number(updateData.loanDeduction) || 0;
   if (updateData.fineAmount !== undefined) updateData.fineAmount = Number(updateData.fineAmount) || 0;
-  if (updateData.visaDeduction !== undefined) updateData.visaDeduction = Number(updateData.visaDeduction) || 0; // NEW
+  if (updateData.visaDeduction !== undefined) updateData.visaDeduction = Number(updateData.visaDeduction) || 0;
 
+  // Fetch employee expense to get basic salary
   const employeeExpense = await EmployeeExpense.findOne({
     employee: updateData.employee || payroll.employee
   });
 
   const basicSalary = Number(employeeExpense?.basicSalary) || 0;
-  const allowance = updateData.allowance ?? payroll.allowance;
-  const transport = updateData.transport ?? payroll.transport;
-  const specialOT = updateData.specialOT ?? (payroll.specialOT || 0);
-  const medical = updateData.medical ?? payroll.medical;
-  const bonus = updateData.bonus ?? payroll.bonus;
-  const mess = updateData.mess ?? payroll.mess;
-  const salaryAdvance = updateData.salaryAdvance ?? payroll.salaryAdvance;
-  const loanDeduction = updateData.loanDeduction ?? payroll.loanDeduction;
-  const fineAmount = updateData.fineAmount ?? payroll.fineAmount;
-  const visaDeduction = updateData.visaDeduction ?? (payroll.visaDeduction || 0); // NEW
+  
+  // Use updated values if provided, otherwise keep existing
+  const allowance = updateData.allowance !== undefined ? updateData.allowance : payroll.allowance;
+  const transport = updateData.transport !== undefined ? updateData.transport : payroll.transport;
+  const specialOT = updateData.specialOT !== undefined ? updateData.specialOT : (payroll.specialOT || 0);
+  const medical = updateData.medical !== undefined ? updateData.medical : payroll.medical;
+  const bonus = updateData.bonus !== undefined ? updateData.bonus : payroll.bonus;
+  const mess = updateData.mess !== undefined ? updateData.mess : payroll.mess;
+  const salaryAdvance = updateData.salaryAdvance !== undefined ? updateData.salaryAdvance : payroll.salaryAdvance;
+  const loanDeduction = updateData.loanDeduction !== undefined ? updateData.loanDeduction : payroll.loanDeduction;
+  const fineAmount = updateData.fineAmount !== undefined ? updateData.fineAmount : payroll.fineAmount;
+  const visaDeduction = updateData.visaDeduction !== undefined ? updateData.visaDeduction : (payroll.visaDeduction || 0);
+  
+  // Keep existing overtime (it's auto-calculated, shouldn't be changed manually)
   const overtime = payroll.overtime;
 
+  // Recalculate net salary
   const totalEarnings = basicSalary + allowance + transport + overtime + specialOT + medical + bonus;
-  const totalDeductions = mess + salaryAdvance + loanDeduction + fineAmount + visaDeduction; // UPDATED
+  const totalDeductions = mess + salaryAdvance + loanDeduction + fineAmount + visaDeduction;
   updateData.net = totalEarnings - totalDeductions;
 
+  console.log('Update calculation:', {
+    basicSalary,
+    allowance,
+    transport,
+    overtime,
+    specialOT,
+    medical,
+    bonus,
+    totalEarnings,
+    mess,
+    salaryAdvance,
+    loanDeduction,
+    fineAmount,
+    visaDeduction,
+    totalDeductions,
+    net: updateData.net
+  });
+
   const updatedPayroll = await Payroll.findByIdAndUpdate(id, updateData, {
-    new: true
+    new: true,
+    runValidators: true
   })
     .populate({
       path: "employee",
@@ -540,6 +569,10 @@ export const updatePayroll = asyncHandler(async (req: Request, res: Response) =>
       path: "createdBy",
       select: "firstName lastName"
     });
+
+  if (!updatedPayroll) {
+    throw new ApiError(404, "Payroll not found after update");
+  }
 
   res.status(200).json(
     new ApiResponse(200, updatedPayroll, "Payroll updated successfully")
@@ -1191,7 +1224,7 @@ const generatePayslipHTML = (data: any): string => {
 <body>
     <div class="payslip-container">
         <div class="header">
-            <img class="logo" src="https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/sample-spmc/logo+(1).png" alt="Company Logo">
+            <img class="logo" src="https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg" alt="Company Logo">
             <div class="company-names">
                 <div class="company-name-arabic">الغزال الأبيض للخدمات الفنية</div>
                 <div class="company-name-english">AL GHAZAL AL ABYAD TECHNICAL SERVICES</div>

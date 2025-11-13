@@ -599,7 +599,7 @@ export const generateQuotationPdf = asyncHandler(
     <div class="content">
       <div class="header-section">
         <div class="header">
-          <img class="logo" src="https://krishnadas-test-1.s3.ap-south-1.amazonaws.com/sample-spmc/logo+(1).png" alt="Company Logo">
+          <img class="logo" src="https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg" alt="Company Logo">
           <div class="company-names">
             <div class="company-name-arabic">الغزال الأبيض للخدمات الفنية</div>
             <div class="company-name-english">AL GHAZAL AL ABYAD TECHNICAL SERVICES</div>
