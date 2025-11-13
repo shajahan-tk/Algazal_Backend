@@ -812,7 +812,14 @@ export const generateQuotationPdf = asyncHandler(
     /* Enhanced Images Section - FIXED FOR PAGE BREAKS */
     .images-section {
       margin-top: 8px;
-      /* REMOVED: page-break-inside: avoid; - This was causing the issue */
+      page-break-before: auto;
+      orphans: 1;
+      widows: 1;
+    }
+    
+    .images-section .section-title {
+      page-break-after: auto;
+      page-break-before: auto;
     }
 
     .images-grid {
@@ -826,6 +833,7 @@ export const generateQuotationPdf = asyncHandler(
       margin-bottom: 8px;
       page-break-inside: avoid;
       break-inside: avoid;
+      page-break-before: auto;
     }
 
     .image-item {
@@ -1142,7 +1150,7 @@ export const generateQuotationPdf = asyncHandler(
 
       ${quotation.images.length > 0 ? `
       <div class="section images-section">
-        <div class="section-title allow-break">QUOTATION IMAGES</div>
+        <div class="section-title">QUOTATION IMAGES</div>
         <div class="images-grid">
           ${(() => {
             let html = '';
