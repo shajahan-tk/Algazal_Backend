@@ -802,10 +802,10 @@ export const generateQuotationPdf = asyncHandler(
       font-family: 'Arial', sans-serif;
     }
 
-    /* Enhanced Images Section */
+    /* Enhanced Images Section - FIXED FOR PAGE BREAKS */
     .images-section {
       margin-top: 8px;
-      page-break-inside: avoid;
+      /* REMOVED: page-break-inside: avoid; - This was causing the issue */
     }
 
     .images-grid {
@@ -818,6 +818,7 @@ export const generateQuotationPdf = asyncHandler(
       gap: 8px;
       margin-bottom: 8px;
       page-break-inside: avoid;
+      break-inside: avoid;
     }
 
     .image-item {
@@ -1133,7 +1134,7 @@ export const generateQuotationPdf = asyncHandler(
       </div>
 
       ${quotation.images.length > 0 ? `
-      <div class="section images-section no-break">
+      <div class="section images-section">
         <div class="section-title">QUOTATION IMAGES</div>
         <div class="images-grid">
           ${(() => {
