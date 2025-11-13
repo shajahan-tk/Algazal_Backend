@@ -689,8 +689,15 @@ export const generateQuotationPdf = asyncHandler(
       padding: 3px 0;
       margin: 6px 0 4px 0;
       border-bottom: 1px solid #94d7f4;
-      page-break-after: avoid;
       color: #2c3e50;
+    }
+    
+    .section-title.allow-break {
+      page-break-after: auto;
+    }
+    
+    .section-title.keep-together {
+      page-break-after: avoid;
     }
 
     .table-container {
@@ -1089,7 +1096,7 @@ export const generateQuotationPdf = asyncHandler(
       </div>
 
       <div class="section no-break">
-        <div class="section-title">ITEMS</div>
+        <div class="section-title keep-together">ITEMS</div>
         <div class="table-container">
           <table>
             <thead>
@@ -1135,7 +1142,7 @@ export const generateQuotationPdf = asyncHandler(
 
       ${quotation.images.length > 0 ? `
       <div class="section images-section">
-        <div class="section-title">QUOTATION IMAGES</div>
+        <div class="section-title allow-break">QUOTATION IMAGES</div>
         <div class="images-grid">
           ${(() => {
             let html = '';
@@ -1176,8 +1183,8 @@ export const generateQuotationPdf = asyncHandler(
       ${quotation.termsAndConditions.length > 0 ? `
       <div class="terms-prepared-section no-break">
         <div class="terms-prepared-header">
-          <div class="terms-title">TERMS & CONDITIONS</div>
-          <div class="prepared-title">PREPARED BY</div>
+          <div class="terms-title keep-together">TERMS & CONDITIONS</div>
+          <div class="prepared-title keep-together">PREPARED BY</div>
         </div>
         <div class="terms-prepared-content">
           <div class="terms-content">
@@ -1197,7 +1204,7 @@ export const generateQuotationPdf = asyncHandler(
       </div>
       ` : `
       <div class="section no-break">
-        <div class="section-title">PREPARED BY</div>
+        <div class="section-title keep-together">PREPARED BY</div>
         <div class="prepared-content">
           <div class="prepared-by-name">${preparedBy?.firstName || "N/A"} ${preparedBy?.lastName || ""}</div>
           ${preparedBy?.phoneNumbers?.length ? `
