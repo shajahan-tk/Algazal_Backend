@@ -818,24 +818,25 @@ td {
   font-family: 'Arial', sans-serif;
 }
 
-/* ==================== IMAGE SECTION (FIXED) ==================== */
+/* ==================== IMAGE SECTION (FIXED - NO BREAK PROBLEMS) ==================== */
 
 .images-section {
   margin-top: 8px;
-  page-break-inside: avoid;
+  /* REMOVED: page-break-inside: avoid - Let it break naturally */
 }
 
 .images-grid {
   display: block;
   margin-top: 4px;
+  /* REMOVED: page-break-inside rules - Let it flow naturally */
 }
 
 .images-row {
   display: flex;
   gap: 8px;
   margin-bottom: 8px;
-  page-break-inside: avoid;
-  break-inside: avoid;
+  /* REMOVED ALL page-break rules - Let rows break naturally between pages */
+  min-height: 140px; /* Ensure minimum height for better breaking */
 }
 
 .image-item {
@@ -845,13 +846,15 @@ td {
   display: flex;
   flex-direction: column;
   align-items: center;
-  page-break-inside: avoid;
+  /* REMOVED: page-break-inside: avoid - Let items break naturally */
   border: 1px solid #ddd;
   border-radius: 4px;
   padding: 6px;
   background: #fafafa;
-  min-height: 0;
+  min-height: 140px;
   box-sizing: border-box;
+  /* Allow breaking inside image items if needed */
+  page-break-inside: auto;
 }
 
 .image-container {
@@ -864,12 +867,18 @@ td {
   margin-bottom: 4px;
   background: #fff;
   border-radius: 3px;
+  /* Prevent images from breaking */
+  page-break-inside: avoid;
+  break-inside: avoid;
 }
 
 .image-container img {
   max-height: 100%;
   max-width: 100%;
   object-fit: contain;
+  /* Ensure images don't break */
+  page-break-inside: avoid;
+  break-inside: avoid;
 }
 
 .image-title {
@@ -885,6 +894,8 @@ td {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+  /* Allow title to break with the image */
+  page-break-inside: auto;
 }
 
 /* ==================== TERMS & PREPARED BY ==================== */
@@ -1117,7 +1128,7 @@ strong {
     <!-- IMAGES SECTION -->
     ${
       quotation.images.length > 0 ? `
-      <div class="section images-section no-break">
+      <div class="images-section">
         <div class="section-title">QUOTATION IMAGES</div>
         <div class="images-grid">
           ${(() => {
@@ -1126,7 +1137,6 @@ strong {
               const rowImages = quotation.images.slice(i, i + 3);
               html += '<div class="images-row">';
               
-              // Always create 3 image containers per row
               for (let j = 0; j < 3; j++) {
                 if (j < rowImages.length) {
                   const image = rowImages[j];
@@ -1139,7 +1149,6 @@ strong {
                     </div>
                   `;
                 } else {
-                  // Add empty placeholder to maintain equal width
                   html += `
                     <div class="image-item" style="visibility: hidden;">
                       <div class="image-container"></div>
