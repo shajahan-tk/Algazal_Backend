@@ -464,14 +464,18 @@ export const generateQuotationPdf = asyncHandler(
     const { id } = req.params;
 
     const quotation = await Quotation.findById(id)
-      .populate<{ project: IProject & { client: IClient } }>({
-        path: "project",
-        select: "projectName client siteAddress location building apartmentNumber attention",
-        populate: {
-          path: "client",
-          select: "clientName clientAddress mobileNumber telephoneNumber email",
-        },
-      })
+      .populate<{ project: IProject & { client: IClient } }>(
+        {
+          path: "project",
+          select:
+            "projectName client siteAddress location building apartmentNumber attention",
+          populate: {
+            path: "client",
+            select:
+              "clientName clientAddress mobileNumber telephoneNumber email",
+          },
+        }
+      )
       .populate<{ preparedBy: IUser }>(
         "preparedBy",
         "firstName lastName phoneNumbers"
@@ -479,774 +483,438 @@ export const generateQuotationPdf = asyncHandler(
 
     if (!quotation) throw new ApiError(404, "Quotation not found");
 
-    if (!quotation.project || typeof quotation.project !== "object" || !("client" in quotation.project)) {
+    if (
+      !quotation.project ||
+      typeof quotation.project !== "object" ||
+      !("client" in quotation.project)
+    ) {
       throw new ApiError(400, "Client information not found");
     }
 
     const client = quotation.project.client as IClient;
-    const preparedBy = quotation.preparedBy as IUser;
+    const preparedBy = quotation.preparedBy as any;
     const project = quotation.project;
+
     const site = `${project.location} ${project.building} ${project.apartmentNumber}`;
 
-    // Calculate totals
-    const subtotal = quotation.items.reduce((sum, item) => sum + item.totalPrice, 0);
+    const subtotal = quotation.items.reduce(
+      (sum, item) => sum + item.totalPrice,
+      0
+    );
     const vatAmount = subtotal * (quotation.vatPercentage / 100);
     const netAmount = subtotal + vatAmount;
 
     const formatDate = (date: Date) => {
-      return date ? new Date(date).toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      }) : "";
+      return date
+        ? new Date(date).toLocaleDateString("en-GB", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          })
+        : "";
     };
 
     const getDaysRemaining = (validUntil: Date) => {
       if (!validUntil) return "N/A";
       const today = new Date();
       const validDate = new Date(validUntil);
-      const timeDiff = validDate.getTime() - today.getTime();
-      const daysRemaining = Math.ceil(timeDiff / (1000 * 3600 * 24));
-      return daysRemaining > 0 ? `${daysRemaining} days` : "Expired";
+      const diff = validDate.getTime() - today.getTime();
+      const days = Math.ceil(diff / (1000 * 3600 * 24));
+      return days > 0 ? `${days} days` : "Expired";
     };
 
-    // Function to clean up description - remove extra blank lines
-    const cleanDescription = (description: string) => {
-      return description.replace(/\n\n+/g, '\n').trim();
-    };
+    const cleanDescription = (desc: string) =>
+      desc.replace(/\n\n+/g, "\n").trim();
 
-    // Function to format currency with proper spacing
-    const formatCurrency = (amount: number) => {
-      return amount.toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,');
-    };
+    const formatCurrency = (n: number) =>
+      n.toFixed(2).replace(/\d(?=(\d{3})+\.)/g, "$&,");
 
     let htmlContent = `<!DOCTYPE html>
 <html>
 <head>
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-  <style type="text/css">
-    @page {
-      size: A4;
-      margin: 0.3cm;
-    }
-    
-    body {
-      font-family: 'Arial', sans-serif;
-      font-size: 10pt;
-      line-height: 1.3;
-      color: #333;
-      margin: 0;
-      padding: 0;
-    }
-
-    .container {
-      display: block;
-      width: 100%;
-      max-width: 100%;
-    }
-
-    .content {
-      margin-bottom: 10px;
-    }
-
-    .header {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 10px;
-      gap: 15px;
-      page-break-after: avoid;
-      padding: 8px 0;
-      border-bottom: 2px solid #94d7f4;
-      position: relative;
-    }
-
-    .logo {
-      height: 40px;
-      width: auto;
-      max-width: 120px;
-      object-fit: contain;
-      position: absolute;
-      left: 0;
-    }
-
-    .company-names {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      flex-grow: 1;
-    }
-
-    .company-name-arabic {
-      font-size: 16pt;
-      font-weight: bold;
-      color: #1a1a1a;
-      line-height: 1.2;
-      direction: rtl;
-      unicode-bidi: bidi-override;
-      letter-spacing: 0;
-      margin-bottom: 3px;
-    }
-
-    .company-name-english {
-      font-size: 9pt;
-      font-weight: bold;
-      color: #1a1a1a;
-      line-height: 1.2;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-    }
-
-    .client-info-container {
-      display: flex;
-      margin-bottom: 6px;
-      gap: 12px;
-      page-break-after: avoid;
-    }
-
-    .client-info {
-      flex: 1;
-      padding: 6px 8px;
-      border: 1px solid #ddd;
-      border-radius: 3px;
-      font-size: 9pt;
-      background-color: #f8f9fa;
-    }
-
-    .client-info p {
-      margin: 3px 0;
-      line-height: 1.2;
-    }
-
-    .client-info strong {
-      font-weight: 600;
-      color: #2c3e50;
-    }
-
-    .quotation-info {
-      width: 200px;
-    }
-
-    .quotation-details {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 9pt;
-    }
-
-    .quotation-details tr:not(:last-child) {
-      border-bottom: 1px solid #eee;
-    }
-
-    .quotation-details td {
-      padding: 4px 6px;
-      vertical-align: top;
-    }
-
-    .quotation-details td:first-child {
-      font-weight: bold;
-      width: 40%;
-      color: #2c3e50;
-    }
-
-    .subject-section {
-      margin: 6px 0;
-      padding: 6px 12px;
-      background-color: #f8f9fa;
-      border-radius: 3px;
-      page-break-after: avoid;
-      page-break-inside: avoid;
-      border-left: 4px solid #94d7f4;
-      border-right: 4px solid #94d7f4;
-      background: linear-gradient(to right, #f0f8ff 0%, #f8f9fa 50%, #f0f8ff 100%);
-    }
-
-    .subject-title {
-      font-weight: bold;
-      font-size: 9.5pt;
-      margin-bottom: 3px;
-      color: #2c5aa0;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .subject-content {
-      font-size: 9pt;
-      color: #333;
-      font-weight: 500;
-      padding-left: 4px;
-    }
-
-    .section {
-      margin-bottom: 8px;
-      page-break-inside: avoid;
-    }
-
-    .section-title {
-      font-size: 10pt;
-      font-weight: bold;
-      padding: 3px 0;
-      margin: 6px 0 4px 0;
-      border-bottom: 1px solid #94d7f4;
-      color: #2c3e50;
-    }
-    
-    .section-title.allow-break {
-      page-break-after: auto;
-    }
-    
-    .section-title.keep-together {
-      page-break-after: avoid;
-    }
-
-    .table-container {
-      page-break-inside: avoid;
-      overflow: visible;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 8px;
-      page-break-inside: avoid;
-      font-size: 9pt;
-      table-layout: fixed;
-    }
-
-    thead {
-      display: table-header-group;
-    }
-
-    tbody {
-      display: table-row-group;
-    }
-
-    tr {
-      page-break-inside: avoid;
-    }
-
-    th, td {
-      page-break-inside: avoid;
-    }
-
-    th {
-      background-color: #94d7f4;
-      color: #000;
-      font-weight: bold;
-      padding: 4px 5px;
-      text-align: center;
-      border: 1px solid #ddd;
-      font-size: 9pt;
-      vertical-align: middle;
-    }
-
-    td {
-      padding: 4px 5px;
-      border: 1px solid #ddd;
-      vertical-align: top;
-      font-size: 9pt;
-    }
-
-    .col-desc {
-      white-space: pre-wrap;
-      line-height: 1.2;
-    }
-
-    .col-no { width: 5%; }
-    .col-desc { width: 45%; }
-    .col-uom { width: 10%; }
-    .col-qty { width: 10%; }
-    .col-unit { width: 15%; }
-    .col-total { width: 15%; }
-
-    .amount-summary {
-      margin-top: 6px;
-      width: 100%;
-      text-align: right;
-      page-break-inside: avoid;
-      font-size: 9.5pt;
-    }
-
-    .amount-summary-row {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 3px;
-      align-items: center;
-    }
-
-    .amount-label {
-      font-weight: bold;
-      text-align: left;
-      font-size: 9pt;
-      min-width: 120px;
-    }
-
-    .amount-value {
-      text-align: right;
-      font-size: 9pt;
-      font-weight: normal;
-      font-family: 'Arial', sans-serif;
-      min-width: 150px;
-      white-space: nowrap;
-    }
-
-    .net-amount-row {
-      display: flex;
-      justify-content: space-between;
-      background-color: #94d7f4;
-      color: #000;
-      font-weight: bold;
-      font-size: 9.5pt;
-      margin-top: 3px;
-      padding: 4px 8px;
-      border-top: 1px solid #333;
-      border-radius: 3px;
-    }
-
-    .net-amount-row .amount-value {
-      font-weight: bold;
-      font-family: 'Arial', sans-serif;
-    }
-
-    /* Enhanced Images Section - FIXED FOR PAGE BREAKS */
-    .images-section {
-      margin-top: 8px;
-      page-break-before: auto;
-      orphans: 1;
-      widows: 1;
-    }
-    
-    .images-section .section-title {
-      page-break-after: auto;
-      page-break-before: auto;
-    }
-
-    .images-grid {
-      display: block;
-      margin-top: 4px;
-    }
-
-    .images-row {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 8px;
-      page-break-inside: avoid;
-      break-inside: avoid;
-      page-break-before: auto;
-    }
-
-    .image-item {
-      flex: 1;
-      min-width: calc(33.333% - 6px);
-      max-width: calc(33.333% - 6px);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      page-break-inside: avoid;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      padding: 6px;
-      background: #fafafa;
-      min-height: 0;
-      box-sizing: border-box;
-    }
-
-    .image-container {
-      width: 100%;
-      height: 100px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      margin-bottom: 4px;
-      background: #fff;
-      border-radius: 3px;
-    }
-
-    .image-container img {
-      max-height: 100%;
-      max-width: 100%;
-      object-fit: contain;
-    }
-
-    .image-title {
-      font-size: 8pt;
-      font-weight: 600;
-      text-align: center;
-      color: #2c3e50;
-      line-height: 1.1;
-      margin: 0;
-      word-break: break-word;
-      max-height: 28px;
-      overflow: hidden;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-    }
-
-    .terms-prepared-section {
-      margin-top: 8px;
-      page-break-inside: avoid;
-    }
-
-    .terms-prepared-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding-bottom: 3px;
-      border-bottom: 1px solid #94d7f4;
-      margin-bottom: 6px;
-      page-break-after: avoid;
-    }
-
-    .terms-title, .prepared-title {
-      font-size: 9.5pt;
-      font-weight: bold;
-      margin: 0;
-      color: #2c3e50;
-    }
-
-    .terms-prepared-content {
-      display: flex;
-      gap: 12px;
-      align-items: flex-start;
-    }
-
-    .terms-content {
-      flex: 1;
-    }
-
-    .prepared-content {
-      width: 180px;
-      flex-shrink: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      font-size: 9pt;
-    }
-
-    .terms-box {
-      border: 1px solid #000;
-      padding: 6px 8px;
-      width: 100%;
-      box-sizing: border-box;
-      font-size: 9pt;
-      line-height: 1.3;
-    }
-
-    .terms-box ol {
-      margin: 0;
-      padding-left: 12px;
-    }
-
-    .terms-box li {
-      margin-bottom: 3px;
-    }
-
-    .prepared-by-name {
-      font-weight: bold;
-      margin-top: 3px;
-      font-size: 9.5pt;
-      color: #2c3e50;
-    }
-
-    .prepared-by-title {
-      font-size: 8.5pt;
-      color: #555;
-      margin-top: 2px;
-    }
-
-    .tagline {
-      text-align: center;
-      font-weight: bold;
-      font-size: 10pt;
-      margin: 10px 0 6px 0;
-      color: #2c3e50;
-      border-top: 1px solid #ddd;
-      padding-top: 6px;
-      page-break-before: avoid;
-    }
-
-    .footer {
-      font-size: 8pt;
-      color: #555;
-      text-align: center;
-      margin-top: 6px;
-      page-break-inside: avoid;
-      line-height: 1.2;
-    }
-
-    .footer p {
-      margin: 3px 0;
-    }
-
-    .footer strong {
-      color: #2c3e50;
-    }
-
-    .text-center {
-      text-align: center;
-    }
-
-    .text-right {
-      text-align: right;
-    }
-
-    p {
-      margin: 3px 0;
-      line-height: 1.2;
-    }
-
-    strong {
-      font-weight: 600;
-    }
-
-    @media print {
-      thead { 
-        display: table-header-group; 
-      }
-      tfoot { 
-        display: table-footer-group; 
-      }
-      
-      table {
-        page-break-inside: avoid;
-      }
-      
-      tr {
-        break-inside: avoid;
-      }
-
-      tbody tr {
-        page-break-inside: avoid;
-      }
-
-      .subject-section {
-        page-break-after: avoid;
-        page-break-inside: avoid;
-      }
-
-      body {
-        font-size: 9pt;
-        margin: 0;
-        padding: 0;
-      }
-
-      .container {
-        margin: 0;
-        padding: 0;
-      }
-
-      .image-item {
-        page-break-inside: avoid;
-      }
-
-      .images-row {
-        page-break-inside: avoid;
-        break-inside: avoid;
-      }
-    }
-
-    .no-break {
-      page-break-inside: avoid;
-    }
-
-    .compact {
-      margin-bottom: 6px;
-    }
-  </style>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<style type="text/css">
+
+@page {
+  size: A4;
+  margin: 0.3cm;
+}
+
+body {
+  font-family: 'Arial', sans-serif;
+  font-size: 10pt;
+  margin: 0;
+  color: #333;
+}
+
+/* ---------------- HEADER ---------------- */
+
+.header {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-bottom: 2px solid #94d7f4;
+  padding: 8px 0;
+  margin-bottom: 10px;
+  position: relative;
+}
+
+.logo {
+  position: absolute;
+  left: 0;
+  height: 40px;
+}
+
+.company-names {
+  text-align: center;
+}
+
+.company-name-arabic {
+  font-size: 16pt;
+  font-weight: bold;
+  direction: rtl;
+}
+
+.company-name-english {
+  font-size: 9pt;
+  font-weight: bold;
+}
+
+/* ---------------- CLIENT INFO ---------------- */
+
+.client-info-container {
+  display: flex;
+  gap: 12px;
+}
+
+.client-info {
+  flex: 1;
+  padding: 6px;
+  background: #f8f9fa;
+  border: 1px solid #ddd;
+  font-size: 9pt;
+}
+
+.quotation-details {
+  width: 200px;
+  font-size: 9pt;
+  border-collapse: collapse;
+}
+
+.quotation-details td {
+  padding: 4px;
+  border-bottom: 1px solid #eee;
+}
+
+/* ---------------- SUBJECT ---------------- */
+
+.subject-section {
+  padding: 6px 12px;
+  background: linear-gradient(to right, #f0f8ff, #f8f9fa, #f0f8ff);
+  border-left: 4px solid #94d7f4;
+  border-right: 4px solid #94d7f4;
+}
+
+.subject-title {
+  font-weight: bold;
+  font-size: 9.5pt;
+}
+
+/* ---------------- ITEMS TABLE ---------------- */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th {
+  background: #94d7f4;
+  border: 1px solid #ddd;
+  padding: 4px;
+  text-align: center;
+}
+
+td {
+  border: 1px solid #ddd;
+  padding: 4px;
+  font-size: 9pt;
+}
+
+.col-desc {
+  white-space: pre-wrap;
+}
+
+/* ---------------- TOTALS ---------------- */
+
+.amount-summary {
+  margin-top: 6px;
+}
+
+.amount-summary-row {
+  display: flex;
+  justify-content: space-between;
+}
+
+.net-amount-row {
+  background: #94d7f4;
+  padding: 5px;
+  font-weight: bold;
+  border-radius: 3px;
+}
+
+/* ---------------- FIXED IMAGE SECTION ---------------- */
+
+.images-section {
+  margin-top: 10px;
+}
+
+.images-grid {
+  margin-top: 6px;
+}
+
+.images-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+
+  /* ⭐ FIX: allow natural flow */
+  /* removed all page-break-inside / avoid rules */
+}
+
+.image-item {
+  flex: 1;
+  min-width: calc(33.33% - 6px);
+  max-width: calc(33.33% - 6px);
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 6px;
+  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.image-container {
+  width: 100%;
+  height: 100px;
+  display: flex;
+  justify-content: center;
+}
+
+.image-container img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.image-title {
+  font-size: 8pt;
+  text-align: center;
+  margin-top: 4px;
+}
+
+/* ---------------- TERMS ---------------- */
+
+.terms-box {
+  border: 1px solid #000;
+  padding: 6px;
+}
+
+/* ---------------- FOOTER ---------------- */
+
+.tagline {
+  text-align: center;
+  font-weight: bold;
+  margin-top: 10px;
+}
+
+.footer {
+  margin-top: 6px;
+  text-align: center;
+  font-size: 8pt;
+}
+
+</style>
 </head>
 <body>
-  <div class="container">
-    <div class="content">
-      <div class="header-section no-break">
-        <div class="header">
-          <img class="logo" src="https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg" alt="Company Logo">
-          <div class="company-names">
-            <div class="company-name-arabic">الغزال الأبيض للخدمات الفنية</div>
-            <div class="company-name-english">AL GHAZAL AL ABYAD TECHNICAL SERVICES</div>
-          </div>
-        </div>
+<div class="container">
 
-        <div class="client-info-container">
-          <div class="client-info">
-            <p><strong>CLIENT:</strong> ${client.clientName || "N/A"}</p>
-            <p><strong>ADDRESS:</strong> ${client.clientAddress || "N/A"}</p>
-            <p><strong>CONTACT:</strong> ${client.mobileNumber || client.telephoneNumber || "N/A"}</p>
-            <p><strong>EMAIL:</strong> ${client.email || "N/A"}</p>
-            <p><strong>SITE:</strong> ${site}</p>
-            <p><strong>ATTENTION:</strong> ${project.attention || "N/A"}</p>
-          </div>
+<div class="header">
+  <img class="logo" src="https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg" />
+  <div class="company-names">
+    <div class="company-name-arabic">الغزال الأبيض للخدمات الفنية</div>
+    <div class="company-name-english">AL GHAZAL AL ABYAD TECHNICAL SERVICES</div>
+  </div>
+</div>
 
-          <div class="quotation-info">
-            <table class="quotation-details">
-              <tr>
-                <td>Quotation #:</td>
-                <td>${quotation.quotationNumber}</td>
-              </tr>
-              <tr>
-                <td>Date:</td>
-                <td>${formatDate(quotation.date)}</td>
-              </tr>
-              <tr>
-                <td>Valid Until:</td>
-                <td>${formatDate(quotation.validUntil)} (${getDaysRemaining(quotation.validUntil)})</td>
-              </tr>
-            </table>
-          </div>
-        </div>
+<div class="client-info-container">
+  <div class="client-info">
+    <p><strong>CLIENT:</strong> ${client.clientName}</p>
+    <p><strong>ADDRESS:</strong> ${client.clientAddress}</p>
+    <p><strong>CONTACT:</strong> ${
+      client.mobileNumber || client.telephoneNumber || "N/A"
+    }</p>
+    <p><strong>EMAIL:</strong> ${client.email}</p>
+    <p><strong>SITE:</strong> ${site}</p>
+    <p><strong>ATTENTION:</strong> ${project.attention}</p>
+  </div>
 
-        <div class="subject-section">
-          <div class="subject-title">SUBJECT</div>
-          <div class="subject-content">${project.projectName || "N/A"}</div>
-        </div>
-      </div>
+  <div class="quotation-info">
+    <table class="quotation-details">
+      <tr><td>Quotation #:</td><td>${
+        quotation.quotationNumber
+      }</td></tr>
+      <tr><td>Date:</td><td>${formatDate(quotation.date)}</td></tr>
+      <tr><td>Valid Until:</td><td>${formatDate(
+        quotation.validUntil
+      )} (${getDaysRemaining(quotation.validUntil)})</td></tr>
+    </table>
+  </div>
+</div>
 
-      <div class="section no-break">
-        <div class="section-title keep-together">ITEMS</div>
-        <div class="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th class="col-no">No.</th>
-                <th class="col-desc">Description</th>
-                <th class="col-uom">UOM</th>
-                <th class="col-qty">Qty</th>
-                <th class="col-unit">Unit Price (AED)</th>
-                <th class="col-total">Total (AED)</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${quotation.items.map((item, index) => `
-                <tr>
-                  <td class="text-center col-no">${index + 1}</td>
-                  <td class="col-desc">${cleanDescription(item.description)}</td>
-                  <td class="text-center col-uom">${item.uom || "NOS"}</td>
-                  <td class="text-center col-qty">${item.quantity.toFixed(2)}</td>
-                  <td class="text-right col-unit">${formatCurrency(item.unitPrice)}</td>
-                  <td class="text-right col-total">${formatCurrency(item.totalPrice)}</td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
-        </div>
+<div class="subject-section">
+  <div class="subject-title">SUBJECT</div>
+  <div class="subject-content">${project.projectName}</div>
+</div>
 
-        <div class="amount-summary">
-          <div class="amount-summary-row">
-            <div class="amount-label">SUBTOTAL:</div>
-            <div class="amount-value">${formatCurrency(subtotal)} AED</div>
-          </div>
-          <div class="amount-summary-row">
-            <div class="amount-label">VAT ${quotation.vatPercentage}%:</div>
-            <div class="amount-value">${formatCurrency(vatAmount)} AED</div>
-          </div>
-          <div class="net-amount-row">
-            <div class="amount-label">NET AMOUNT:</div>
-            <div class="amount-value">${formatCurrency(netAmount)} AED</div>
-          </div>
-        </div>
-      </div>
+<div class="section">
+  <div class="section-title">ITEMS</div>
+  <table>
+    <thead>
+      <tr>
+        <th>No.</th>
+        <th>Description</th>
+        <th>UOM</th>
+        <th>Qty</th>
+        <th>Unit Price (AED)</th>
+        <th>Total (AED)</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${quotation.items
+        .map(
+          (item, index) => `
+        <tr>
+          <td>${index + 1}</td>
+          <td class="col-desc">${cleanDescription(
+            item.description
+          )}</td>
+          <td>${item.uom || "NOS"}</td>
+          <td>${item.quantity.toFixed(2)}</td>
+          <td>${formatCurrency(item.unitPrice)}</td>
+          <td>${formatCurrency(item.totalPrice)}</td>
+        </tr>
+      `
+        )
+        .join("")}
+    </tbody>
+  </table>
 
-      ${quotation.images.length > 0 ? `
-      <div class="section images-section">
-        <div class="section-title">QUOTATION IMAGES</div>
-        <div class="images-grid">
-          ${(() => {
-            let html = '';
-            for (let i = 0; i < quotation.images.length; i += 3) {
-              const rowImages = quotation.images.slice(i, i + 3);
-              html += '<div class="images-row">';
-              
-              // Always create 3 image containers per row
-              for (let j = 0; j < 3; j++) {
-                if (j < rowImages.length) {
-                  const image = rowImages[j];
-                  html += `
-                    <div class="image-item">
-                      <div class="image-container">
-                        <img src="${image.imageUrl}" alt="${image.title}" />
-                      </div>
-                      <div class="image-title">${image.title}</div>
-                    </div>
-                  `;
-                } else {
-                  // Add empty placeholder to maintain equal width
-                  html += `
-                    <div class="image-item" style="visibility: hidden;">
-                      <div class="image-container"></div>
-                      <div class="image-title"></div>
-                    </div>
-                  `;
-                }
-              }
-              html += '</div>';
-            }
-            return html;
-          })()}
-        </div>
-      </div>
-      ` : ''}
-
-      ${quotation.termsAndConditions.length > 0 ? `
-      <div class="terms-prepared-section no-break">
-        <div class="terms-prepared-header">
-          <div class="terms-title keep-together">TERMS & CONDITIONS</div>
-          <div class="prepared-title keep-together">PREPARED BY</div>
-        </div>
-        <div class="terms-prepared-content">
-          <div class="terms-content">
-            <div class="terms-box">
-              <ol>
-                ${quotation.termsAndConditions.map(term => `<li>${term}</li>`).join("")}
-              </ol>
-            </div>
-          </div>
-          <div class="prepared-content">
-            <div class="prepared-by-name">${preparedBy?.firstName || "N/A"} ${preparedBy?.lastName || ""}</div>
-            ${preparedBy?.phoneNumbers?.length ? `
-            <div class="prepared-by-title">Phone: ${preparedBy.phoneNumbers.join(", ")}</div>
-            ` : ''}
-          </div>
-        </div>
-      </div>
-      ` : `
-      <div class="section no-break">
-        <div class="section-title keep-together">PREPARED BY</div>
-        <div class="prepared-content">
-          <div class="prepared-by-name">${preparedBy?.firstName || "N/A"} ${preparedBy?.lastName || ""}</div>
-          ${preparedBy?.phoneNumbers?.length ? `
-          <div class="prepared-by-title">Phone: ${preparedBy.phoneNumbers.join(", ")}</div>
-          ` : ''}
-        </div>
-      </div>
-      `}
+  <div class="amount-summary">
+    <div class="amount-summary-row">
+      <span>SUBTOTAL:</span>
+      <span>${formatCurrency(subtotal)} AED</span>
     </div>
-
-    <div class="tagline">We work U Relax</div>
-    <div class="footer">
-      <p><strong>AL GHAZAL AL ABYAD TECHNICAL SERVICES</strong></p>
-      <p>Office No:04, R09-France Cluster, International City-Dubai | P.O.Box:262760, Dubai-U.A.E</p>
-      <p>Tel: 044102555 | <a href="http://www.alghazalgroup.com/">www.alghazalgroup.com</a></p>
-      <p>Generated on ${formatDate(new Date())}</p>
+    <div class="amount-summary-row">
+      <span>VAT ${quotation.vatPercentage}%:</span>
+      <span>${formatCurrency(vatAmount)} AED</span>
+    </div>
+    <div class="net-amount-row">
+      <span>NET AMOUNT:</span>
+      <span>${formatCurrency(netAmount)} AED</span>
     </div>
   </div>
+</div>
+
+${
+  quotation.images.length
+    ? `
+<div class="images-section">
+  <div class="section-title">QUOTATION IMAGES</div>
+  <div class="images-grid">
+    ${(() => {
+      let html = "";
+      for (let i = 0; i < quotation.images.length; i += 3) {
+        const row = quotation.images.slice(i, i + 3);
+        html += `<div class="images-row">`;
+
+        for (let j = 0; j < 3; j++) {
+          if (row[j]) {
+            html += `
+            <div class="image-item">
+              <div class="image-container">
+                <img src="${row[j].imageUrl}" />
+              </div>
+              <div class="image-title">${row[j].title}</div>
+            </div>`;
+          } else {
+            html += `
+            <div class="image-item" style="visibility:hidden;">
+              <div class="image-container"></div>
+              <div class="image-title"></div>
+            </div>`;
+          }
+        }
+
+        html += `</div>`;
+      }
+      return html;
+    })()}
+  </div>
+</div>
+`
+    : ""
+}
+
+${
+  quotation.termsAndConditions.length
+    ? `
+<div class="terms-section">
+  <h4>TERMS & CONDITIONS</h4>
+  <div class="terms-box">
+    <ol>
+      ${quotation.termsAndConditions
+        .map((t) => `<li>${t}</li>`)
+        .join("")}
+    </ol>
+  </div>
+</div>
+`
+    : ""
+}
+
+<div class="prepared">
+  <h4>PREPARED BY</h4>
+  <p><strong>${preparedBy.firstName} ${
+      preparedBy.lastName
+    }</strong></p>
+  <p>Phone: ${preparedBy.phoneNumbers.join(", ")}</p>
+</div>
+
+<div class="tagline">We work U Relax</div>
+<div class="footer">
+  <p><strong>AL GHAZAL AL ABYAD TECHNICAL SERVICES</strong></p>
+  <p>Office No:04, R09-France Cluster, International City-Dubai | P.O.Box:262760</p>
+  <p>Tel: 044102555 | www.alghazalgroup.com</p>
+  <p>Generated on ${formatDate(new Date())}</p>
+</div>
+
+</div>
 </body>
 </html>
 `;
 
     const browser = await puppeteer.launch({
       headless: "shell",
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--font-render-hinting=none"],
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
     });
 
     try {
       const page = await browser.newPage();
-
       await page.setViewport({ width: 1200, height: 1600 });
 
       await page.setContent(htmlContent, {
-        waitUntil: ["load", "networkidle0", "domcontentloaded"],
+        waitUntil: ["load", "networkidle0"],
         timeout: 30000,
       });
 
@@ -1259,8 +927,6 @@ export const generateQuotationPdf = asyncHandler(
           bottom: "0.3cm",
           left: "0.3cm",
         },
-        displayHeaderFooter: false,
-        preferCSSPageSize: true,
       });
 
       res.setHeader("Content-Type", "application/pdf");
@@ -1269,8 +935,8 @@ export const generateQuotationPdf = asyncHandler(
         `attachment; filename=quotation-${quotation.quotationNumber}.pdf`
       );
       res.send(pdfBuffer);
-    } catch (error) {
-      console.error("PDF generation error:", error);
+    } catch (err) {
+      console.error("PDF generation error:", err);
       throw new ApiError(500, "Failed to generate PDF");
     } finally {
       await browser.close();
