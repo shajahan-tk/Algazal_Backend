@@ -17,7 +17,7 @@ import { WorkProgressTemplateParams } from "../template/workProgressEmailTemplat
 import { Expense } from "../models/expenseModel";
 import puppeteer from "puppeteer";
 import { FRONTEND_URL } from "../config/constant";
-import { Bank } from "@/models/bankDetailsModel";
+import { Bank } from "../models/bankDetailsModel";
 
 // Status transition validation
 const validStatusTransitions: Record<string, string[]> = {
