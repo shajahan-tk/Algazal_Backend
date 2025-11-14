@@ -189,7 +189,7 @@ export const replaceWorkCompletionImage = asyncHandler(
 
     await workCompletion.save();
     const updatedData = await getCompletionDataForProject(projectId);
-    
+
     res.status(200).json(
       new ApiResponse(200, updatedData, "Image replaced successfully")
     );
@@ -303,7 +303,7 @@ export const updateWorkCompletionImage = asyncHandler(
     await workCompletion.save();
 
     const updatedData = await getCompletionDataForProject(projectId);
-    
+
     res.status(200).json(
       new ApiResponse(200, updatedData, "Image title updated successfully")
     );
@@ -949,45 +949,9 @@ export const generateCompletionCertificatePdf = asyncHandler(
                     </table>
                 </div>
 
-                <div class="section">
-                    <table class="signature-table">
-                        <tr>
-                            <td colspan="3" class="header-row">Hand over by: AL GHAZAL AL ABYAD TECHNICAL SERVICES</td>
-                        </tr>
-                        <tr class="label-row">
-                            <td>Name</td>
-                            <td>Signature</td>
-                            <td>Date</td>
-                        </tr>
-                        <tr class="value-row">
-                            <td>${engineer?.firstName} ${engineer?.lastName || ""}</td>
-                            <td>
-                                ${engineer?.signatureImage ? `<img src="${engineer.signatureImage}" class="signature-img" />` : '<div class="empty-signature">Signature</div>'}
-                            </td>
-                            <td><span class="green-text">${formatDate(project.handoverDate)}</span></td>
-                        </tr>
-                    </table>
-                </div>
+               
 
-                <div class="section">
-                    <table class="signature-table">
-                        <tr>
-                            <td colspan="3" class="header-row">Accepted by: Client side</td>
-                        </tr>
-                        <tr class="label-row">
-                            <td>Name</td>
-                            <td>Signature</td>
-                            <td>Date</td>
-                        </tr>
-                        <tr class="value-row">
-                            <td>${client.clientName}</td>
-                            <td>
-                                <div class="empty-signature">Client Signature</div>
-                            </td>
-                            <td>${formatDate(project.acceptanceDate)}</td>
-                        </tr>
-                    </table>
-                </div>
+               
 
                 <div class="section">
                     <table class="signature-table">
@@ -1008,23 +972,60 @@ export const generateCompletionCertificatePdf = asyncHandler(
                         </tr>
                     </table>
                 </div>
+                 <div class="section">
+                    <table class="signature-table">
+                        <tr>
+                            <td colspan="3" class="header-row">Hand over by: AL GHAZAL AL ABYAD TECHNICAL SERVICES</td>
+                        </tr>
+                        <tr class="label-row">
+                            <td>Name</td>
+                            <td>Signature</td>
+                            <td>Date</td>
+                        </tr>
+                        <tr class="value-row">
+                            <td>${engineer?.firstName} ${engineer?.lastName || ""}</td>
+                            <td>
+                                ${engineer?.signatureImage ? `<img src="${engineer.signatureImage}" class="signature-img" />` : '<div class="empty-signature">Signature</div>'}
+                            </td>
+                            <td><span class="green-text">${formatDate(project.handoverDate)}</span></td>
+                        </tr>
+                    </table>
+                </div>
+                 <div class="section">
+                    <table class="signature-table">
+                        <tr>
+                            <td colspan="3" class="header-row">Accepted by: Client side</td>
+                        </tr>
+                        <tr class="label-row">
+                            <td>Name</td>
+                            <td>Signature</td>
+                            <td>Date</td>
+                        </tr>
+                        <tr class="value-row">
+                            <td>${client.clientName}</td>
+                            <td>
+                                <div class="empty-signature">Client Signature</div>
+                            </td>
+                            <td>${formatDate(project.acceptanceDate)}</td>
+                        </tr>
+                    </table>
+                </div>
 
                 <!-- IMAGES SECTION -->
-                ${
-                  workCompletion?.images && workCompletion.images.length > 0 ? `
+                ${workCompletion?.images && workCompletion.images.length > 0 ? `
                   <div class="images-section">
                     <div class="section-title">Site Pictures</div>
                     <div class="images-grid">
                       ${(() => {
-                        let html = '';
-                        for (let i = 0; i < workCompletion.images.length; i += 3) {
-                          const rowImages = workCompletion.images.slice(i, i + 3);
-                          html += '<div class="images-row">';
-                          
-                          for (let j = 0; j < 3; j++) {
-                            if (j < rowImages.length) {
-                              const image = rowImages[j];
-                              html += `
+          let html = '';
+          for (let i = 0; i < workCompletion.images.length; i += 3) {
+            const rowImages = workCompletion.images.slice(i, i + 3);
+            html += '<div class="images-row">';
+
+            for (let j = 0; j < 3; j++) {
+              if (j < rowImages.length) {
+                const image = rowImages[j];
+                html += `
                                 <div class="image-item">
                                   <div class="image-container">
                                     <img src="${image.imageUrl}" alt="${image.title || "Site picture"}" />
@@ -1032,19 +1033,19 @@ export const generateCompletionCertificatePdf = asyncHandler(
                                   <div class="image-title">${image.title || "Site Image"}</div>
                                 </div>
                               `;
-                            } else {
-                              html += `
+              } else {
+                html += `
                                 <div class="image-item" style="visibility: hidden;">
                                   <div class="image-container"></div>
                                   <div class="image-title"></div>
                                 </div>
                               `;
-                            }
-                          }
-                          html += '</div>';
-                        }
-                        return html;
-                      })()}
+              }
+            }
+            html += '</div>';
+          }
+          return html;
+        })()}
                     </div>
                   </div>
                   ` : `
@@ -1053,7 +1054,7 @@ export const generateCompletionCertificatePdf = asyncHandler(
                     <p style="text-align: center; font-size: 10pt; color: #666; padding: 20px;">No site pictures available</p>
                   </div>
                   `
-                }
+      }
             </div>
 
             <div class="tagline">We work U Relax</div>
