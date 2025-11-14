@@ -1851,9 +1851,7 @@ export const generateInvoicePdf = asyncHandler(
       </div>
       ` : ''}
 
-      <div class="payment-terms">
-        <p><strong>Payment Terms:</strong> 30 days from invoice date</p>
-      </div>
+  
     </div>
 
     <div class="footer-container">
