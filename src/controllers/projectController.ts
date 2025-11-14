@@ -1231,13 +1231,13 @@ export const getDriverProjects = asyncHandler(
 );
 export const generateInvoicePdf = asyncHandler(
   async (req: Request, res: Response) => {
-    const { projectId,selectedBankId } = req.params;
+    const { projectId, selectedBankId } = req.params;
 
     // Validate projectId
-    if (!projectId || !Types.ObjectId.isValid(projectId) ) {
+    if (!projectId || !Types.ObjectId.isValid(projectId)) {
       throw new ApiError(400, "Valid project ID is required");
     }
-    if (!selectedBankId || !Types.ObjectId.isValid(selectedBankId) ) {
+    if (!selectedBankId || !Types.ObjectId.isValid(selectedBankId)) {
       throw new ApiError(400, "Valid selectedBank ID is required");
     }
     
@@ -1251,11 +1251,11 @@ export const generateInvoicePdf = asyncHandler(
         "createdBy",
         "firstName lastName signatureImage"
       );
-      const bankDetails=await Bank.findById(selectedBankId);
-      if (!bankDetails) {
+    const bankDetails = await Bank.findById(selectedBankId);
+    if (!bankDetails) {
       throw new ApiError(404, "Bank details not found");
-        
-      }
+    }
+    
     if (!project) {
       throw new ApiError(404, "Project not found");
     }
@@ -1403,6 +1403,9 @@ export const generateInvoicePdf = asyncHandler(
       position: absolute;
       left: 0;
       top: -12px;
+      /* Prevent logo from breaking */
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
     .company-names {
       display: flex;
@@ -1443,6 +1446,9 @@ export const generateInvoicePdf = asyncHandler(
       border-radius: 6px;
       border-left: 4px solid #94d7f4;
       border-right: 4px solid #94d7f4;
+      /* Prevent title from breaking */
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
     .invoice-header {
       display: flex;
@@ -1451,6 +1457,9 @@ export const generateInvoicePdf = asyncHandler(
       padding-bottom: 10px;
       border-bottom: 1px solid #eee;
       align-items: flex-start;
+      /* Prevent header from breaking */
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
     .invoice-info {
       text-align: right;
@@ -1468,11 +1477,17 @@ export const generateInvoicePdf = asyncHandler(
       border-left: 4px solid #94d7f4;
       border-right: 4px solid #94d7f4;
       border-radius: 4px;
+      /* Prevent service period from breaking */
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
     .client-info-container {
       display: flex;
       margin-bottom: 15px;
       gap: 15px;
+      /* Prevent client info from breaking */
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
     .client-info, .company-info {
       flex: 1;
@@ -1506,12 +1521,28 @@ export const generateInvoicePdf = asyncHandler(
       color: #2c3e50;
       page-break-after: avoid;
     }
+    .table-container {
+      page-break-inside: avoid;
+      overflow: visible;
+    }
     table {
       width: 100%;
       border-collapse: collapse;
       margin-bottom: 10px;
-      page-break-inside: avoid;
       font-size: 9.5pt;
+      table-layout: fixed;
+    }
+    thead {
+      display: table-header-group;
+    }
+    tbody {
+      display: table-row-group;
+    }
+    tr {
+      page-break-inside: avoid;
+    }
+    th, td {
+      page-break-inside: avoid;
     }
     th {
       background-color: #94d7f4;
@@ -1534,6 +1565,9 @@ export const generateInvoicePdf = asyncHandler(
       width: 100%;
       text-align: right;
       font-size: 10pt;
+      /* Prevent amount summary from breaking */
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
     .amount-summary-row {
       display: flex;
@@ -1562,6 +1596,21 @@ export const generateInvoicePdf = asyncHandler(
       margin-top: 4px;
       padding: 6px 0;
       border-top: 2px solid #333;
+      /* Prevent net amount row from breaking */
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .amount-in-words {
+      margin: 10px 0;
+      padding: 8px 12px;
+      background-color: #f8f9fa;
+      border-left: 4px solid #94d7f4;
+      border-right: 4px solid #94d7f4;
+      border-radius: 4px;
+      font-size: 10pt;
+      /* Prevent amount in words from breaking */
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
     .bank-details {
       margin-top: 15px;
@@ -1570,6 +1619,9 @@ export const generateInvoicePdf = asyncHandler(
       border-radius: 4px;
       background-color: #f8f9fa;
       font-size: 10pt;
+      /* Prevent bank details from breaking */
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
     .bank-details h3 {
       font-size: 11pt;
@@ -1581,6 +1633,18 @@ export const generateInvoicePdf = asyncHandler(
     .bank-details p {
       margin: 4px 0;
       line-height: 1.3;
+    }
+    .payment-terms {
+      margin-top: 10px;
+      padding: 8px 12px;
+      background-color: #f8f9fa;
+      border-left: 4px solid #94d7f4;
+      border-right: 4px solid #94d7f4;
+      border-radius: 4px;
+      font-size: 10pt;
+      /* Prevent payment terms from breaking */
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
     .text-center {
       text-align: center;
@@ -1625,6 +1689,24 @@ export const generateInvoicePdf = asyncHandler(
     @media print {
       body {
         font-size: 10pt;
+      }
+      thead { 
+        display: table-header-group; 
+      }
+      tfoot { 
+        display: table-footer-group; 
+      }
+      
+      table {
+        page-break-inside: avoid;
+      }
+      
+      tr {
+        break-inside: avoid;
+      }
+
+      tbody tr {
+        page-break-inside: avoid;
       }
     }
   </style>
@@ -1681,30 +1763,32 @@ export const generateInvoicePdf = asyncHandler(
 
       <div class="section">
         <div class="section-title">INVOICE ITEMS</div>
-        <table>
-          <thead>
-            <tr>
-              <th width="5%">No.</th>
-              <th width="45%">Description</th>
-              <th width="10%">UOM</th>
-              <th width="10%">Qty</th>
-              <th width="15%">Unit Price (AED)</th>
-              <th width="15%" class="text-right">Total (AED)</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${quotation.items.map((item, index) => `
+        <div class="table-container">
+          <table>
+            <thead>
               <tr>
-                <td class="text-center">${index + 1}</td>
-                <td>${item.description}</td>
-                <td class="text-center">${item.uom || "NOS"}</td>
-                <td class="text-center">${item.quantity.toFixed(2)}</td>
-                <td class="text-right">${item.unitPrice.toFixed(2)}</td>
-                <td class="text-right">${item.totalPrice.toFixed(2)}</td>
+                <th width="5%">No.</th>
+                <th width="45%">Description</th>
+                <th width="10%">UOM</th>
+                <th width="10%">Qty</th>
+                <th width="15%">Unit Price (AED)</th>
+                <th width="15%" class="text-right">Total (AED)</th>
               </tr>
-            `).join("")}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              ${quotation.items.map((item, index) => `
+                <tr>
+                  <td class="text-center">${index + 1}</td>
+                  <td>${item.description}</td>
+                  <td class="text-center">${item.uom || "NOS"}</td>
+                  <td class="text-center">${item.quantity.toFixed(2)}</td>
+                  <td class="text-right">${item.unitPrice.toFixed(2)}</td>
+                  <td class="text-right">${item.totalPrice.toFixed(2)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
 
         <div class="amount-summary">
           <div class="amount-summary-row">
@@ -1722,7 +1806,7 @@ export const generateInvoicePdf = asyncHandler(
         </div>
       </div>
 
-      <div class="section">
+      <div class="amount-in-words">
         <p><strong>Amount in words:</strong> ${convertToWords(totalAmount)} AED only</p>
       </div>
 
@@ -1735,7 +1819,7 @@ export const generateInvoicePdf = asyncHandler(
         <p><strong>Swift Code:</strong> ${bankDetails.swiftCode}</p>
       </div>
 
-      <div class="section">
+      <div class="payment-terms">
         <p><strong>Payment Terms:</strong> 30 days from invoice date</p>
       </div>
     </div>
