@@ -395,13 +395,10 @@ export const assignProject = asyncHandler(
             "https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg",
           projectName: project.projectName || "the project",
         },
-        text: `Dear Team,\n\nEngineer ${
-          engineer.firstName || "Engineer"
-        } has been assigned to project "${
-          project.projectName || "the project"
-        }".\n\nView project details: ${FRONTEND_URL}/app/project-view/${
-          project._id
-        }\n\nBest regards,\nTECHNICAL SERVICE TEAM`,
+        text: `Dear Team,\n\nEngineer ${engineer.firstName || "Engineer"
+          } has been assigned to project "${project.projectName || "the project"
+          }".\n\nView project details: ${FRONTEND_URL}/app/project-view/${project._id
+          }\n\nBest regards,\nTECHNICAL SERVICE TEAM`,
         headers: {
           "X-Priority": "1",
           Importance: "high",
@@ -559,13 +556,10 @@ export const updateProjectProgress = asyncHandler(
           bcc: uniqueRecipients.map((r) => r.email).join(","),
           subject: `Progress Update: ${project.projectName} (${progress}% Complete)`,
           templateParams,
-          text: `Dear Team,\n\nThe progress for project ${
-            project.projectName
-          } has been updated to ${progress}%.\n\n${
-            comment ? `Details: ${comment}\n\n` : ""
-          }View project: ${
-            templateParams.actionUrl
-          }\n\nBest regards,\nTECHNICAL SERVICE TEAM`,
+          text: `Dear Team,\n\nThe progress for project ${project.projectName
+            } has been updated to ${progress}%.\n\n${comment ? `Details: ${comment}\n\n` : ""
+            }View project: ${templateParams.actionUrl
+            }\n\nBest regards,\nTECHNICAL SERVICE TEAM`,
           headers: {
             "X-Priority": "1",
             Importance: "high",
@@ -673,7 +667,7 @@ export const generateInvoiceData = asyncHandler(
     }
 
     // Generate invoice number with better format
-    const invoiceNumber = `INV${project.projectNumber.slice(3,10)}`;
+    const invoiceNumber = `INV${project.projectNumber.slice(3, 10)}`;
 
 
     // Type-safe client data extraction
@@ -720,22 +714,22 @@ export const generateInvoiceData = asyncHandler(
       unitPrice: item.unitPrice || 0,
       total: item.totalPrice || 0,
     }));
-function getDaysLeft(validUntil?: Date): string {
-  if (!validUntil) return "N/A";
+    function getDaysLeft(validUntil?: Date): string {
+      if (!validUntil) return "N/A";
 
-  const today = new Date();
+      const today = new Date();
 
-  // Calculate difference in ms
-  const diffTime = validUntil.getTime() - today.getTime();
+      // Calculate difference in ms
+      const diffTime = validUntil.getTime() - today.getTime();
 
-  // Convert ms → days
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      // Convert ms → days
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-  if (diffDays < 0) return "Expired"; 
-  if (diffDays === 0) return "Today";
+      if (diffDays < 0) return "Expired";
+      if (diffDays === 0) return "Today";
 
-  return `${diffDays} days left`;
-}
+      return `${diffDays} days left`;
+    }
     // Enhanced response structure with type-safe checks
     const response = {
       _id: project._id.toString(),
@@ -758,8 +752,8 @@ function getDaysLeft(validUntil?: Date): string {
         firstName: createdByData?.firstName || "N/A",
         lastName: createdByData?.lastName || "N/A",
       },
-      projectName:project.projectName,
-      location:project.location,
+      projectName: project.projectName,
+      location: project.location,
     };
 
     res
@@ -832,7 +826,7 @@ export const assignTeamAndDriver = asyncHandler(
     const project = await Project.findById(projectId);
     if (!project) throw new ApiError(404, "Project not found");
 
-  
+
 
     // Define all valid worker roles (excluding management and admin roles)
     const validWorkerRoles = [
@@ -853,7 +847,7 @@ export const assignTeamAndDriver = asyncHandler(
       "mep_supervisor",
       "electrical_supervisor",
       "supervisor",
-    
+
     ];
 
     // Verify all workers have valid worker roles and are active
@@ -990,7 +984,7 @@ export const updateWorkersAndDriver = asyncHandler(
       throw new ApiError(404, "Project not found");
     }
 
-   
+
     // Define all valid worker roles (same as assignTeamAndDriver)
     const validWorkerRoles = [
       "worker",
@@ -1240,7 +1234,7 @@ export const generateInvoicePdf = asyncHandler(
     if (!selectedBankId || !Types.ObjectId.isValid(selectedBankId)) {
       throw new ApiError(400, "Valid selectedBank ID is required");
     }
-    
+
     // Get project data with populated fields
     const project = await Project.findById(projectId)
       .populate<{ client: IClient }>({
@@ -1255,7 +1249,7 @@ export const generateInvoicePdf = asyncHandler(
     if (!bankDetails) {
       throw new ApiError(404, "Bank details not found");
     }
-    
+
     if (!project) {
       throw new ApiError(404, "Project not found");
     }
@@ -1274,9 +1268,8 @@ export const generateInvoicePdf = asyncHandler(
     const createdBy = project.createdBy as IUser;
 
     // Generate invoice number
-    const invoiceNumber = `INV${project.projectNumber.slice(3,10)}`;
+    const invoiceNumber = `INV${project.projectNumber.slice(3, 10)}`;
 
-    
     // Format dates
     const formatDate = (date: Date | string | undefined): string => {
       if (!date) return 'N/A';
@@ -1299,7 +1292,7 @@ export const generateInvoicePdf = asyncHandler(
     // Helper function to convert amount to words
     const convertToWords = (num: number): string => {
       if (num === 0) return 'Zero AED only';
-      
+
       const units = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
       const teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
       const tens = ['', 'Ten', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
@@ -1308,12 +1301,12 @@ export const generateInvoicePdf = asyncHandler(
       const convertChunk = (n: number): string => {
         if (n === 0) return '';
         let chunkWords = [];
-        
+
         const hundred = Math.floor(n / 100);
         if (hundred > 0) {
           chunkWords.push(units[hundred] + ' Hundred');
         }
-        
+
         const remainder = n % 100;
         if (remainder > 0) {
           if (remainder < 10) {
@@ -1329,7 +1322,7 @@ export const generateInvoicePdf = asyncHandler(
             }
           }
         }
-        
+
         return chunkWords.join(' ');
       };
 
@@ -1402,7 +1395,7 @@ export const generateInvoicePdf = asyncHandler(
       object-fit: contain;
       position: absolute;
       left: 0;
-      top: -12px;
+  
       /* Prevent logo from breaking */
       page-break-inside: avoid;
       break-inside: avoid;
@@ -1638,6 +1631,26 @@ export const generateInvoicePdf = asyncHandler(
       margin: 4px 0;
       line-height: 1.3;
     }
+    /* Added for terms and conditions */
+    .terms-section {
+      margin-top: 15px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .terms-box {
+      border: 1px solid #000;
+      padding: 8px 12px;
+      background-color: #f8f9fa;
+      font-size: 10pt;
+      line-height: 1.4;
+    }
+    .terms-box ol {
+      margin: 0;
+      padding-left: 15px;
+    }
+    .terms-box li {
+      margin-bottom: 5px;
+    }
     .payment-terms {
       margin-top: 10px;
       padding: 8px 12px;
@@ -1826,6 +1839,18 @@ export const generateInvoicePdf = asyncHandler(
         <p><strong>Swift Code:</strong> ${bankDetails.swiftCode}</p>
       </div>
 
+      <!-- FIXED: Terms and Conditions Section -->
+      ${quotation.termsAndConditions && quotation.termsAndConditions.length > 0 ? `
+      <div class="terms-section">
+        <div class="section-title">TERMS & CONDITIONS</div>
+        <div class="terms-box">
+          <ol>
+            ${quotation.termsAndConditions.map((term) => `<li>${term}</li>`).join("")}
+          </ol>
+        </div>
+      </div>
+      ` : ''}
+
       <div class="payment-terms">
         <p><strong>Payment Terms:</strong> 30 days from invoice date</p>
       </div>
@@ -1852,9 +1877,9 @@ export const generateInvoicePdf = asyncHandler(
 
     try {
       const page = await browser.newPage();
-      
+
       await page.setViewport({ width: 1200, height: 1600 });
-      
+
       await page.setContent(htmlContent, {
         waitUntil: ["load", "networkidle0", "domcontentloaded"],
         timeout: 30000,
@@ -2070,7 +2095,7 @@ export const setWorkStartDate = asyncHandler(
       { new: true, runValidators: true }
     );
     console.log(updatedProject);
-    
+
 
     res.status(200).json(
       new ApiResponse(200, updatedProject, "Work start date set successfully")
