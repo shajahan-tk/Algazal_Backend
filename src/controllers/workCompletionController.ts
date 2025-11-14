@@ -778,26 +778,46 @@ export const generateCompletionCertificatePdf = asyncHandler(
                 color: #228B22;
                 font-weight: bold;
             }
+            
+            /* ==================== IMAGE SECTION (FIXED - NO BREAK PROBLEMS) ==================== */
+            
             .images-section {
                 margin-top: 15px;
-                page-break-inside: avoid;
+                /* REMOVED: page-break-inside: avoid - Let it break naturally */
             }
+            
             .images-grid {
-                display: grid;
-                grid-template-columns: repeat(3, 1fr);
-                gap: 12px;
+                display: block;
                 margin-top: 8px;
+                /* REMOVED: page-break-inside rules - Let it flow naturally */
             }
+            
+            .images-row {
+                display: flex;
+                gap: 12px;
+                margin-bottom: 12px;
+                /* REMOVED ALL page-break rules - Let rows break naturally between pages */
+                min-height: 140px; /* Ensure minimum height for better breaking */
+            }
+            
             .image-item {
+                flex: 1;
+                min-width: calc(33.333% - 8px);
+                max-width: calc(33.333% - 8px);
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                page-break-inside: avoid;
+                /* REMOVED: page-break-inside: avoid - Let items break naturally */
                 border: 1px solid #ddd;
                 border-radius: 6px;
                 padding: 8px;
                 background: #fafafa;
+                min-height: 140px;
+                box-sizing: border-box;
+                /* Allow breaking inside image items if needed */
+                page-break-inside: auto;
             }
+            
             .image-container {
                 width: 100%;
                 height: 140px;
@@ -808,12 +828,20 @@ export const generateCompletionCertificatePdf = asyncHandler(
                 margin-bottom: 6px;
                 background: #fff;
                 border-radius: 4px;
+                /* Prevent images from breaking */
+                page-break-inside: avoid;
+                break-inside: avoid;
             }
+            
             .image-container img {
                 max-height: 100%;
                 max-width: 100%;
                 object-fit: contain;
+                /* Ensure images don't break */
+                page-break-inside: avoid;
+                break-inside: avoid;
             }
+            
             .image-title {
                 font-size: 8.5pt;
                 font-weight: 600;
@@ -822,7 +850,15 @@ export const generateCompletionCertificatePdf = asyncHandler(
                 line-height: 1.2;
                 margin: 0;
                 word-break: break-word;
+                max-height: 28px;
+                overflow: hidden;
+                display: -webkit-box;
+                -webkit-line-clamp: 2;
+                -webkit-box-orient: vertical;
+                /* Allow title to break with the image */
+                page-break-inside: auto;
             }
+            
             .tagline {
                 text-align: center;
                 font-weight: bold;
@@ -973,21 +1009,51 @@ export const generateCompletionCertificatePdf = asyncHandler(
                     </table>
                 </div>
 
-                <div class="section images-section">
+                <!-- IMAGES SECTION -->
+                ${
+                  workCompletion?.images && workCompletion.images.length > 0 ? `
+                  <div class="images-section">
                     <div class="section-title">Site Pictures</div>
-                    ${workCompletion?.images && workCompletion.images.length > 0 ? `
                     <div class="images-grid">
-                        ${workCompletion.images.map((image) =>
-      `<div class="image-item">
-                               <div class="image-container">
-                                   <img src="${image.imageUrl}" alt="${image.title || "Site picture"}" />
-                               </div>
-                               <div class="image-title">${image.title || "Site Image"}</div>
-                             </div>`
-    ).join("")}
+                      ${(() => {
+                        let html = '';
+                        for (let i = 0; i < workCompletion.images.length; i += 3) {
+                          const rowImages = workCompletion.images.slice(i, i + 3);
+                          html += '<div class="images-row">';
+                          
+                          for (let j = 0; j < 3; j++) {
+                            if (j < rowImages.length) {
+                              const image = rowImages[j];
+                              html += `
+                                <div class="image-item">
+                                  <div class="image-container">
+                                    <img src="${image.imageUrl}" alt="${image.title || "Site picture"}" />
+                                  </div>
+                                  <div class="image-title">${image.title || "Site Image"}</div>
+                                </div>
+                              `;
+                            } else {
+                              html += `
+                                <div class="image-item" style="visibility: hidden;">
+                                  <div class="image-container"></div>
+                                  <div class="image-title"></div>
+                                </div>
+                              `;
+                            }
+                          }
+                          html += '</div>';
+                        }
+                        return html;
+                      })()}
                     </div>
-                    ` : '<p style="text-align: center; font-size: 10pt; color: #666; padding: 20px;">No site pictures available</p>'}
-                </div>
+                  </div>
+                  ` : `
+                  <div class="section">
+                    <div class="section-title">Site Pictures</div>
+                    <p style="text-align: center; font-size: 10pt; color: #666; padding: 20px;">No site pictures available</p>
+                  </div>
+                  `
+                }
             </div>
 
             <div class="tagline">We work U Relax</div>
