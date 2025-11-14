@@ -1510,7 +1510,6 @@ export const generateInvoicePdf = asyncHandler(
     }
     .section {
       margin-bottom: 12px;
-      page-break-inside: avoid;
     }
     .section-title {
       font-size: 11pt;
@@ -1521,8 +1520,9 @@ export const generateInvoicePdf = asyncHandler(
       color: #2c3e50;
       page-break-after: avoid;
     }
+    /* MODIFIED: Allow table to break across pages */
     .table-container {
-      page-break-inside: avoid;
+      /* REMOVED: page-break-inside: avoid - Allow table to break */
       overflow: visible;
     }
     table {
@@ -1531,15 +1531,19 @@ export const generateInvoicePdf = asyncHandler(
       margin-bottom: 10px;
       font-size: 9.5pt;
       table-layout: fixed;
+      /* REMOVED: page-break-inside: avoid - Allow table to break */
     }
     thead {
       display: table-header-group;
+      /* Ensure header repeats on each page */
     }
     tbody {
       display: table-row-group;
     }
+    /* Keep individual rows from breaking */
     tr {
       page-break-inside: avoid;
+      break-inside: avoid;
     }
     th, td {
       page-break-inside: avoid;
@@ -1697,12 +1701,15 @@ export const generateInvoicePdf = asyncHandler(
         display: table-footer-group; 
       }
       
+      /* Allow table to break in print */
       table {
-        page-break-inside: avoid;
+        page-break-inside: auto;
       }
       
+      /* Keep rows from breaking individually */
       tr {
         break-inside: avoid;
+        page-break-inside: avoid;
       }
 
       tbody tr {
