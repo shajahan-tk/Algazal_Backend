@@ -271,46 +271,46 @@ export const getProjectProfits = asyncHandler(
 
     // Date range filter (takes precedence over year/month)
     if (startDate && endDate) {
-      filter.reportMonth = {
+      filter.createdAt = {
         $gte: new Date(startDate as string),
         $lte: new Date(endDate as string),
       };
     } else {
-      // Year filter
+      // Year filter - based on createdAt
       if (year) {
         const yearNum = parseInt(year as string);
         if (isNaN(yearNum)) {
           throw new ApiError(400, "Invalid year value");
         }
-        filter.reportMonth = {
+        filter.createdAt = {
           $gte: new Date(yearNum, 0, 1),
           $lte: new Date(yearNum + 1, 0, 1),
         };
       }
 
-      // Month filter (works with year filter)
+      // Month filter - based on createdAt (works with year filter)
       if (month) {
         const monthNum = parseInt(month as string);
         if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
           throw new ApiError(400, "Invalid month value (1-12)");
         }
 
-        if (!filter.reportMonth) {
+        if (!filter.createdAt) {
           const currentYear = new Date().getFullYear();
-          filter.reportMonth = {
+          filter.createdAt = {
             $gte: new Date(currentYear, monthNum - 1, 1),
             $lt: new Date(currentYear, monthNum, 1),
           };
         } else {
-          const startDate = new Date(filter.reportMonth.$gte);
+          const startDate = new Date(filter.createdAt.$gte);
           startDate.setMonth(monthNum - 1);
           startDate.setDate(1);
 
           const endDate = new Date(startDate);
           endDate.setMonth(monthNum);
 
-          filter.reportMonth.$gte = startDate;
-          filter.reportMonth.$lte = endDate;
+          filter.createdAt.$gte = startDate;
+          filter.createdAt.$lte = endDate;
         }
       }
     }
@@ -344,8 +344,24 @@ export const getProjectProfits = asyncHandler(
       { $match: filter },
       { $skip: skip },
       { $limit: Number(limit) },
-      { $sort: { reportMonth: -1 } },
-      // Lookup LPO data to get lpoNumber
+      { $sort: { createdAt: -1 } },
+      // First lookup project to get project details
+      {
+        $lookup: {
+          from: "projects",
+          localField: "project",
+          foreignField: "_id",
+          as: "projectData",
+        },
+      },
+      // Unwind project data
+      {
+        $unwind: {
+          path: "$projectData",
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      // Lookup LPO data - try both lpoId and project as fallback
       {
         $lookup: {
           from: "lpos",
@@ -354,16 +370,55 @@ export const getProjectProfits = asyncHandler(
           as: "lpoData",
         },
       },
+      // If no LPO found with lpoId, try looking up by project
+      {
+        $lookup: {
+          from: "lpos",
+          localField: "project",
+          foreignField: "project",
+          as: "lpoDataByProject",
+        },
+      },
+      // Add lpoNumber field - try lpoData first, then lpoDataByProject
       {
         $addFields: {
-          lpoNumber: { $arrayElemAt: ["$lpoData.lpoNumber", 0] },
+          lpoNumber: {
+            $ifNull: [
+              { $arrayElemAt: ["$lpoData.lpoNumber", 0] },
+              { $arrayElemAt: ["$lpoDataByProject.lpoNumber", 0] },
+              "N/A"
+            ]
+          },
         },
       },
+      // Group back to remove unwound documents
       {
-        $project: {
-          lpoData: 0, // Remove the full LPO data array
-        },
+        $group: {
+          _id: "$_id",
+          project: { $first: "$project" },
+          projectName: { $first: "$projectName" },
+          projectNumber: { $first: "$projectNumber" },
+          clientName: { $first: "$clientName" },
+          location: { $first: "$location" },
+          building: { $first: "$building" },
+          apartmentNumber: { $first: "$apartmentNumber" },
+          lpoId: { $first: "$lpoId" },
+          lpoNumber: { $first: "$lpoNumber" },
+          reportMonth: { $first: "$reportMonth" },
+          reportPeriodStart: { $first: "$reportPeriodStart" },
+          reportPeriodEnd: { $first: "$reportPeriodEnd" },
+          budget: { $first: "$budget" },
+          expenses: { $first: "$expenses" },
+          profit: { $first: "$profit" },
+          description: { $first: "$description" },
+          attachments: { $first: "$attachments" },
+          createdBy: { $first: "$createdBy" },
+          createdAt: { $first: "$createdAt" },
+          updatedAt: { $first: "$updatedAt" }
+        }
       },
+      // Sort again after grouping
+      { $sort: { createdAt: -1 } }
     ]);
 
     // Populate createdBy and project separately
@@ -392,7 +447,6 @@ export const getProjectProfits = asyncHandler(
     );
   }
 );
-
 export const getProjectProfit = asyncHandler(
   async (req: Request, res: Response) => {
     const { id } = req.params;
@@ -688,7 +742,23 @@ export const exportProjectProfitsToExcel = asyncHandler(
     const projects = await ProjectProfit.aggregate([
       { $match: filter },
       { $sort: { reportMonth: -1 } },
-      // Lookup LPO data to get lpoNumber
+      // First lookup project to get project details
+      {
+        $lookup: {
+          from: "projects",
+          localField: "project",
+          foreignField: "_id",
+          as: "projectData",
+        },
+      },
+      // Unwind project data
+      {
+        $unwind: {
+          path: "$projectData",
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      // Lookup LPO data - try both lpoId and project as fallback
       {
         $lookup: {
           from: "lpos",
@@ -697,16 +767,55 @@ export const exportProjectProfitsToExcel = asyncHandler(
           as: "lpoData",
         },
       },
+      // If no LPO found with lpoId, try looking up by project
+      {
+        $lookup: {
+          from: "lpos",
+          localField: "project",
+          foreignField: "project",
+          as: "lpoDataByProject",
+        },
+      },
+      // Add lpoNumber field - try lpoData first, then lpoDataByProject
       {
         $addFields: {
-          lpoNumber: { $arrayElemAt: ["$lpoData.lpoNumber", 0] },
+          lpoNumber: {
+            $ifNull: [
+              { $arrayElemAt: ["$lpoData.lpoNumber", 0] },
+              { $arrayElemAt: ["$lpoDataByProject.lpoNumber", 0] },
+              "N/A"
+            ]
+          },
         },
       },
+      // Group back to remove unwound documents
       {
-        $project: {
-          lpoData: 0, // Remove the full LPO data array
-        },
+        $group: {
+          _id: "$_id",
+          project: { $first: "$project" },
+          projectName: { $first: "$projectName" },
+          projectNumber: { $first: "$projectNumber" },
+          clientName: { $first: "$clientName" },
+          location: { $first: "$location" },
+          building: { $first: "$building" },
+          apartmentNumber: { $first: "$apartmentNumber" },
+          lpoId: { $first: "$lpoId" },
+          lpoNumber: { $first: "$lpoNumber" },
+          reportMonth: { $first: "$reportMonth" },
+          reportPeriodStart: { $first: "$reportPeriodStart" },
+          reportPeriodEnd: { $first: "$reportPeriodEnd" },
+          budget: { $first: "$budget" },
+          expenses: { $first: "$expenses" },
+          profit: { $first: "$profit" },
+          description: { $first: "$description" },
+          attachments: { $first: "$attachments" },
+          createdBy: { $first: "$createdBy" },
+          createdAt: { $first: "$createdAt" },
+          updatedAt: { $first: "$updatedAt" }
+        }
       },
+      // Sort again after grouping
+      { $sort: { reportMonth: -1 } }
     ]);
 
     // Populate createdBy
@@ -732,6 +841,9 @@ export const exportProjectProfitsToExcel = asyncHandler(
     ];
 
     populatedProjects.forEach((project:any, index)  => {
+      console.log('====================================');
+      console.log(project);
+      console.log('====================================');
       worksheet.addRow({
         sno: index + 1,
         reportMonth: project.reportMonth,
