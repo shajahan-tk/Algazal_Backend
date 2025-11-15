@@ -912,14 +912,14 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     { header: 'ALLOWANCE', key: 'allowance', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'TRANSPORT', key: 'transport', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'OVERTIME', key: 'overtime', width: 15, style: { numFmt: '#,##0.00' } },
+    { header: 'SPECIAL OVERTIME', key: 'specialOT', width: 15, style: { numFmt: '#,##0.00' } }, // NEW FIELD
     { header: 'MEDICAL', key: 'medical', width: 15, style: { numFmt: '##0.00' } },
     { header: 'BONUS', key: 'bonus', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'TOTAL EARNING', key: 'totalEarning', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'FOOD ALLOWANCE', key: 'mess', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'SALARY ADVANCE', key: 'salaryAdvance', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'LOAN DEDUCTION', key: 'loanDeduction', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'FINE AMOUNT', key: 'fineAmount', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'VISA DEDUCTION', key: 'visaDeduction', width: 15, style: { numFmt: '#,##0.00' } },
+    { header: 'VISA DEDUCTION', key: 'visaDeduction', width: 15, style: { numFmt: '#,##0.00' } }, // NEW FIELD
     { header: 'TOTAL DEDUCTIONS', key: 'totalDeductions', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'NET', key: 'net', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'REMARK', key: 'remark', width: 30 }
@@ -937,8 +937,7 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     }).lean();
 
     const basicSalary = employeeExpense?.basicSalary || 0;
-    const totalEarnings = basicSalary + payroll.allowance + payroll.transport + payroll.overtime + payroll.medical + payroll.bonus;
-    const totalDeductions = payroll.mess + payroll.salaryAdvance + payroll.loanDeduction + payroll.fineAmount + payroll.visaDeduction; // UPDATED
+    const totalDeductions = payroll.mess + payroll.salaryAdvance + payroll.loanDeduction + payroll.fineAmount + payroll.visaDeduction;
 
     worksheet.addRow({
       serialNo: i + 1,
@@ -952,15 +951,15 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
       allowance: payroll.allowance,
       transport: payroll.transport,
       overtime: payroll.overtime,
+      specialOT: payroll.specialOT || 0, // NEW FIELD
       medical: payroll.medical,
       bonus: payroll.bonus,
-      totalEarnings: basicSalary + payroll.allowance + payroll.transport + payroll.overtime + payroll.medical + payroll.bonus,
       mess: payroll.mess,
       salaryAdvance: payroll.salaryAdvance,
       loanDeduction: payroll.loanDeduction,
       fineAmount: payroll.fineAmount,
-      visaDeduction: payroll.visaDeduction || 0,
-      totalDeductions: payroll.mess + payroll.salaryAdvance + payroll.loanDeduction + payroll.fineAmount + payroll.visaDeduction,
+      visaDeduction: payroll.visaDeduction || 0, // NEW FIELD
+      totalDeductions: totalDeductions,
       net: payroll.net,
       remark: payroll.remark || ''
     });
