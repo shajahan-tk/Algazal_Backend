@@ -691,7 +691,7 @@ export const exportProjectProfitsToExcel = asyncHandler(
       ];
     }
 
-    // Date filter using reportMonth
+    // Date filter using createdAt (not reportMonth)
     if (month && year) {
       const monthNum = parseInt(month as string);
       const yearNum = parseInt(year as string);
@@ -706,7 +706,7 @@ export const exportProjectProfitsToExcel = asyncHandler(
       const startDate = new Date(yearNum, monthNum - 1, 1);
       const endDate = new Date(yearNum, monthNum, 0);
       
-      filter.reportMonth = {
+      filter.createdAt = {
         $gte: startDate,
         $lte: endDate
       };
@@ -719,7 +719,7 @@ export const exportProjectProfitsToExcel = asyncHandler(
       const startDate = new Date(yearNum, 0, 1);
       const endDate = new Date(yearNum, 11, 31);
       
-      filter.reportMonth = {
+      filter.createdAt = {
         $gte: startDate,
         $lte: endDate
       };
@@ -741,7 +741,7 @@ export const exportProjectProfitsToExcel = asyncHandler(
     // Get projects with populated LPO data
     const projects = await ProjectProfit.aggregate([
       { $match: filter },
-      { $sort: { reportMonth: -1 } },
+      { $sort: { createdAt: -1 } }, // Sort by createdAt instead of reportMonth
       // First lookup project to get project details
       {
         $lookup: {
@@ -815,7 +815,7 @@ export const exportProjectProfitsToExcel = asyncHandler(
         }
       },
       // Sort again after grouping
-      { $sort: { reportMonth: -1 } }
+      { $sort: { createdAt: -1 } } // Sort by createdAt instead of reportMonth
     ]);
 
     // Populate createdBy
