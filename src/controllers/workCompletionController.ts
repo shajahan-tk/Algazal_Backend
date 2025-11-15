@@ -907,7 +907,7 @@ export const generateCompletionCertificatePdf = asyncHandler(
                     <table class="info-table">
                         <tr>
                             <td class="label">Reference</td>
-                            <td>: <span class="">${`QTNAGA${project.projectNumber.slice(3, 40)}`}</span></td>
+                            <td>: <span class="">${`QTN${project.projectNumber.slice(3, 40)}`}</span></td>
                         </tr>
                         <tr>
                             <td class="label">FM CONTRACTOR</td>

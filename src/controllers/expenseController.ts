@@ -377,7 +377,7 @@ export const getExpenseById = asyncHandler(
           : null,
       })),
       quotation: await Quotation.findOne({ project: expense.project }).select(
-        "netAmount"
+        "netAmount subtotal"
       ),
       commissionAmount: estimation?.commissionAmount || 0,
     };
@@ -683,7 +683,7 @@ export const generateExpensePdf = asyncHandler(
     const totalLaborCost = expense.laborDetails.totalLaborCost;
     const totalExpense =
       totalMaterialCost + totalMiscellaneousCost + totalLaborCost;
-    const quotationAmount = quotation?.netAmount || 0;
+    const quotationAmount = quotation?.subtotal || 0;
     const commissionAmount = estimation?.commissionAmount || 0;
     const profit = quotationAmount - totalExpense - commissionAmount;
     const profitPercentage = quotationAmount
@@ -991,7 +991,7 @@ export const generateExpensePdf = asyncHandler(
               quotation
                 ? `
             <tr>
-              <td>Project Quotation Amount</td>
+              <td>Project Quotation Amount (before VAT) </td>
               <td class="text-right">${quotationAmount.toFixed(2)}</td>
             </tr>
             ${

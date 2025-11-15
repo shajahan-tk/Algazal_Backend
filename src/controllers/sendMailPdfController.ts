@@ -1528,7 +1528,7 @@ const generateWorkCompletionPdfBuffer = async (
                     <table class="info-table">
                         <tr>
                             <td class="label">Reference</td>
-                            <td>: <span class="highlight">${`QTNAGA${project.projectNumber.slice(3,40)}`}</span></td>
+                            <td>: <span class="highlight">${`QTN${project.projectNumber.slice(3,40)}`}</span></td>
                         </tr>
                         <tr>
                             <td class="label">FM CONTRACTOR</td>

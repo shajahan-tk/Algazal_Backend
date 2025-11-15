@@ -19,7 +19,7 @@ projectController_1.getDriverProjects);
 // Get single project
 router.get("/:id", projectController_1.getProject);
 router.get("/:projectId/invoice", (0, authMiddleware_1.authorize)(["admin", "super_admin", "finance", "engineer"]), projectController_1.generateInvoiceData);
-router.get("/:projectId/invoice/pdf", (0, authMiddleware_1.authorize)(["admin", "super_admin", "finance", "engineer"]), projectController_1.generateInvoicePdf);
+router.get("/:projectId/invoice/pdf/:selectedBankId", (0, authMiddleware_1.authorize)(["admin", "super_admin", "finance", "engineer"]), projectController_1.generateInvoicePdf);
 router.put("/:projectId/grn-number", (0, authMiddleware_1.authorize)(["admin", "super_admin", "finance", "engineer"]), projectController_1.addGrnNumber);
 // Update project - Admin/Engineer only
 router.put("/:id", (0, authMiddleware_1.authorize)(["admin", "super_admin", "engineer"]), projectController_1.updateProject);

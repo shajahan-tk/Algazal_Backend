@@ -19,18 +19,22 @@ class Mailer {
         });
     }
     async sendEmail(options) {
-        const { to, subject, templateParams, ...mailOptions } = options;
+        const { to, subject, cc, templateParams, ...mailOptions } = options;
         const html = mailOptions.html || (0, actionNotificationEmailTemplate_1.getEmailTemplate)(templateParams);
         try {
             const info = await this.transporter.sendMail({
                 from: this.config.from,
                 to,
+                cc, // Add CC to mail options
                 subject,
                 text: mailOptions.text || "Please enable HTML to view this email content.",
                 html,
                 ...mailOptions,
             });
             console.log("Message sent: %s", info.messageId);
+            if (cc) {
+                console.log("CC recipients:", Array.isArray(cc) ? cc.join(', ') : cc);
+            }
         }
         catch (error) {
             console.error("Error sending email:", error);
@@ -58,6 +62,13 @@ exports.mailerConfig = {
         user: "info@alghazalgroup.com", // your Office365 email
         pass: "ftftxxppxyjppggf", // 🔑 your Office365 App Password
     },
+    // host: "smtp.gmail.com",
+    // port: parseInt(process.env.SMTP_PORT || '587'),
+    // secure: false,
+    // auth: {
+    //   user: "ajmalshahan23@gmail.com",
+    //   pass: "wgmt bvtx wllu nzuz",
+    // },
     from: '"Alghazal" <info@alghazalgroup.com>', // must match user
 };
 // ✅ Singleton instance

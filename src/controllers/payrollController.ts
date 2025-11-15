@@ -20,7 +20,7 @@ export const calculatePreviousMonthOvertimeAmount = async (
     const now = new Date();
     const previousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const year = previousMonth.getFullYear();
-    const month = previousMonth.getMonth() + 1;
+    const month = previousMonth.getMonth() + 1; // JavaScript months are 0-indexed
 
     const startDate = new Date(year, month - 1, 1);
     startDate.setHours(0, 0, 0, 0);
@@ -69,164 +69,176 @@ export const calculatePreviousMonthOvertimeAmount = async (
   }
 };
 
-// Create payroll record
-export const createPayroll = asyncHandler(async (req: Request, res: Response) => {
-  let {
-    employee,
-    labourCard,
-    labourCardPersonalNo,
-    allowance,
-    transport,
-    medical,
-    bonus,
-    specialOT,
-    mess,
-    salaryAdvance,
-    loanDeduction,
-    fineAmount,
-    visaDeduction, // NEW FIELD
-    remark
-  } = req.body;
+// Helper function to get month number from month name
+const getMonthNumber = (monthName: string): number => {
+  const months: { [key: string]: number } = {
+    'January': 1,
+    'February': 2,
+    'March': 3,
+    'April': 4,
+    'May': 5,
+    'June': 6,
+    'July': 7,
+    'August': 8,
+    'September': 9,
+    'October': 10,
+    'November': 11,
+    'December': 12
+  };
+  return months[monthName] || 0;
+};
 
-  console.log('====================================');
-  console.log('Creating payroll for previous month:', req.body);
-  console.log('====================================');
-
-  allowance = Number(allowance) || 0;
-  transport = Number(transport) || 0;
-  medical = Number(medical) || 0;
-  bonus = Number(bonus) || 0;
-  specialOT = Number(specialOT) || 0;
-  mess = Number(mess) || 0;
-  salaryAdvance = Number(salaryAdvance) || 0;
-  loanDeduction = Number(loanDeduction) || 0;
-  fineAmount = Number(fineAmount) || 0;
-  visaDeduction = Number(visaDeduction) || 0; // NEW
-
-  if (!employee || !labourCard || !labourCardPersonalNo) {
-    throw new ApiError(400, "Required fields are missing");
-  }
-
-  const employeeExists = await User.findById(employee);
-  if (!employeeExists) {
-    throw new ApiError(404, "Employee not found");
-  }
-
-  const now = new Date();
-  const previousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const period = `${String(previousMonth.getMonth() + 1).padStart(2, '0')}-${previousMonth.getFullYear()}`;
-
-  console.log(`Auto-generated period for payroll: ${period}`);
-
-  const existingPayroll = await Payroll.findOne({ employee, period });
-  if (existingPayroll) {
-    throw new ApiError(400, `Payroll already exists for this employee for period ${period}`);
-  }
-
-  const employeeExpense = await EmployeeExpense.findOne({ employee });
-  const basicSalary = Number(employeeExpense?.basicSalary) || 0;
-
-  const overtimeData = await calculatePreviousMonthOvertimeAmount(employee, basicSalary);
-  const overtime = overtimeData.overtimeAmount;
-
-  const totalEarnings = basicSalary + allowance + transport + overtime + specialOT + medical + bonus;
-  const totalDeductions = mess + salaryAdvance + loanDeduction + fineAmount + visaDeduction; // UPDATED
-  const net = totalEarnings - totalDeductions;
-
-  const payroll = await Payroll.create({
-    employee,
-    labourCard,
-    labourCardPersonalNo,
-    period,
-    allowance,
-    transport,
-    overtime,
-    specialOT,
-    medical,
-    bonus,
-    mess,
-    salaryAdvance,
-    loanDeduction,
-    fineAmount,
-    visaDeduction, // NEW FIELD
-    net,
-    remark,
-    createdBy: req.user?.userId
+// Helper function to format date
+const formatDate = (date: Date | string | undefined): string => {
+  if (!date) return 'N/A';
+  const d = new Date(date);
+  return isNaN(d.getTime()) ? 'N/A' : d.toLocaleDateString('en-GB', { 
+    day: '2-digit', 
+    month: '2-digit', 
+    year: 'numeric' 
   });
-
-  console.log(`Payroll created successfully for period ${period} with overtime: ${overtime}, special OT: ${specialOT}, visa deduction: ${visaDeduction}`);
-
-  res.status(201).json(
-    new ApiResponse(201, payroll, "Payroll created successfully for previous month")
-  );
-});
+};
 
 // Get attendance details for a specific period with Sunday tracking
 const getAttendanceDetails = async (userId: Types.ObjectId, period: string) => {
-  const [month, year] = period.split('-').map(Number);
-
-  const startDate = new Date(year, month - 1, 1);
-  startDate.setHours(0, 0, 0, 0);
-
-  const endDate = new Date(year, month, 0);
-  endDate.setHours(23, 59, 59, 999);
-
-  const attendances = await Attendance.find({
-    user: userId,
-    date: { $gte: startDate, $lte: endDate }
-  }).sort({ date: 1 });
-
-  const days = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
-
-  let presentDays = 0;
-  let absentDays = 0;
-  let dutyOffDays = 0;
-  let totalHours = 0;
-  let overtimeHours = 0;
-  let sundayWorkingDays = 0;
-  let sundayOvertimeHours = 0;
-
-  const attendanceRecords = attendances.map((att, index) => {
-    const date = new Date(att.date);
-    const dayName = days[date.getDay()];
-    const isSunday = date.getDay() === 0;
-
-    let status = 'ABSENT';
-    let hours = 0;
-
-    if (att.isPaidLeave) {
-      status = 'DUTY OFF';
-      dutyOffDays++;
-    } else if (att.present) {
-      status = 'PRESENT';
-      hours = att.workingHours;
-      totalHours += hours;
-      overtimeHours += att.overtimeHours;
-      presentDays++;
-
-      // Track Sunday working separately
-      if (isSunday) {
-        sundayWorkingDays++;
-        sundayOvertimeHours += att.overtimeHours;
-      }
-    } else {
-      absentDays++;
+  try {
+    // Validate inputs
+    if (!userId || !period) {
+      return {
+        summary: {
+          totalDays: 0,
+          presentDays: 0,
+          absentDays: 0,
+          holidays: 0,
+          fridays: 0,
+          saturdays: 0,
+          sundays: 0
+        }
+      };
     }
 
-    return {
-      sno: index + 1,
-      date: date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-      day: dayName,
-      status,
-      hours: hours.toFixed(2),
-      overtimeHours: att.overtimeHours.toFixed(2),
-      isSunday
+    const filter: any = {
+      user: userId
     };
-  });
 
-  return {
-    records: attendanceRecords,
-    summary: {
+    // Add date filter if period is provided
+    if (period) {
+      // Parse period (expected format: MM-YYYY)
+      const [monthStr, yearStr] = period.split('-');
+      
+      if (!monthStr || !yearStr) {
+        console.log('Invalid period format:', period);
+        return {
+          summary: {
+            totalDays: 0,
+            presentDays: 0,
+            absentDays: 0,
+            holidays: 0,
+            fridays: 0,
+            saturdays: 0,
+            sundays: 0
+          }
+        };
+      }
+
+      const monthNum = parseInt(monthStr, 10);
+      const yearNum = parseInt(yearStr, 10);
+
+      if (isNaN(monthNum) || isNaN(yearNum) || monthNum < 1 || monthNum > 12) {
+        console.log('Invalid month/year in period:', period);
+        return {
+          summary: {
+            totalDays: 0,
+            presentDays: 0,
+            absentDays: 0,
+            holidays: 0,
+            fridays: 0,
+            saturdays: 0,
+            sundays: 0
+          }
+        };
+      }
+
+      // Create VALID date range for the specific month
+      // JavaScript months are 0-indexed (0=Jan, 1=Feb, etc.)
+      const startDate = new Date(yearNum, monthNum - 1, 1);
+      const endDate = new Date(yearNum, monthNum, 0); // 0th day of next month is last day of current month
+      
+      console.log('Date range for attendance:', {
+        period,
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString()
+      });
+
+      filter.date = {
+        $gte: startDate,
+        $lte: endDate
+      };
+    }
+
+    console.log('Attendance filter:', filter);
+
+    const attendances = await Attendance.find(filter)
+      .populate('user', 'firstName lastName')
+      .sort({ date: 1 });
+
+    // Initialize counters
+    let totalDays = 0;
+    let presentDays = 0;
+    let absentDays = 0;
+    let dutyOffDays = 0;
+    let totalHours = 0;
+    let overtimeHours = 0;
+    let sundayWorkingDays = 0;
+    let sundayOvertimeHours = 0;
+
+    const days = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+
+    // Process attendance records
+    const attendanceRecords = attendances.map((att, index) => {
+      if (!att.date) return;
+
+      totalDays++;
+      
+      const date = new Date(att.date);
+      const dayName = days[date.getDay()];
+      const isSunday = date.getDay() === 0;
+
+      let status = 'ABSENT';
+      let hours = 0;
+
+      if (att.isPaidLeave) {
+        status = 'DUTY OFF';
+        dutyOffDays++;
+      } else if (att.present) {
+        status = 'PRESENT';
+        hours = att.workingHours || 0;
+        totalHours += hours;
+        overtimeHours += att.overtimeHours || 0;
+        presentDays++;
+
+        // Track Sunday working separately
+        if (isSunday) {
+          sundayWorkingDays++;
+          sundayOvertimeHours += att.overtimeHours || 0;
+        }
+      } else {
+        absentDays++;
+      }
+
+      return {
+        sno: index + 1,
+        date: date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+        day: dayName,
+        status,
+        hours: hours.toFixed(2),
+        overtimeHours: (att.overtimeHours || 0).toFixed(2),
+        isSunday
+      };
+    });
+
+    const summary = {
+      totalDays,
       presentDays,
       absentDays,
       dutyOffDays,
@@ -234,15 +246,183 @@ const getAttendanceDetails = async (userId: Types.ObjectId, period: string) => {
       overtimeHours: overtimeHours.toFixed(2),
       sundayWorkingDays,
       sundayOvertimeHours: sundayOvertimeHours.toFixed(2)
+    };
+
+    console.log('Attendance summary:', summary);
+
+    return {
+      records: attendanceRecords,
+      summary
+    };
+
+  } catch (error) {
+    console.error('Error in getAttendanceDetails:', error);
+    return {
+      summary: {
+        totalDays:  0,
+        presentDays: 0,
+        absentDays: 0,
+        holidays: 0,
+        fridays: 0,
+        saturdays: 0,
+        sundays: 0
+      }
+    };
+  }
+};
+
+// New function to get attendance details by month and year
+const getAttendanceDetailsByMonthYear = async (userId: Types.ObjectId, month: number, year: number) => {
+  try {
+    // Validate inputs
+    if (!userId || !month || !year) {
+      return {
+        summary: {
+          totalDays: 0,
+          presentDays: 0,
+          absentDays: 0,
+          holidays: 0,
+          fridays: 0,
+          saturdays: 0,
+          sundays: 0
+        }
+      };
     }
-  };
+
+    const filter: any = {
+      user: userId
+    };
+
+    // Create date range for specific month and year
+    // JavaScript months are 0-indexed (0=Jan, 1=Feb, etc.)
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0); // Last day of month
+    
+    // Validate dates
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      console.log('Invalid dates created:', { startDate, endDate, month, year });
+      return {
+        summary: {
+          totalDays: 0,
+          presentDays: 0,
+          absentDays: 0,
+          holidays: 0,
+          fridays: 0,
+          saturdays: 0,
+          sundays: 0
+        }
+      };
+    }
+
+    console.log('Date range for attendance:', {
+      month,
+      year,
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString()
+    });
+
+    filter.date = {
+      $gte: startDate,
+      $lte: endDate
+    };
+
+    const attendances = await Attendance.find(filter)
+      .populate('user', 'firstName lastName')
+      .sort({ date: 1 });
+
+    // Initialize counters
+    let totalDays = 0;
+    let presentDays = 0;
+    let absentDays = 0;
+    let dutyOffDays = 0;
+    let totalHours = 0;
+    let overtimeHours = 0;
+    let sundayWorkingDays = 0;
+    let sundayOvertimeHours = 0;
+
+    const days = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+
+    // Process attendance records
+    const attendanceRecords = attendances.map((att, index) => {
+      if (!att.date) return;
+
+      totalDays++;
+      
+      const date = new Date(att.date);
+      const dayName = days[date.getDay()];
+      const isSunday = date.getDay() === 0;
+
+      let status = 'ABSENT';
+      let hours = 0;
+
+      if (att.isPaidLeave) {
+        status = 'DUTY OFF';
+        dutyOffDays++;
+      } else if (att.present) {
+        status = 'PRESENT';
+        hours = att.workingHours || 0;
+        totalHours += hours;
+        overtimeHours += att.overtimeHours || 0;
+        presentDays++;
+
+        // Track Sunday working separately
+        if (isSunday) {
+          sundayWorkingDays++;
+          sundayOvertimeHours += att.overtimeHours || 0;
+        }
+      } else {
+        absentDays++;
+      }
+
+      return {
+        sno: index + 1,
+        date: date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+        day: dayName,
+        status,
+        hours: hours.toFixed(2),
+        overtimeHours: (att.overtimeHours || 0).toFixed(2),
+        isSunday
+      };
+    });
+
+    const summary = {
+      totalDays,
+      presentDays,
+      absentDays,
+      dutyOffDays,
+      totalHours: totalHours.toFixed(2),
+      overtimeHours: overtimeHours.toFixed(2),
+      sundayWorkingDays,
+      sundayOvertimeHours: sundayOvertimeHours.toFixed(2)
+    };
+
+    console.log('Attendance summary:', summary);
+
+    return {
+      records: attendanceRecords,
+      summary
+    };
+
+  } catch (error) {
+    console.error('Error in getAttendanceDetailsByMonthYear:', error);
+    return {
+      summary: {
+        totalDays: 0,
+        presentDays: 0,
+        absentDays: 0,
+        holidays: 0,
+        fridays: 0,
+        saturdays: 0,
+        sundays: 0
+      }
+    };
+  }
 };
 
 // Get all payroll records with comprehensive data
 export const getPayrolls = asyncHandler(async (req: Request, res: Response) => {
   const {
     employee,
-    period,
     labourCard,
     labourCardPersonalNo,
     startDate,
@@ -257,7 +437,6 @@ export const getPayrolls = asyncHandler(async (req: Request, res: Response) => {
 
   interface PayrollFilter {
     employee?: Types.ObjectId | string;
-    period?: string;
     labourCard?: string;
     labourCardPersonalNo?: string;
     createdAt?: {
@@ -269,57 +448,71 @@ export const getPayrolls = asyncHandler(async (req: Request, res: Response) => {
   const filter: PayrollFilter = {};
 
   if (employee) filter.employee = new Types.ObjectId(employee as string);
-  if (period) filter.period = period as string;
   if (labourCard) filter.labourCard = labourCard as string;
   if (labourCardPersonalNo) filter.labourCardPersonalNo = labourCardPersonalNo as string;
 
+  // Initialize createdAt filter if not already present
+  if (!filter.createdAt) filter.createdAt = {};
+
   if (startDate && endDate) {
-    filter.createdAt = {
-      $gte: new Date(startDate as string),
-      $lte: new Date(endDate as string),
-    };
-  } else {
-    if (!filter.createdAt) filter.createdAt = {};
-
-    if (year) {
-      const yearNum = parseInt(year as string);
-      if (isNaN(yearNum)) {
-        throw new ApiError(400, "Invalid year value");
-      }
-      filter.createdAt.$gte = new Date(yearNum, 0, 1);
-      filter.createdAt.$lte = new Date(yearNum + 1, 0, 1);
+    // Validate and parse the dates
+    const start = new Date(startDate as string);
+    const end = new Date(endDate as string);
+    
+    // Check if dates are valid
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      throw new ApiError(400, "Invalid date format in startDate or endDate");
     }
-
+    
+    filter.createdAt = {
+      $gte: start,
+      $lte: end
+    };
+  } else if (year) {
+    const yearNum = parseInt(year as string);
+    if (isNaN(yearNum)) {
+      throw new ApiError(400, "Invalid year value");
+    }
+    
     if (month) {
       const monthNum = parseInt(month as string);
       if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
         throw new ApiError(400, "Invalid month value (1-12)");
       }
-
-      if (!filter.createdAt.$gte) {
-        const currentYear = new Date().getFullYear();
-        filter.createdAt.$gte = new Date(currentYear, monthNum - 1, 1);
-        filter.createdAt.$lte = new Date(currentYear, monthNum, 1);
-      } else {
-        const start = new Date(filter.createdAt.$gte);
-        start.setMonth(monthNum - 1);
-        start.setDate(1);
-
-        const end = new Date(start);
-        end.setMonth(monthNum);
-
-        filter.createdAt.$gte = start;
-        filter.createdAt.$lte = end;
-      }
+      
+      // Create date range for the specific month
+      // JavaScript months are 0-indexed (0=Jan, 1=Feb, etc.)
+      const startDateOfMonth = new Date(yearNum, monthNum - 1, 1);
+      const endDateOfMonth = new Date(yearNum, monthNum, 0); // 0th day of next month is last day of current month
+      
+      console.log('Filtering by month/year:', {
+        year: yearNum,
+        month: monthNum,
+        startDate: startDateOfMonth.toISOString(),
+        endDate: endDateOfMonth.toISOString()
+      });
+      
+      filter.createdAt = {
+        $gte: startDateOfMonth,
+        $lte: endDateOfMonth
+      };
+    } else {
+      // If only year is provided, get entire year
+      filter.createdAt = {
+        $gte: new Date(yearNum, 0, 1),
+        $lte: new Date(yearNum + 1, 0, 1)
+      };
     }
   }
+
+  console.log('Final payroll filter:', filter);
 
   const total = await Payroll.countDocuments(filter);
 
   const payrolls = await Payroll.find(filter)
     .skip(skip)
     .limit(Number(limit))
-    .sort({ period: -1, createdAt: -1 })
+    .sort({ createdAt: -1 }) // Sort by creation date
     .populate<{ employee: IUser }>({
       path: 'employee',
       select: 'firstName lastName role emiratesId'
@@ -339,8 +532,12 @@ export const getPayrolls = asyncHandler(async (req: Request, res: Response) => {
         employee: payroll.employee._id
       }).lean();
 
-      // Get attendance details with Sunday tracking
-      const attendanceDetails = await getAttendanceDetails(payroll.employee._id, payroll.period);
+      // Get attendance details - DON'T pass period since we're filtering by month/year
+      const attendanceDetails = await getAttendanceDetailsByMonthYear(
+        payroll.employee._id, 
+        getMonthNumber(payroll.period.split('-')[0]),
+        parseInt(payroll.period.split('-')[1])
+      );
 
       const totalEarnings = (employeeExpense?.basicSalary || 0) +
         payroll.allowance +
@@ -353,7 +550,7 @@ export const getPayrolls = asyncHandler(async (req: Request, res: Response) => {
         payroll.salaryAdvance +
         payroll.loanDeduction +
         payroll.fineAmount +
-        payroll.visaDeduction; // UPDATED
+        (payroll.visaDeduction || 0);
 
       return {
         _id: payroll._id,
@@ -374,7 +571,7 @@ export const getPayrolls = asyncHandler(async (req: Request, res: Response) => {
         salaryAdvance: payroll.salaryAdvance,
         loanDeduction: payroll.loanDeduction,
         fineAmount: payroll.fineAmount,
-        visaDeduction: payroll.visaDeduction, // NEW FIELD
+        visaDeduction: payroll.visaDeduction || 0,
         totalDeductions,
         net: payroll.net,
         remark: payroll.remark,
@@ -407,70 +604,100 @@ export const getPayrolls = asyncHandler(async (req: Request, res: Response) => {
   );
 });
 
-// Get single payroll record
-export const getPayroll = asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+// Create payroll record
+export const createPayroll = asyncHandler(async (req: Request, res: Response) => {
+  let {
+    employee,
+    labourCard,
+    labourCardPersonalNo,
+    allowance,
+    transport,
+    medical,
+    bonus,
+    specialOT,
+    mess,
+    salaryAdvance,
+    loanDeduction,
+    fineAmount,
+    visaDeduction,
+    remark
+  } = req.body;
 
-  const payroll = await Payroll.findById(id)
-    .populate<{ employee: IUser }>({
-      path: 'employee',
-      select: 'firstName lastName role emiratesId'
-    })
-    .populate<{ createdBy: IUser }>({
-      path: 'createdBy',
-      select: 'firstName lastName'
-    });
+  console.log('====================================');
+  console.log('Creating payroll for previous month:', req.body);
+  console.log('====================================');
 
-  if (!payroll) {
-    throw new ApiError(404, "Payroll not found");
+  allowance = Number(allowance) || 0;
+  transport = Number(transport) || 0;
+  medical = Number(medical) || 0;
+  bonus = Number(bonus) || 0;
+  specialOT = Number(specialOT) || 0;
+  mess = Number(mess) || 0;
+  salaryAdvance = Number(salaryAdvance) || 0;
+  loanDeduction = Number(loanDeduction) || 0;
+  fineAmount = Number(fineAmount) || 0;
+  visaDeduction = Number(visaDeduction) || 0;
+
+  if (!employee || !labourCard || !labourCardPersonalNo) {
+    throw new ApiError(400, "Required fields are missing");
   }
 
-  if (!payroll.employee || typeof payroll.employee !== 'object' || !('firstName' in payroll.employee)) {
-    throw new ApiError(500, "Employee data not properly populated");
+  const employeeExists = await User.findById(employee);
+  if (!employeeExists) {
+    throw new ApiError(404, "Employee not found");
   }
 
-  const employeeExpense = await EmployeeExpense.findOne({
-    employee: payroll.employee._id
-  }).lean();
+  const now = new Date();
+  const previousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const period = `${String(previousMonth.getMonth() + 1).padStart(2, '0')}-${previousMonth.getFullYear()}`;
 
-  // Get attendance details with Sunday tracking
-  const attendanceDetails = await getAttendanceDetails(payroll.employee._id, payroll.period);
+  console.log(`Auto-generated period for payroll: ${period}`);
 
-  const totalEarnings = (employeeExpense?.basicSalary || 0) +
-    payroll.allowance +
-    payroll.transport +
-    payroll.overtime +
-    payroll.medical +
-    payroll.bonus;
+  const existingPayroll = await Payroll.findOne({ employee, period });
+  if (existingPayroll) {
+    throw new ApiError(400, `Payroll already exists for this employee for period ${period}`);
+  }
 
-  const totalDeductions = payroll.mess +
-    payroll.salaryAdvance +
-    payroll.loanDeduction +
-    payroll.fineAmount +
-    payroll.visaDeduction; // UPDATED
+  const employeeExpense = await EmployeeExpense.findOne({ employee });
+  const basicSalary = Number(employeeExpense?.basicSalary) || 0;
 
-  const enhancedPayroll = {
-    ...payroll.toObject(),
-    name: `${payroll.employee.firstName} ${payroll.employee.lastName}`,
-    designation: payroll.employee.role,
-    emiratesId: payroll.employee.emiratesId || 'N/A',
-    basicSalary: employeeExpense?.basicSalary || 0,
-    totalEarnings,
-    totalDeductions,
-    // Include attendance summary with Sunday tracking
-    attendanceSummary: attendanceDetails.summary,
-    createdByName: payroll.createdBy
-      ? `${payroll.createdBy.firstName} ${payroll.createdBy.lastName}`
-      : 'System'
-  };
+  const overtimeData = await calculatePreviousMonthOvertimeAmount(employee, basicSalary);
+  const overtime = overtimeData.overtimeAmount;
 
-  res.status(200).json(
-    new ApiResponse(200, enhancedPayroll, "Payroll retrieved successfully")
+  const totalEarnings = basicSalary + allowance + transport + overtime + specialOT + medical + bonus;
+  const totalDeductions = mess + salaryAdvance + loanDeduction + fineAmount + visaDeduction;
+
+  const net = totalEarnings - totalDeductions;
+
+  const payroll = await Payroll.create({
+    employee,
+    labourCard,
+    labourCardPersonalNo,
+    period,
+    allowance,
+    transport,
+    overtime,
+    specialOT,
+    medical,
+    bonus,
+    mess,
+    salaryAdvance,
+    loanDeduction,
+    fineAmount,
+    visaDeduction,
+    net,
+    remark,
+    createdBy: req.user?.userId
+  });
+
+  console.log(`Payroll created successfully for period ${period} with overtime: ${overtime}, special OT: ${specialOT}, visa deduction: ${visaDeduction}`);
+
+  res.status(201).json(
+    new ApiResponse(201, payroll, "Payroll created successfully for previous month")
   );
 });
 
 // Update payroll record
-// Updated updatePayroll function in payrollController.ts
 export const updatePayroll = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const updateData = req.body;
@@ -480,7 +707,7 @@ export const updatePayroll = asyncHandler(async (req: Request, res: Response) =>
     throw new ApiError(404, "Payroll not found");
   }
 
-  // Don't allow period or overtime to be changed (overtime is auto-calculated)
+  // Don'T allow period or overtime to be changed (overtime is auto-calculated)
   delete updateData.period;
   delete updateData.overtime;
 
@@ -603,7 +830,14 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   if (month && year) {
     const startOfMonth = new Date(Number(year), Number(month) - 1, 1);
     const endOfMonth = new Date(Number(year), Number(month), 0, 23, 59, 59, 999);
-
+    
+    console.log('Exporting by month/year:', {
+      month,
+      year,
+      startDate: startOfMonth.toISOString(),
+      endDate: endOfMonth.toISOString()
+    });
+    
     filter.createdAt = {
       $gte: startOfMonth,
       $lte: endOfMonth
@@ -612,21 +846,21 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     const startOfYear = new Date(Number(year), 0, 1);
     const endOfYear = new Date(Number(year), 11, 31, 23, 59, 59, 999);
 
+    console.log('Exporting by year:', {
+      year,
+      startDate: startOfYear.toISOString(),
+      endDate: endOfYear.toISOString()
+    });
+    
     filter.createdAt = {
       $gte: startOfYear,
       $lte: endOfYear
     };
-  }
-
-  if (startDate && endDate) {
+  } else if (startDate && endDate) {
     filter.createdAt = {
       $gte: new Date(startDate as string),
       $lte: new Date(endDate as string)
     };
-  } else if (startDate) {
-    filter.createdAt = { $gte: new Date(startDate as string) };
-  } else if (endDate) {
-    filter.createdAt = { $lte: new Date(endDate as string) };
   }
 
   if (period) filter.period = period as string;
@@ -659,7 +893,7 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   if (payrolls.length === 0) {
     return res.status(404).json({
       success: false,
-      message: "No payroll records found for the specified criteria"
+      message: "No payroll records found for specified criteria"
     });
   }
 
@@ -678,14 +912,14 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     { header: 'ALLOWANCE', key: 'allowance', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'TRANSPORT', key: 'transport', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'OVERTIME', key: 'overtime', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'MEDICAL', key: 'medical', width: 15, style: { numFmt: '#,##0.00' } },
+    { header: 'MEDICAL', key: 'medical', width: 15, style: { numFmt: '##0.00' } },
     { header: 'BONUS', key: 'bonus', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'TOTAL EARNING', key: 'totalEarning', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'FOOD ALLOWANCE', key: 'mess', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'SALARY ADVANCE', key: 'salaryAdvance', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'LOAN DEDUCTION', key: 'loanDeduction', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'FINE AMOUNT', key: 'fineAmount', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'VISA DEDUCTION', key: 'visaDeduction', width: 15, style: { numFmt: '#,##0.00' } }, // NEW COLUMN
+    { header: 'VISA DEDUCTION', key: 'visaDeduction', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'TOTAL DEDUCTIONS', key: 'totalDeductions', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'NET', key: 'net', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'REMARK', key: 'remark', width: 30 }
@@ -694,7 +928,7 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   for (let i = 0; i < payrolls.length; i++) {
     const payroll = payrolls[i];
 
-    if (!payroll.employee || typeof payroll.employee !== 'object' || !('firstName' in payroll.employee)) {
+    if (!payroll.employee || typeof payroll.employee !== 'object') {
       continue;
     }
 
@@ -714,38 +948,23 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
       labourCard: payroll.labourCard,
       labourCardPersonalNo: payroll.labourCardPersonalNo,
       period: payroll.period,
-      basicSalary,
+      basicSalary: employeeExpense?.basicSalary || 0,
       allowance: payroll.allowance,
       transport: payroll.transport,
       overtime: payroll.overtime,
       medical: payroll.medical,
       bonus: payroll.bonus,
-      totalEarning: totalEarnings,
+      totalEarnings: basicSalary + payroll.allowance + payroll.transport + payroll.overtime + payroll.medical + payroll.bonus,
       mess: payroll.mess,
       salaryAdvance: payroll.salaryAdvance,
       loanDeduction: payroll.loanDeduction,
       fineAmount: payroll.fineAmount,
-      visaDeduction: payroll.visaDeduction || 0, // NEW FIELD
-      totalDeductions,
+      visaDeduction: payroll.visaDeduction || 0,
+      totalDeductions: payroll.mess + payroll.salaryAdvance + payroll.loanDeduction + payroll.fineAmount + payroll.visaDeduction,
       net: payroll.net,
       remark: payroll.remark || ''
     });
   }
-
-  worksheet.getRow(1).eachCell((cell) => {
-    cell.font = { bold: true };
-    cell.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFD3D3D3' }
-    };
-    cell.border = {
-      top: { style: 'thin' },
-      left: { style: 'thin' },
-      bottom: { style: 'thin' },
-      right: { style: 'thin' }
-    };
-  });
 
   let filename = 'payroll_report';
   if (month && year) {
@@ -769,6 +988,72 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
 
   await workbook.xlsx.write(res);
   res.end();
+});
+
+// Get single payroll record
+export const getPayroll = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  const payroll = await Payroll.findById(id)
+    .populate<{ employee: IUser }>({
+      path: 'employee',
+      select: 'firstName lastName role emiratesId'
+    })
+    .populate<{ createdBy: IUser }>({
+      path: 'createdBy',
+      select: 'firstName lastName'
+    });
+
+  if (!payroll) {
+    throw new ApiError(404, "Payroll not found");
+  }
+
+  if (!payroll.employee || typeof payroll.employee !== 'object') {
+    throw new ApiError(500, "Employee data not properly populated");
+  }
+
+  const employeeExpense = await EmployeeExpense.findOne({
+    employee: payroll.employee._id
+  }).lean();
+
+  // Get attendance details - DON'T pass period since we're filtering by month/year
+  const attendanceDetails = await getAttendanceDetailsByMonthYear(
+    payroll.employee._id, 
+    getMonthNumber(payroll.period.split('-')[0]),
+    parseInt(payroll.period.split('-')[1])
+  );
+
+  const totalEarnings = (employeeExpense?.basicSalary || 0) +
+    payroll.allowance +
+    payroll.transport +
+    payroll.overtime +
+    payroll.medical +
+    payroll.bonus;
+
+  const totalDeductions = payroll.mess +
+    payroll.salaryAdvance +
+    payroll.loanDeduction +
+    payroll.fineAmount +
+    payroll.visaDeduction;
+
+  const enhancedPayroll = {
+    ...payroll.toObject(),
+    name: `${payroll.employee.firstName} ${payroll.employee.lastName}`,
+    designation: payroll.employee.role,
+    emiratesId: payroll.employee.emiratesId || 'N/A',
+    basicSalary: employeeExpense?.basicSalary || 0,
+    totalEarnings,
+    totalDeductions,
+    // Include attendance summary with Sunday tracking
+    attendanceSummary: attendanceDetails.summary,
+    createdByName: payroll.createdBy
+      ? `${payroll.createdBy.firstName} ${payroll.createdBy.lastName}`
+      : 'System'
+  };
+
+  res.status(200).json(
+    new ApiResponse(200, enhancedPayroll, "Payroll retrieved successfully")
+  );
 });
 
 // Helper function to convert number to words
@@ -1249,8 +1534,8 @@ const generatePayslipHTML = (data: any): string => {
                         <span class="info-value">${data.designation}</span>
                     </div>
                     <div class="info-item">
-                        <span class="info-label">Bank Name</span>
-                        <span class="info-value">${data.bankName || 'N/A'}</span>
+                        <span class="info-label">Account Number</span>
+                        <span class="info-value">${data.accountNumber || 'N/A'}</span>
                     </div>
                     <div class="info-item">
                         <span class="info-label">IBAN Number</span>
@@ -1518,7 +1803,8 @@ export const generatePayslipPDF = asyncHandler(async (req: Request, res: Respons
     passportNumber: payroll.employee.passportNumber || 'N/A',
     passportExpiry: formatDate(visaExpense?.passportExpireDate),
     ibanNumber: payroll.employee.iBANNumber || 'N/A',
-    bankName: 'Emirates NBD',
+    accountNumber: payroll.employee.accountNumber || 'N/A',
+    // bankName: 'Emirates NBD',
     labourCard: payroll.labourCard,
     labourCardPersonalNo: payroll.labourCardPersonalNo,
     labourCardExpiry: formatDate(visaExpense?.labourExpireDate),

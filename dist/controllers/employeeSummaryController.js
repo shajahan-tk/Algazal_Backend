@@ -16,18 +16,20 @@ exports.getEmployeeSummary = (0, asyncHandler_1.asyncHandler)(async (req, res) =
     const user = await userModel_1.User.findById(id).select("-password");
     if (!user)
         throw new apiHandlerHelpers_2.ApiError(404, "User not found");
-    // Previous month as period string
-    const now = new Date();
-    const prevMonth = (0, date_fns_1.subMonths)(now, 1);
-    const period = (0, date_fns_1.format)(prevMonth, "MM-yyyy"); // "08-2025" for example
-    // ✅ Reuse the helper here
-    const totalOvertime = await (0, payrollController_1.calculateOvertime)(user._id, period);
+    // Get employee expense details first (needed for overtime calculation)
+    const employeeExpense = await employeeExpenseModel_1.EmployeeExpense.findOne({ employee: user._id });
+    const basicSalary = Number(employeeExpense?.basicSalary) || 0;
+    const allowance = Number(employeeExpense?.allowance) || 0;
+    // ✅ Use the updated helper function that calculates overtime AMOUNT for previous month
+    const overtimeData = await (0, payrollController_1.calculatePreviousMonthOvertimeAmount)(user._id, basicSalary);
     const visaExpense = await visaExpenseModel_1.VisaExpense.findOne({ employee: user._id })
         .sort({ createdAt: -1 })
         .select("labourCardPersonalNumber workPermitNumber passportNumber emirateIdNumber iBan total")
         .lean();
-    const employeeExpense = await employeeExpenseModel_1.EmployeeExpense.findOne({ employee: user._id });
-    const basicSalary = Number(employeeExpense?.basicSalary) || 0;
+    // Get current period for display
+    const now = new Date();
+    const prevMonth = (0, date_fns_1.subMonths)(now, 1);
+    const period = (0, date_fns_1.format)(prevMonth, "MM-yyyy");
     const response = {
         employee: {
             _id: user._id,
@@ -36,6 +38,7 @@ exports.getEmployeeSummary = (0, asyncHandler_1.asyncHandler)(async (req, res) =
             email: user.email,
             role: user.role,
             basicSalary,
+            allowance,
             phoneNumbers: user.phoneNumbers,
             accountNumber: user.accountNumber,
             emiratesId: user.emiratesId,
@@ -44,7 +47,10 @@ exports.getEmployeeSummary = (0, asyncHandler_1.asyncHandler)(async (req, res) =
             address: user.address,
         },
         overtime: {
-            previousMonthTotal: totalOvertime,
+            previousMonthAmount: overtimeData.overtimeAmount, // Amount in AED
+            previousMonthHours: overtimeData.overtimeHours, // Hours for reference
+            hourlyRate: overtimeData.hourlyRate, // Hourly rate for reference
+            daysInMonth: overtimeData.daysInMonth, // Days in previous month
             period,
         },
         visaDetails: visaExpense

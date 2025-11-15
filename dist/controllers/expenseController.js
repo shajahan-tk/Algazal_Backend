@@ -275,20 +275,39 @@ exports.updateExpense = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         throw new apiHandlerHelpers_2.ApiError(404, "Expense not found");
     }
     try {
+        // Recalculate labor details
         const laborDetails = await calculateLaborDetails(existingExpense.project.toString());
         // Process materials with files
-        const processedMaterials = await processMaterialsWithFiles(materials, materialFiles, "material-", existingExpense.materials // Pass existing materials to handle file preservation
-        );
+        const processedMaterials = await processMaterialsWithFiles(materials, materialFiles, "material-", existingExpense.materials);
+        // Calculate totals manually
+        const totalMaterialCost = processedMaterials.reduce((sum, material) => sum + (material.amount || 0), 0);
+        const totalMiscellaneousCost = miscellaneous.reduce((sum, misc) => sum + (misc.total || 0), 0);
+        const workersTotal = laborDetails.workers.reduce((sum, worker) => sum + worker.totalSalary, 0);
+        const driverTotal = laborDetails.driver.totalSalary;
+        const totalLaborCost = workersTotal + driverTotal;
+        // Update the expense with calculated totals
         const updatedExpense = await expenseModel_1.Expense.findByIdAndUpdate(expenseId, {
             materials: processedMaterials,
-            miscellaneous,
-            laborDetails,
+            totalMaterialCost: totalMaterialCost,
+            miscellaneous: miscellaneous,
+            totalMiscellaneousCost: totalMiscellaneousCost,
+            laborDetails: {
+                workers: laborDetails.workers,
+                driver: laborDetails.driver,
+                totalLaborCost: totalLaborCost,
+            },
             updatedAt: new Date(),
-        }, { new: true })
+        }, {
+            new: true,
+            runValidators: true // This ensures schema validations run
+        })
             .populate("laborDetails.workers.user", "firstName lastName profileImage salary")
             .populate("laborDetails.driver.user", "firstName lastName profileImage salary")
             .populate("createdBy", "firstName lastName")
             .populate("project", "projectName projectNumber");
+        if (!updatedExpense) {
+            throw new apiHandlerHelpers_2.ApiError(404, "Failed to update expense");
+        }
         return res
             .status(200)
             .json(new apiHandlerHelpers_1.ApiResponse(200, updatedExpense, "Expense updated successfully"));
@@ -406,7 +425,7 @@ exports.generateExpensePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
         }
         .section {
           margin-bottom: 15px;
-          page-break-inside: avoid;
+          page-break-inside: auto;
         }
         .section-title {
           font-size: 11pt;
@@ -414,12 +433,26 @@ exports.generateExpensePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
           padding: 5px 0;
           margin: 10px 0 5px 0;
           border-bottom: 1px solid #ddd;
+          page-break-after: avoid;
         }
         table {
           width: 100%;
           border-collapse: collapse;
           margin-bottom: 15px;
+          page-break-inside: auto;
+        }
+        thead {
+          display: table-header-group;
+        }
+        tbody {
+          display: table-row-group;
+        }
+        tfoot {
+          display: table-footer-group;
+        }
+        tr {
           page-break-inside: avoid;
+          page-break-after: auto;
         }
         th {
           background-color: #f5f5f5;
@@ -427,6 +460,7 @@ exports.generateExpensePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
           padding: 6px 8px;
           text-align: left;
           border: 1px solid #ddd;
+          page-break-after: avoid;
         }
         td {
           padding: 6px 8px;
@@ -435,6 +469,7 @@ exports.generateExpensePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
         }
         .total-row {
           font-weight: bold;
+          page-break-inside: avoid;
         }
         .text-right {
           text-align: right;
@@ -444,6 +479,14 @@ exports.generateExpensePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
           font-size: 9pt;
           color: #777;
           text-align: center;
+        }
+        /* Prevent orphan headers */
+        .section-title + table {
+          page-break-before: avoid;
+        }
+        /* Keep total rows with their table */
+        .total-row {
+          page-break-before: avoid;
         }
       </style>
     </head>
@@ -482,11 +525,13 @@ exports.generateExpensePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
               </tr>
             `)
         .join("")}
+          </tbody>
+          <tfoot>
             <tr class="total-row">
               <td colspan="6">TOTAL MATERIAL COST</td>
               <td class="text-right">${totalMaterialCost.toFixed(2)}</td>
             </tr>
-          </tbody>
+          </tfoot>
         </table>
       </div>
 
@@ -498,7 +543,7 @@ exports.generateExpensePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
               <th width="5%">No.</th>
               <th width="40%">Description</th>
               <th width="15%">Qty</th>
-              <th width="15%">Unit Price</th>
+              <th width="15%">Unit Price (AED)</th>
               <th width="25%" class="text-right">Amount (AED)</th>
             </tr>
           </thead>
@@ -514,47 +559,106 @@ exports.generateExpensePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
               </tr>
             `)
         .join("")}
+          </tbody>
+          <tfoot>
             <tr class="total-row">
               <td colspan="4">TOTAL MISCELLANEOUS COST</td>
               <td class="text-right">${totalMiscellaneousCost.toFixed(2)}</td>
             </tr>
-          </tbody>
+          </tfoot>
         </table>
       </div>
 
       <div class="section">
-        <div class="section-title">LABOR DETAILS</div>
+        <div class="section-title">LABOR DETAILS - WORKERS</div>
         <table>
           <thead>
             <tr>
               <th width="5%">No.</th>
-              <th width="65%">Description</th>
-              <th width="30%" class="text-right">Amount (AED)</th>
+              <th width="40%">Worker Name</th>
+              <th width="15%">Days Present</th>
+              <th width="20%">Daily Salary (AED)</th>
+              <th width="20%" class="text-right">Total Salary (AED)</th>
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td>1</td>
-              <td>Technicians Expenses</td>
+            ${expense.laborDetails.workers
+        .map((worker, index) => `
+              <tr>
+                <td>${index + 1}</td>
+                <td>${worker.user.firstName} ${worker.user.lastName}</td>
+                <td>${worker.daysPresent}</td>
+                <td>${worker.dailySalary.toFixed(2)}</td>
+                <td class="text-right">${worker.totalSalary.toFixed(2)}</td>
+              </tr>
+            `)
+        .join("")}
+          </tbody>
+          <tfoot>
+            <tr class="total-row">
+              <td colspan="4">TOTAL WORKERS COST</td>
               <td class="text-right">${expense.laborDetails.workers
-        .reduce((sum, worker) => sum + worker.totalSalary, 0)
+        .reduce((sum, w) => sum + w.totalSalary, 0)
         .toFixed(2)}</td>
             </tr>
-            <tr>
-              <td>2</td>
-              <td>Driver Expenses</td>
-              <td class="text-right">${expense.laborDetails.driver.totalSalary.toFixed(2)}</td>
-            </tr>
-            <tr class="total-row">
-              <td colspan="2">TOTAL LABOR COST</td>
-              <td class="text-right">${totalLaborCost.toFixed(2)}</td>
-            </tr>
-          </tbody>
+          </tfoot>
         </table>
       </div>
 
       <div class="section">
-        <div class="section-title">SUMMARY</div>
+        <div class="section-title">LABOR DETAILS - DRIVER</div>
+        <table>
+          <thead>
+            <tr>
+              <th width="40%">Driver Name</th>
+              <th width="15%">Days Present</th>
+              <th width="20%">Daily Salary (AED)</th>
+              <th width="25%" class="text-right">Total Salary (AED)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>${expense.laborDetails.driver.user.firstName} ${expense.laborDetails.driver.user.lastName}</td>
+              <td>${expense.laborDetails.driver.daysPresent}</td>
+              <td>${expense.laborDetails.driver.dailySalary.toFixed(2)}</td>
+              <td class="text-right">${expense.laborDetails.driver.totalSalary.toFixed(2)}</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr class="total-row">
+              <td colspan="3">TOTAL DRIVER COST</td>
+              <td class="text-right">${expense.laborDetails.driver.totalSalary.toFixed(2)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div class="section">
+        <div class="section-title">LABOR SUMMARY</div>
+        <table>
+          <tbody>
+            <tr>
+              <td>Total Workers Cost</td>
+              <td class="text-right">${expense.laborDetails.workers
+        .reduce((sum, w) => sum + w.totalSalary, 0)
+        .toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td>Total Driver Cost</td>
+              <td class="text-right">${expense.laborDetails.driver.totalSalary.toFixed(2)}</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr class="total-row">
+              <td>TOTAL LABOR COST</td>
+              <td class="text-right">${totalLaborCost.toFixed(2)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div class="section">
+        <div class="section-title">FINANCIAL SUMMARY</div>
         <table>
           <tbody>
             <tr>
@@ -575,20 +679,22 @@ exports.generateExpensePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
             </tr>
             ${quotation
         ? `
-              <tr>
-                <td>Project Quotation Amount</td>
-                <td class="text-right">${quotationAmount.toFixed(2)}</td>
-              </tr>
-              ${commissionAmount > 0
+            <tr>
+              <td>Project Quotation Amount</td>
+              <td class="text-right">${quotationAmount.toFixed(2)}</td>
+            </tr>
+            ${commissionAmount > 0
             ? `<tr>
-                      <td>Commission Amount</td>
-                      <td class="text-right">${commissionAmount.toFixed(2)}</td>
-                    </tr>`
+                    <td>Commission Amount</td>
+                    <td class="text-right">${commissionAmount.toFixed(2)}</td>
+                  </tr>`
             : ""}
-              <tr class="total-row">
-                <td>${profit >= 0 ? "PROFIT" : "LOSS"}</td>
-                <td class="text-right">${profit.toFixed(2)} (${profitPercentage.toFixed(2)}%)</td>
-              </tr>
+            <tr class="total-row">
+              <td>${profit >= 0 ? "NET PROFIT" : "NET LOSS"}</td>
+              <td class="text-right" style="color: ${profit >= 0 ? '#28a745' : '#dc3545'}">
+                ${profit.toFixed(2)} (${profitPercentage.toFixed(2)}%)
+              </td>
+            </tr>
             `
         : ""}
           </tbody>
@@ -620,6 +726,7 @@ exports.generateExpensePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
                 bottom: "1cm",
                 left: "1cm",
             },
+            preferCSSPageSize: true,
         });
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", `attachment; filename=expense-report-${expense.project.projectNumber}.pdf`);

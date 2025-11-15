@@ -1395,7 +1395,7 @@ export const generateInvoicePdf = asyncHandler(
       object-fit: contain;
       position: absolute;
       left: 0;
-  
+     
       /* Prevent logo from breaking */
       page-break-inside: avoid;
       break-inside: avoid;
@@ -1526,9 +1526,12 @@ export const generateInvoicePdf = asyncHandler(
       table-layout: fixed;
       /* REMOVED: page-break-inside: avoid - Allow table to break */
     }
+    /* CHANGED: Prevent header from repeating on each page */
     thead {
       display: table-header-group;
-      /* Ensure header repeats on each page */
+      /* Prevent header from repeating on each page */
+      page-break-after: avoid;
+      break-inside: avoid;
     }
     tbody {
       display: table-row-group;
@@ -1707,8 +1710,11 @@ export const generateInvoicePdf = asyncHandler(
       body {
         font-size: 10pt;
       }
+      /* CHANGED: Prevent header from repeating on each page in print */
       thead { 
-        display: table-header-group; 
+        display: table-row-group;
+        page-break-after: avoid;
+        break-inside: avoid;
       }
       tfoot { 
         display: table-footer-group; 
@@ -1851,7 +1857,7 @@ export const generateInvoicePdf = asyncHandler(
       </div>
       ` : ''}
 
-  
+     
     </div>
 
     <div class="footer-container">

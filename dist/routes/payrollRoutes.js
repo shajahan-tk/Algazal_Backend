@@ -15,6 +15,10 @@ router.post("/", (0, authMiddleware_1.authorize)(["admin", "super_admin", "accou
 router.get("/", payrollController_1.getPayrolls);
 // Export payrolls to Excel
 router.get("/export/excel", payrollController_1.exportPayrollsToExcel);
+// Generate payslip PDF (must come before /:id routes)
+router.get("/:id/pdf", (0, authMiddleware_1.authorize)(["super_admin", "admin", "accountant", "finance"]), payrollController_1.generatePayslipPDF);
+// Get payslip data (preview) (must come before /:id routes)
+router.get("/:id/data", (0, authMiddleware_1.authorize)(["super_admin", "admin", "accountant", "finance"]), payrollController_1.getPayslipData);
 // Get single payroll record
 router.get("/:id", payrollController_1.getPayroll);
 // Update payroll record

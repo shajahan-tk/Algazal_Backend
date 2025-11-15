@@ -15,42 +15,41 @@ const mongoose_1 = require("mongoose");
 // Mark attendance (supports both project and normal types)
 exports.markAttendance = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const { projectId, userId } = req.params;
-    let { present, type = "project", workingHours = 0 } = req.body;
+    let { present, type = "project", workingHours = 0, isPaidLeave = false } = req.body;
     console.log('Request body:', req.body);
-    console.log('Present:', present);
-    console.log('Working hours:', workingHours);
-    console.log('Type:', type);
-    // Ensure markedBy exists and is valid
+    // NEW: Validate paid leave cannot have project type
+    if (isPaidLeave && type === "project") {
+        throw new apiHandlerHelpers_2.ApiError(400, "Paid leave cannot be associated with a project");
+    }
     if (!req.user?.userId) {
         throw new apiHandlerHelpers_2.ApiError(401, "Unauthorized - User not authenticated");
     }
     const markedBy = new mongoose_1.Types.ObjectId(req.user.userId);
-    // Get today's date at midnight (00:00:00)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    // Validate input
     if (typeof present !== "boolean") {
         throw new apiHandlerHelpers_2.ApiError(400, "Present must be a boolean");
     }
     if (!["project", "normal"].includes(type)) {
         throw new apiHandlerHelpers_2.ApiError(400, "Invalid attendance type");
     }
-    // FIXED: Convert time string to hours and validate
     let workingHoursValue = 0;
-    if (present) {
-        // Handle both number and time string formats
+    // NEW: For paid leave, force hours to 0
+    if (isPaidLeave) {
+        workingHoursValue = 0;
+        present = false;
+    }
+    else if (present) {
+        // Existing working hours conversion logic
         if (typeof workingHours === 'string' && workingHours.includes(':')) {
-            // Convert time string like "15:00" to hours
             const [hours, minutes] = workingHours.split(':').map(Number);
             workingHoursValue = hours + (minutes / 60);
-            // Round to 2 decimal places for cleaner storage
             workingHoursValue = Math.round(workingHoursValue * 100) / 100;
         }
         else if (typeof workingHours === 'number') {
             workingHoursValue = workingHours;
         }
         else if (typeof workingHours === 'string') {
-            // Try to parse as number if it's a string number
             workingHoursValue = parseFloat(workingHours);
             if (isNaN(workingHoursValue)) {
                 throw new apiHandlerHelpers_2.ApiError(400, "Working hours must be a valid number or time string (HH:MM)");
@@ -59,37 +58,32 @@ exports.markAttendance = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         else {
             throw new apiHandlerHelpers_2.ApiError(400, "Working hours must be a number or time string (HH:MM)");
         }
-        // Validate the converted value
         if (workingHoursValue < 0 || workingHoursValue > 24) {
             throw new apiHandlerHelpers_2.ApiError(400, "Working hours must be between 0 and 24");
         }
     }
     else {
-        // For absent cases, force workingHours to 0
         workingHoursValue = 0;
     }
-    // Use the converted value
     workingHours = workingHoursValue;
+    // Project validation only if not paid leave
     let project;
-    if (type === "project") {
+    if (type === "project" && !isPaidLeave) {
         if (!projectId) {
             throw new apiHandlerHelpers_2.ApiError(400, "Project ID is required for project attendance");
         }
         project = await projectModel_1.Project.findById(projectId);
         if (!project)
             throw new apiHandlerHelpers_2.ApiError(404, "Project not found");
-        // Check if user is assigned to project
         const isAssigned = (project.assignedWorkers?.some((w) => w.equals(userId)) ?? false) ||
             (project.assignedDriver?.equals(userId) ?? false);
         if (!isAssigned) {
             throw new apiHandlerHelpers_2.ApiError(400, "User is not assigned to this project");
         }
-        // Only assigned driver can mark attendance for project
         if (!project.assignedDriver?.equals(markedBy)) {
             throw new apiHandlerHelpers_2.ApiError(403, "Only assigned driver can mark project attendance");
         }
     }
-    // Find existing attendance record for today
     const nextDay = new Date(today);
     nextDay.setDate(today.getDate() + 1);
     const query = {
@@ -97,27 +91,30 @@ exports.markAttendance = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         date: { $gte: today, $lt: nextDay },
         type,
     };
-    if (type === "project") {
+    if (type === "project" && !isPaidLeave) {
         query.project = projectId;
     }
     let attendance = await attendanceModel_1.Attendance.findOne(query);
     if (attendance) {
-        // Update existing record
         attendance.present = present;
         attendance.workingHours = workingHours;
         attendance.markedBy = markedBy;
+        attendance.isPaidLeave = isPaidLeave;
+        if (isPaidLeave) {
+            attendance.project = undefined;
+        }
         await attendance.save();
     }
     else {
-        // Create new record
         attendance = await attendanceModel_1.Attendance.create({
-            project: type === "project" ? projectId : undefined,
+            project: (type === "project" && !isPaidLeave) ? projectId : undefined,
             user: userId,
             present,
             workingHours,
             markedBy,
             date: today,
             type,
+            isPaidLeave,
         });
     }
     res
@@ -199,6 +196,7 @@ exports.getTodayProjectAttendance = (0, asyncHandler_1.asyncHandler)(async (req,
             profileImage: worker.profileImage,
             phoneNumbers: worker.phoneNumbers,
             present: attendanceRecord?.present || false,
+            isPaidLeave: attendanceRecord?.isPaidLeave || false, // ADDED THIS LINE
             workingHours: attendanceRecord?.workingHours || 0,
             overtimeHours: attendanceRecord?.overtimeHours || 0,
             markedBy: attendanceRecord?.markedBy || null,
@@ -319,6 +317,7 @@ exports.dailyNormalAttendance = (0, asyncHandler_1.asyncHandler)(async (req, res
                 role: user.role,
             },
             present: attendance?.present || false,
+            isPaidLeave: attendance?.isPaidLeave || false, // ADDED THIS LINE
             workingHours: attendance?.workingHours || 0,
             overtimeHours: attendance?.overtimeHours || 0,
             markedBy: attendance?.markedBy || null,

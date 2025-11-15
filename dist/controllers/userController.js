@@ -335,7 +335,30 @@ exports.getActiveDrivers = (0, asyncHandler_1.asyncHandler)(async (req, res) => 
         .json(new apiHandlerHelpers_1.ApiResponse(200, { drivers }, "Drivers retrieved successfully"));
 });
 exports.getActiveWorkers = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
-    const workers = await userModel_1.User.find({ role: "worker", isActive: true }).select("-v -password");
+    const workers = await userModel_1.User.find({
+        role: {
+            $in: [
+                "worker",
+                "plumber",
+                "electrician",
+                "mason",
+                "carpenter",
+                "painter",
+                "aluminium_fabricator",
+                "plasterer",
+                "ac_technician",
+                "ac_assistant",
+                "building_labourer",
+                "helper",
+                "cleaner",
+                "senior_plumber",
+                "mep_supervisor",
+                "electrical_supervisor",
+                "supervisor"
+            ]
+        },
+        isActive: true
+    }).select("-v -password");
     res
         .status(200)
         .json(new apiHandlerHelpers_1.ApiResponse(200, { workers }, "Workers retrieved successfully"));

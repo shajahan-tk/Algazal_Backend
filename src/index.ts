@@ -34,6 +34,7 @@ import reportTouter from "./routes/reportRoutes"
 import employeeSummaryRouter from "./routes/employeeSummaryRoutes";
 import attendanceManagementRouter from "./routes/attendanceManagementRoutes";
 import bankDetailsRouter from "./routes/bankDetailsRoutes";
+import dashboardRoutes from "./routes/dashboardAnalyticsRoutes";
 
 
 import { connectDb } from "./config/db";
@@ -70,6 +71,7 @@ app.get("/seed",(_req:Request,res:Response)=>{
   seedSuperAdmin();
   res.send("ok")
 })
+app.use("/api/dashboard-analytics",dashboardRoutes)
 app.use("/api/user", userRouter);
 app.use("/api/estimation", estimationRouter);
 app.use("/api/client", clientRouter);

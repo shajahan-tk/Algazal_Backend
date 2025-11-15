@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.generateCompletionCertificatePdf = exports.updateAcceptanceDate = exports.updateHandoverDate = exports.updateCompletionDate = exports.getCompletionData = exports.getProjectWorkCompletionImages = exports.deleteWorkCompletionImage = exports.getWorkCompletion = exports.uploadWorkCompletionImages = exports.createWorkCompletion = void 0;
+exports.generateCompletionCertificatePdf = exports.updateAcceptanceDate = exports.updateHandoverDate = exports.updateCompletionDate = exports.getCompletionData = exports.getProjectWorkCompletionImages = exports.deleteWorkCompletionImage = exports.getWorkCompletion = exports.updateWorkCompletionImage = exports.uploadWorkCompletionImages = exports.replaceWorkCompletionImage = exports.createWorkCompletion = void 0;
 const asyncHandler_1 = require("../utils/asyncHandler");
 const apiHandlerHelpers_1 = require("../utils/apiHandlerHelpers");
 const apiHandlerHelpers_2 = require("../utils/apiHandlerHelpers");
@@ -66,7 +66,8 @@ async function getCompletionDataForProject(projectId) {
         },
         sitePictures: workCompletion?.images.map((img) => ({
             url: img.imageUrl,
-            caption: img.title,
+            title: img.title,
+            _id: img._id
         })) || [],
         project: {
             _id: populatedProject._id.toString(),
@@ -98,6 +99,46 @@ exports.createWorkCompletion = (0, asyncHandler_1.asyncHandler)(async (req, res)
     res
         .status(201)
         .json(new apiHandlerHelpers_1.ApiResponse(201, workCompletion, "Work completion created successfully"));
+});
+exports.replaceWorkCompletionImage = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    const { projectId, imageId } = req.params;
+    const file = req.file;
+    if (!projectId || !imageId) {
+        throw new apiHandlerHelpers_2.ApiError(400, "Project ID and image ID are required");
+    }
+    if (!file) {
+        throw new apiHandlerHelpers_2.ApiError(400, "Image file is required");
+    }
+    const workCompletion = await workCompletionModel_1.WorkCompletion.findOne({ project: projectId });
+    if (!workCompletion) {
+        throw new apiHandlerHelpers_2.ApiError(404, "Work completion not found");
+    }
+    // Check if user is authorized to update this work completion
+    if (workCompletion.createdBy.toString() !== req.user?.userId.toString()) {
+        throw new apiHandlerHelpers_2.ApiError(403, "Not authorized to update this work completion");
+    }
+    const imageIndex = workCompletion.images.findIndex((img) => img._id.toString() === imageId);
+    if (imageIndex === -1) {
+        throw new apiHandlerHelpers_2.ApiError(404, "Image not found");
+    }
+    const oldImage = workCompletion.images[imageIndex];
+    // Upload new image
+    const uploadResult = await (0, uploadConf_1.uploadWorkCompletionImagesToS3)([file]);
+    if (!uploadResult.success || !uploadResult.uploadData?.[0]) {
+        throw new apiHandlerHelpers_2.ApiError(500, "Failed to upload new image to S3");
+    }
+    const newImageData = uploadResult.uploadData[0];
+    // Delete old image from S3
+    if (oldImage.s3Key) {
+        await (0, uploadConf_1.deleteFileFromS3)(oldImage.s3Key);
+    }
+    // Update image with new file
+    workCompletion.images[imageIndex].imageUrl = newImageData.url;
+    workCompletion.images[imageIndex].s3Key = newImageData.key;
+    workCompletion.images[imageIndex].uploadedAt = new Date();
+    await workCompletion.save();
+    const updatedData = await getCompletionDataForProject(projectId);
+    res.status(200).json(new apiHandlerHelpers_1.ApiResponse(200, updatedData, "Image replaced successfully"));
 });
 exports.uploadWorkCompletionImages = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const { projectId } = req.params;
@@ -152,6 +193,33 @@ exports.uploadWorkCompletionImages = (0, asyncHandler_1.asyncHandler)(async (req
         .status(200)
         .json(new apiHandlerHelpers_1.ApiResponse(200, updatedData, "Images uploaded successfully"));
 });
+exports.updateWorkCompletionImage = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    const { projectId, imageId } = req.params;
+    const { title } = req.body;
+    if (!projectId || !imageId) {
+        throw new apiHandlerHelpers_2.ApiError(400, "Project ID and image ID are required");
+    }
+    if (!title?.trim()) {
+        throw new apiHandlerHelpers_2.ApiError(400, "Title is required and cannot be empty");
+    }
+    const workCompletion = await workCompletionModel_1.WorkCompletion.findOne({ project: projectId });
+    if (!workCompletion) {
+        throw new apiHandlerHelpers_2.ApiError(404, "Work completion not found");
+    }
+    // Check if user is authorized to update this work completion
+    if (workCompletion.createdBy.toString() !== req.user?.userId.toString()) {
+        throw new apiHandlerHelpers_2.ApiError(403, "Not authorized to update this work completion");
+    }
+    const imageIndex = workCompletion.images.findIndex((img) => img._id.toString() === imageId);
+    if (imageIndex === -1) {
+        throw new apiHandlerHelpers_2.ApiError(404, "Image not found");
+    }
+    // Update only the title
+    workCompletion.images[imageIndex].title = title.trim();
+    await workCompletion.save();
+    const updatedData = await getCompletionDataForProject(projectId);
+    res.status(200).json(new apiHandlerHelpers_1.ApiResponse(200, updatedData, "Image title updated successfully"));
+});
 exports.getWorkCompletion = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const { projectId } = req.params;
     if (!projectId) {
@@ -175,7 +243,7 @@ exports.deleteWorkCompletionImage = (0, asyncHandler_1.asyncHandler)(async (req,
     if (!workCompletionId || !imageId) {
         throw new apiHandlerHelpers_2.ApiError(400, "Work completion ID and image ID are required");
     }
-    const workCompletion = await workCompletionModel_1.WorkCompletion.findById(workCompletionId);
+    let workCompletion = await workCompletionModel_1.WorkCompletion.findOne({ project: workCompletionId });
     if (!workCompletion) {
         throw new apiHandlerHelpers_2.ApiError(404, "Work completion not found");
     }
@@ -293,9 +361,8 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
         .populate("createdBy", "firstName lastName signatureImage")
         .sort({ createdAt: -1 });
     const engineer = project.assignedTo;
-    // Add type assertion or safe access for workCompletion.createdBy
     const preparedBy = workCompletion?.createdBy;
-    // Format dates - updated to use project dates
+    // Format dates
     const formatDate = (date) => {
         if (!date)
             return "";
@@ -308,7 +375,7 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
         })
             .replace(/ /g, "-");
     };
-    // Prepare HTML content with optimized spacing
+    // Prepare HTML content
     const htmlContent = `
     <!DOCTYPE html>
     <html lang="en">
@@ -318,181 +385,175 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
         <style>
             @page {
               size: A4;
-              margin: 0.5in;
+              margin: 0.5cm;
+            }
+            * {
+                box-sizing: border-box;
             }
             body {
-                font-family: Arial, sans-serif;
+                font-family: 'Arial', sans-serif;
+                font-size: 11pt;
+                line-height: 1.4;
+                color: #333;
                 margin: 0;
                 padding: 0;
-                color: #000;
-                border: 1px solid #000;
-                font-size: 11pt; /* Base font size increased */
-                line-height: 1.5; /* Better line height */
             }
             .container {
-                width: 96%;
-                margin: 0 auto;
-                padding: 15px;
-                padding-bottom: 60px; /* Reduced space for footer */
+                display: block;
+                width: 100%;
+                max-width: 100%;
+            }
+            .content {
+                margin-bottom: 15px;
             }
             .header {
                 display: flex;
                 align-items: center;
+                justify-content: center;
                 margin-bottom: 15px;
-                border-bottom: 2px solid #94d7f4;
-                padding-bottom: 15px;
+                gap: 20px;
+                page-break-after: avoid;
+                padding: 10px 0;
+                border-bottom: 3px solid #94d7f4;
+                position: relative;
             }
             .logo {
-                max-height: 70px; /* Slightly larger logo */
-                margin-right: 25px;
-            }
-            .title-container {
-                flex-grow: 1;
-                text-align: end;
-            }
-            h1 {
-                color: #800080; /* Purple color */
-                font-size: 28px; /* Larger title */
-                font-weight: bold;
-                margin: 0;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-            }
-            .highlight {
-                padding: 2px 6px;
-                background-color: #f0f8ff; /* Light blue background */
-                border-radius: 3px;
-                font-weight: 600;
-            }
-            table {
-                width: 100%;
-                border-collapse: collapse;
-                margin: 12px 0;
-                font-size: 11pt; /* Better table font size */
-            }
-            td {
-                padding: 8px 10px; /* More padding */
-                vertical-align: top;
-                line-height: 1.4;
-            }
-            .bordered {
-                border: 1px solid #000;
-                margin: 15px 0;
-            }
-            .bordered td {
-                border: 1px solid #000;
-            }
-            .bold {
-                font-weight: bold;
-                color: #2c3e50; /* Darker color for better readability */
-            }
-            .section-title {
-                margin: 20px 0 8px 0;
-                font-weight: bold;
-                font-size: 14pt; /* Larger section titles */
-                color: #2c3e50;
-                border-bottom: 1px solid #94d7f4;
-                padding-bottom: 5px;
-            }
-            .signature-img {
-                height: 50px; /* Larger signature images */
-                max-width: 180px;
+                height: 50px;
+                width: auto;
+                max-width: 150px;
                 object-fit: contain;
+                position: absolute;
+                left: 0;
+             
             }
-            .green-text {
-                color: #228B22; /* Forest green */
-                font-weight: bold;
-                font-size: 11pt;
-            }
-            .blue-bg {
-                background-color: #94d7f4; /* Consistent with other PDFs */
-                color: #000;
-                font-weight: bold;
-                padding: 8px 12px;
-                font-size: 12pt; /* Larger header text */
-                text-align: center;
-            }
-            .image-container {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 12px;
-                margin: 15px 0 10px 0;
-                justify-content: center;
-            }
-            .image-item {
+            .company-names {
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                flex-grow: 1;
-                max-width: 200px; /* Slightly larger images */
-                margin-bottom: 15px;
-            }
-            .image-item img {
-                height: 120px; /* Larger images */
-                width: 100%;
-                border: 1px solid #ddd;
-                object-fit: cover;
-                margin-bottom: 8px;
-                border-radius: 4px;
-            }
-            .image-title {
-                font-size: 10.5pt; /* Better font size */
-                font-weight: 600;
+                justify-content: center;
                 text-align: center;
-                color: #333;
-                word-wrap: break-word;
-                width: 100%;
-                padding: 4px 6px;
-                background-color: #f8f9fa;
-                border-radius: 3px;
+                flex-grow: 1;
             }
-            .footer-container {
-                margin-top: 25px;
-                width: 96%;
-                margin-left: auto;
-                margin-right: auto;
+            .company-name-arabic {
+                font-size: 20pt;
+                font-weight: bold;
+                color: #1a1a1a;
+                line-height: 1.3;
+                direction: rtl;
+                unicode-bidi: bidi-override;
+                letter-spacing: 0;
+                margin-bottom: 5px;
+            }
+            .company-name-english {
+                font-size: 10pt;
+                font-weight: bold;
+                color: #1a1a1a;
+                line-height: 1.3;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+            }
+            .certificate-title {
+                text-align: center;
+                font-size: 20pt;
+                font-weight: bold;
+                color: #2c3e50;
+                margin: 20px 0 15px 0;
+                text-transform: uppercase;
+                letter-spacing: 1.5px;
+                padding: 12px;
+                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+                border-radius: 6px;
+                border-left: 4px solid #94d7f4;
+                border-right: 4px solid #94d7f4;
+            }
+            .section {
+                margin-bottom: 12px;
                 page-break-inside: avoid;
             }
-            .tagline {
-                text-align: center;
+            .section-title {
+                font-size: 11pt;
                 font-weight: bold;
-                font-size: 13pt; /* Consistent with other PDFs */
-                margin: 15px 0 10px 0;
+                padding: 4px 0;
+                margin: 12px 0 8px 0;
+                border-bottom: 2px solid #94d7f4;
+                page-break-after: avoid;
                 color: #2c3e50;
             }
-            .footer {
-                text-align: center;
-                font-size: 10pt; /* Better footer font size */
-                color: #555;
-                border-top: 2px solid #ddd;
-                padding-top: 12px;
-                margin-top: 10px;
-                line-height: 1.6;
+            .info-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 10px 0;
+                font-size: 10pt;
             }
-            .footer p {
-                margin: 6px 0;
+            .info-table td {
+                padding: 6px 8px;
+                vertical-align: top;
+                line-height: 1.4;
             }
-            .footer strong {
+            .info-table .label {
+                font-weight: bold;
                 color: #2c3e50;
-                font-size: 10.5pt;
+                width: 30%;
+            }
+            .highlight {
+                padding: 2px 6px;
+                background-color: #f0f8ff;
+                border-radius: 3px;
+                font-weight: 600;
             }
             .certification-text {
                 margin: 15px 0;
                 padding: 12px 15px;
                 background-color: #f8f9fa;
                 border-left: 4px solid #94d7f4;
+                border-right: 4px solid #94d7f4;
                 border-radius: 4px;
-                font-size: 11.5pt; /* Better text size */
+                font-size: 10.5pt;
                 line-height: 1.6;
                 color: #333;
             }
-            .signature-section {
-                margin: 5px 0;
+            table.signature-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 10px 0;
+                font-size: 10pt;
             }
-            .signature-name {
-                font-weight: 600;
+            .signature-table td {
+                padding: 10px 12px;
+                border: 1px solid #ddd;
+                vertical-align: middle;
+            }
+            .signature-table .header-row {
+                background-color: #94d7f4;
+                color: #000;
+                font-weight: bold;
+                text-align: center;
+                padding: 8px 12px;
+            }
+            .signature-table .label-row {
+                background-color: #f8f9fa;
+                font-weight: bold;
                 color: #2c3e50;
-                margin-top: 5px;
+                text-align: center;
+                padding: 8px 12px;
+            }
+            .signature-table .value-row {
+                text-align: center;
+                padding: 12px;
+            }
+            .signature-table td:nth-child(1) {
+                width: 30%;
+            }
+            .signature-table td:nth-child(2) {
+                width: 40%;
+            }
+            .signature-table td:nth-child(3) {
+                width: 30%;
+            }
+            .signature-img {
+                height: 50px;
+                max-width: 180px;
+                object-fit: contain;
             }
             .empty-signature {
                 height: 50px;
@@ -502,162 +563,299 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
                 align-items: center;
                 justify-content: center;
                 color: #999;
-                font-size: 10pt;
+                font-size: 9pt;
             }
-            /* Improved table row styling */
-            .bordered tr:nth-child(even) {
-                background-color: #f8f9fa;
+            .signature-name {
+                font-weight: 600;
+                color: #2c3e50;
             }
-            .bordered tr:hover {
-                background-color: #e9f7fe;
+            .green-text {
+                color: #228B22;
+                font-weight: bold;
             }
-            /* Certificate border styling */
-            body {
-                border: 2px solid #800080; /* Purple border to match title */
-                background: linear-gradient(white, white) padding-box,
-                            linear-gradient(135deg, #94d7f4, #800080) border-box;
-                border: 2px solid transparent;
-                background-clip: padding-box, border-box;
+            
+            /* ==================== IMAGE SECTION (FIXED - NO BREAK PROBLEMS) ==================== */
+            
+            .images-section {
+                margin-top: 15px;
+                /* REMOVED: page-break-inside: avoid - Let it break naturally */
+            }
+            
+            .images-grid {
+                display: block;
+                margin-top: 8px;
+                /* REMOVED: page-break-inside rules - Let it flow naturally */
+            }
+            
+            .images-row {
+                display: flex;
+                gap: 12px;
+                margin-bottom: 12px;
+                /* REMOVED ALL page-break rules - Let rows break naturally between pages */
+                min-height: 140px; /* Ensure minimum height for better breaking */
+            }
+            
+            .image-item {
+                flex: 1;
+                min-width: calc(33.333% - 8px);
+                max-width: calc(33.333% - 8px);
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                /* REMOVED: page-break-inside: avoid - Let items break naturally */
+                border: 1px solid #ddd;
+                border-radius: 6px;
+                padding: 8px;
+                background: #fafafa;
+                min-height: 140px;
+                box-sizing: border-box;
+                /* Allow breaking inside image items if needed */
+                page-break-inside: auto;
+            }
+            
+            .image-container {
+                width: 100%;
+                height: 140px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                overflow: hidden;
+                margin-bottom: 6px;
+                background: #fff;
+                border-radius: 4px;
+                /* Prevent images from breaking */
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+            
+            .image-container img {
+                max-height: 100%;
+                max-width: 100%;
+                object-fit: contain;
+                /* Ensure images don't break */
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+            
+            .image-title {
+                font-size: 8.5pt;
+                font-weight: 600;
+                text-align: center;
+                color: #2c3e50;
+                line-height: 1.2;
+                margin: 0;
+                word-break: break-word;
+                max-height: 28px;
+                overflow: hidden;
+                display: -webkit-box;
+                -webkit-line-clamp: 2;
+                -webkit-box-orient: vertical;
+                /* Allow title to break with the image */
+                page-break-inside: auto;
+            }
+            
+            .tagline {
+                text-align: center;
+                font-weight: bold;
+                font-size: 11pt;
+               
+                color: #2c3e50;
+                border-top: 2px solid #ddd;
+                padding-top: 10px;
+                page-break-before: avoid;
+            }
+            .footer {
+                font-size: 8.5pt;
+                color: #555;
+                text-align: center;
+                margin-top: 8px;
+                page-break-inside: avoid;
+                line-height: 1.3;
+            }
+            .footer p {
+                margin: 4px 0;
+            }
+            .footer strong {
+                color: #2c3e50;
+            }
+            @media print {
+                body {
+                    font-size: 10pt;
+                }
             }
         </style>
     </head>
     <body>
         <div class="container">
-            <div class="header">
-                <img src="https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg" alt="Company Logo" class="logo">
-                <div class="title-container">
-                    <h1>Completion Certificate</h1>
+            <div class="content">
+                <div class="header">
+                    <img class="logo" src="https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg" alt="Company Logo">
+                    <div class="company-names">
+                        <div class="company-name-arabic">الغزال الأبيض للخدمات الفنية</div>
+                        <div class="company-name-english">AL GHAZAL AL ABYAD TECHNICAL SERVICES</div>
+                    </div>
                 </div>
+
+                <div class="certificate-title">Completion Certificate</div>
+
+                <div class="section">
+                    <table class="info-table">
+                        <tr>
+                            <td class="label">Reference</td>
+                            <td>: <span class="">${`QTN${project.projectNumber.slice(3, 40)}`}</span></td>
+                        </tr>
+                        <tr>
+                            <td class="label">FM CONTRACTOR</td>
+                            <td>:&nbsp;${client.clientName}</td>
+                        </tr>
+                        <tr>
+                            <td class="label">SUB CONTRACTOR</td>
+                            <td>:&nbsp; AL GHAZAL ALABYAD TECHNICAL SERVICES</td>
+                        </tr>
+                        <tr>
+                            <td class="label">PROJECT DESCRIPTION</td>
+                            <td>: <span class="">${project.projectName}</span></td>
+                        </tr>
+                        <tr>
+                            <td class="label">LOCATION (Bldg.)</td>
+                            <td>: <span class="">${project.location}${project.building ? `, ${project.building}` : ""}</span></td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div class="certification-text">
+                    This is to certify that the work described above in the project description has been cleared out and completed to the required standards and specifications.
+                </div>
+
+                <div class="section">
+                    <table class="info-table">
+                        <tr>
+                            <td class="label">Completion Date</td>
+                            <td>: <span class="highlight">${formatDate(project.completionDate)}</span></td>
+                        </tr>
+                        <tr>
+                            <td class="label">LPO Number</td>
+                            <td>: ${lpo?.lpoNumber || "N/A"}</td>
+                        </tr>
+                        <tr>
+                            <td class="label">LPO Date</td>
+                            <td>: ${formatDate(lpo?.lpoDate)}</td>
+                        </tr>
+                    </table>
+                </div>
+
+               
+
+               
+
+                <div class="section">
+                    <table class="signature-table">
+                        <tr>
+                            <td colspan="3" class="header-row">Prepared by: AL GHAZAL AL ABYAD TECHNICAL SERVICES</td>
+                        </tr>
+                        <tr class="label-row">
+                            <td>Name</td>
+                            <td>Signature</td>
+                            <td>Date</td>
+                        </tr>
+                        <tr class="value-row">
+                            <td>${preparedBy?.firstName || ""} ${preparedBy?.lastName || ""}</td>
+                            <td>
+                                ${preparedBy?.signatureImage ? `<img src="${preparedBy.signatureImage}" class="signature-img" />` : '<div class="empty-signature">Signature</div>'}
+                            </td>
+                            <td><span class="green-text">${formatDate(project.handoverDate)}</span></td>
+                        </tr>
+                    </table>
+                </div>
+                 <div class="section">
+                    <table class="signature-table">
+                        <tr>
+                            <td colspan="3" class="header-row">Hand over by: AL GHAZAL AL ABYAD TECHNICAL SERVICES</td>
+                        </tr>
+                        <tr class="label-row">
+                            <td>Name</td>
+                            <td>Signature</td>
+                            <td>Date</td>
+                        </tr>
+                        <tr class="value-row">
+                            <td>${engineer?.firstName} ${engineer?.lastName || ""}</td>
+                            <td>
+                                ${engineer?.signatureImage ? `<img src="${engineer.signatureImage}" class="signature-img" />` : '<div class="empty-signature">Signature</div>'}
+                            </td>
+                            <td><span class="green-text">${formatDate(project.handoverDate)}</span></td>
+                        </tr>
+                    </table>
+                </div>
+                 <div class="section">
+                    <table class="signature-table">
+                        <tr>
+                            <td colspan="3" class="header-row">Accepted by: Client side</td>
+                        </tr>
+                        <tr class="label-row">
+                            <td>Name</td>
+                            <td>Signature</td>
+                            <td>Date</td>
+                        </tr>
+                        <tr class="value-row">
+                            <td>${client.clientName}</td>
+                            <td>
+                                <div class="empty-signature">Client Signature</div>
+                            </td>
+                            <td>${formatDate(project.acceptanceDate)}</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <!-- IMAGES SECTION -->
+                ${workCompletion?.images && workCompletion.images.length > 0 ? `
+                  <div class="images-section">
+                    <div class="section-title">Site Pictures</div>
+                    <div class="images-grid">
+                      ${(() => {
+        let html = '';
+        for (let i = 0; i < workCompletion.images.length; i += 3) {
+            const rowImages = workCompletion.images.slice(i, i + 3);
+            html += '<div class="images-row">';
+            for (let j = 0; j < 3; j++) {
+                if (j < rowImages.length) {
+                    const image = rowImages[j];
+                    html += `
+                                <div class="image-item">
+                                  <div class="image-container">
+                                    <img src="${image.imageUrl}" alt="${image.title || "Site picture"}" />
+                                  </div>
+                                  <div class="image-title">${image.title || "Site Image"}</div>
+                                </div>
+                              `;
+                }
+                else {
+                    html += `
+                                <div class="image-item" style="visibility: hidden;">
+                                  <div class="image-container"></div>
+                                  <div class="image-title"></div>
+                                </div>
+                              `;
+                }
+            }
+            html += '</div>';
+        }
+        return html;
+    })()}
+                    </div>
+                  </div>
+                  ` : `
+                  <div class="section">
+                    <div class="section-title">Site Pictures</div>
+                    <p style="text-align: center; font-size: 10pt; color: #666; padding: 20px;">No site pictures available</p>
+                  </div>
+                  `}
             </div>
 
-            <table>
-                <tr>
-                    <td class="bold" style="width: 30%">Reference</td>
-                    <td>: <span class="highlight">${`QTN${project.projectNumber.slice(3, 40)}`}</span></td>
-                </tr>
-                <tr>
-                    <td class="bold">FM CONTRACTOR</td>
-                    <td>: ${client.clientName}</td>
-                </tr>
-                <tr>
-                    <td class="bold">SUB CONTRACTOR</td>
-                    <td>: AL GHAZAL ALABYAD TECHNICAL SERVICES</td>
-                </tr>
-                <tr>
-                    <td class="bold">PROJECT DESCRIPTION</td>
-                    <td>: <span class="highlight">${project.projectName}</span></td>
-                </tr>
-                <tr>
-                    <td class="bold">LOCATION (Bldg.)</td>
-                    <td>: <span class="highlight">${project.location}${project.building ? `, ${project.building}` : ""}</span></td>
-                </tr>
-            </table>
-
-            <div class="certification-text">
-                This is to certify that the work described above in the project description has been cleared out and completed to the required standards and specifications.
-            </div>
-
-            <table>
-                <tr>
-                    <td class="bold" style="width: 30%">Completion Date</td>
-                    <td>: <span class="highlight">${formatDate(project.completionDate)}</span></td>
-                </tr>
-                <tr>
-                    <td class="bold">LPO Number</td>
-                    <td>: ${lpo?.lpoNumber || "N/A"}</td>
-                </tr>
-                <tr>
-                    <td class="bold">LPO Date</td>
-                    <td>: ${formatDate(lpo?.lpoDate)}</td>
-                </tr>
-            </table>
-
-            <table class="bordered">
-                <tr>
-                    <td colspan="2" class="blue-bg">Hand over by:</td>
-                    <td colspan="2" class="blue-bg">AL GHAZAL AL ABYAD TECHNICAL SERVICES</td>
-                </tr>
-                <tr>
-                    <td class="bold" style="width: 25%">Name:</td>
-                    <td style="width: 25%" class="signature-name">${engineer?.firstName} ${engineer?.lastName || ""}</td>
-                    <td class="bold" style="width: 25%">Signature:</td>
-                    <td style="width: 25%" class="signature-section">
-                        ${engineer?.signatureImage
-        ? `<img src="${engineer.signatureImage}" class="signature-img" />`
-        : '<div class="empty-signature">Signature</div>'}
-                    </td>
-                </tr>
-                <tr>
-                    <td class="bold">Date:</td>
-                    <td><span class="green-text">${formatDate(project.handoverDate)}</span></td>
-                    <td></td>
-                    <td></td>
-                </tr>
-            </table>
-
-            <table class="bordered">
-                <tr>
-                    <td colspan="2" class="blue-bg">Accepted by:</td>
-                    <td colspan="2" class="blue-bg">Client side</td>
-                </tr>
-                <tr>
-                    <td class="bold" style="width: 25%">Name:</td>
-                    <td style="width: 25%" class="signature-name">${client.clientName}</td>
-                    <td class="bold" style="width: 25%">Signature:</td>
-                    <td style="width: 25%" class="signature-section">
-                        <div class="empty-signature">Client Signature</div>
-                    </td>
-                </tr>
-                <tr>
-                    <td class="bold">Date:</td>
-                    <td>${formatDate(project.acceptanceDate)}</td>
-                    <td></td>
-                    <td></td>
-                </tr>
-            </table>
-
-            <table class="bordered">
-                <tr>
-                    <td colspan="2" class="blue-bg">Prepared by:</td>
-                    <td colspan="2" class="blue-bg">AL GHAZAL AL ABYAD TECHNICAL SERVICES</td>
-                </tr>
-                <tr>
-                    <td class="bold" style="width: 25%">Name:</td>
-                    <td style="width: 25%" class="signature-name">${preparedBy?.firstName || ""} ${preparedBy?.lastName || ""}</td>
-                    <td class="bold" style="width: 25%">Signature:</td>
-                    <td style="width: 25%" class="signature-section">
-                        ${preparedBy?.signatureImage
-        ? `<img src="${preparedBy.signatureImage}" class="signature-img" />`
-        : '<div class="empty-signature">Signature</div>'}
-                    </td>
-                </tr>
-                <tr>
-                    <td class="bold">Date:</td>
-                    <td><span class="green-text">${formatDate(project.handoverDate)}</span></td>
-                    <td></td>
-                    <td></td>
-                </tr>
-            </table>
-
-            <div class="section-title">Site Pictures:</div>
-            <div class="image-container">
-                ${workCompletion?.images && workCompletion.images.length > 0
-        ? workCompletion.images
-            .map((image) => `<div class="image-item">
-                               <img src="${image.imageUrl}" alt="${image.title || "Site picture"}" />
-                               <div class="image-title">${image.title || "Site Image"}</div>
-                             </div>`)
-            .join("")
-        : '<p style="text-align: center; width: 100%; font-size: 11pt; color: #666; padding: 20px;">No site pictures available</p>'}
-            </div>
-        </div>
-
-        <div class="footer-container">
             <div class="tagline">We work U Relax</div>
             <div class="footer">
                 <p><strong>AL GHAZAL AL ABYAD TECHNICAL SERVICES</strong></p>
                 <p>Office No:04, R09-France Cluster, International City-Dubai | P.O.Box:262760, Dubai-U.A.E</p>
-                <p>Tel: 044102555 | <a href="http://www.alghazalgroup.com/" style="color: #0074cc; text-decoration: none;">www.alghazalgroup.com</a></p>
+                <p>Tel: 044102555 | <a href="http://www.alghazalgroup.com/">www.alghazalgroup.com</a></p>
                 <p>Generated on ${formatDate(new Date())}</p>
             </div>
         </div>
@@ -671,7 +869,6 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
     });
     try {
         const page = await browser.newPage();
-        // Set viewport for consistent rendering
         await page.setViewport({ width: 1200, height: 1600 });
         await page.setContent(htmlContent, {
             waitUntil: ["networkidle0", "domcontentloaded"],
@@ -681,10 +878,10 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
             format: "A4",
             printBackground: true,
             margin: {
-                top: "0.5in",
-                right: "0.5in",
-                bottom: "0.5in",
-                left: "0.5in",
+                top: "0.5cm",
+                right: "0.5cm",
+                bottom: "0.5cm",
+                left: "0.5cm",
             },
             preferCSSPageSize: true,
             displayHeaderFooter: false,
@@ -697,5 +894,4 @@ exports.generateCompletionCertificatePdf = (0, asyncHandler_1.asyncHandler)(asyn
         await browser.close();
     }
 });
-///ads
 //# sourceMappingURL=workCompletionController.js.map

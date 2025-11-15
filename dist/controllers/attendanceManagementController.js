@@ -12,7 +12,7 @@ const mongoose_1 = require("mongoose");
 // Create or Update attendance record
 exports.createOrUpdateAttendance = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const { userId, date, type = "normal" } = req.body;
-    let { present, workingHours = 0, overtimeHours = 0, projectId } = req.body;
+    let { present, workingHours = 0, overtimeHours = 0, projectId, isPaidLeave = false } = req.body;
     console.log('Create/Update Attendance Request:', req.body);
     // Validate required fields
     if (!userId || !date) {
@@ -21,29 +21,29 @@ exports.createOrUpdateAttendance = (0, asyncHandler_1.asyncHandler)(async (req, 
     if (!["project", "normal"].includes(type)) {
         throw new apiHandlerHelpers_2.ApiError(400, "Invalid attendance type");
     }
-    // For project attendance, validate project
-    if (type === "project") {
+    // NEW: Validate paid leave cannot have project
+    if (isPaidLeave && projectId) {
+        throw new apiHandlerHelpers_2.ApiError(400, "Paid leave cannot be associated with a project");
+    }
+    // For project attendance, validate project (unless it's paid leave)
+    if (type === "project" && !isPaidLeave) {
         if (!projectId) {
             throw new apiHandlerHelpers_2.ApiError(400, "Project ID is required for project attendance");
         }
-        // Validate project exists
         const project = await projectModel_1.Project.findById(projectId);
         if (!project) {
             throw new apiHandlerHelpers_2.ApiError(404, "Project not found");
         }
-        // Check if user is assigned to project
         const isAssigned = (project.assignedWorkers?.some((w) => w.equals(userId)) ?? false) ||
             (project.assignedDriver?.equals(userId) ?? false);
         if (!isAssigned) {
             throw new apiHandlerHelpers_2.ApiError(400, "User is not assigned to this project");
         }
     }
-    // Ensure markedBy exists
     if (!req.user?.userId) {
         throw new apiHandlerHelpers_2.ApiError(401, "Unauthorized - User not authenticated");
     }
     const markedBy = new mongoose_1.Types.ObjectId(req.user.userId);
-    // Parse and validate date
     const attendanceDate = new Date(date);
     if (isNaN(attendanceDate.getTime())) {
         throw new apiHandlerHelpers_2.ApiError(400, "Invalid date format");
@@ -51,35 +51,36 @@ exports.createOrUpdateAttendance = (0, asyncHandler_1.asyncHandler)(async (req, 
     attendanceDate.setHours(0, 0, 0, 0);
     const nextDay = new Date(attendanceDate);
     nextDay.setDate(attendanceDate.getDate() + 1);
-    // Validate user exists
     const user = await userModel_1.User.findById(userId);
     if (!user) {
         throw new apiHandlerHelpers_2.ApiError(404, "User not found");
     }
-    // Convert working hours - FIXED: Handle both string and number properly
+    // Convert working hours
     let workingHoursValue = 0;
     let overtimeHoursValue = 0;
-    if (present) {
-        // Handle working hours
+    // NEW: For paid leave (day off), force hours to 0
+    if (isPaidLeave) {
+        workingHoursValue = 0;
+        overtimeHoursValue = 0;
+        present = false; // Paid leave is technically absent but paid
+    }
+    else if (present) {
+        // Handle working hours (existing code)
         if (typeof workingHours === 'string') {
             if (workingHours.includes(':')) {
-                // Convert time string like "8:30" to hours
                 const [hours, minutes] = workingHours.split(':').map(Number);
                 workingHoursValue = hours + (minutes / 60);
             }
             else {
-                // Convert string number to float
                 workingHoursValue = parseFloat(workingHours);
             }
         }
         else if (typeof workingHours === 'number') {
             workingHoursValue = workingHours;
         }
-        // Validate working hours
         if (isNaN(workingHoursValue) || workingHoursValue < 0 || workingHoursValue > 24) {
             throw new apiHandlerHelpers_2.ApiError(400, "Working hours must be between 0 and 24");
         }
-        // Round to 2 decimal places
         workingHoursValue = Math.round(workingHoursValue * 100) / 100;
         // Handle overtime hours
         if (typeof overtimeHours === 'string') {
@@ -94,26 +95,25 @@ exports.createOrUpdateAttendance = (0, asyncHandler_1.asyncHandler)(async (req, 
         else if (typeof overtimeHours === 'number') {
             overtimeHoursValue = overtimeHours;
         }
-        // Validate overtime hours
         if (isNaN(overtimeHoursValue) || overtimeHoursValue < 0) {
             throw new apiHandlerHelpers_2.ApiError(400, "Overtime hours cannot be negative");
         }
-        // Round to 2 decimal places
         overtimeHoursValue = Math.round(overtimeHoursValue * 100) / 100;
     }
     else {
-        // If absent, set both to 0
+        // If absent (and not paid leave), set both to 0
         workingHoursValue = 0;
         overtimeHoursValue = 0;
     }
-    console.log('Processed hours - Working:', workingHoursValue, 'Overtime:', overtimeHoursValue);
+    console.log('Processed hours - Working:', workingHoursValue, 'Overtime:', overtimeHoursValue, 'PaidLeave:', isPaidLeave);
     // Find existing attendance record
     const query = {
         user: userId,
         date: { $gte: attendanceDate, $lt: nextDay },
         type,
     };
-    if (type === "project") {
+    // Only include project in query if not paid leave
+    if (type === "project" && !isPaidLeave) {
         query.project = projectId;
     }
     let attendance = await attendanceModel_1.Attendance.findOne(query);
@@ -123,13 +123,18 @@ exports.createOrUpdateAttendance = (0, asyncHandler_1.asyncHandler)(async (req, 
         attendance.workingHours = workingHoursValue;
         attendance.overtimeHours = overtimeHoursValue;
         attendance.markedBy = markedBy;
+        attendance.isPaidLeave = isPaidLeave;
+        // Remove project if it's paid leave
+        if (isPaidLeave) {
+            attendance.project = undefined;
+        }
         await attendance.save();
         console.log('Updated existing attendance record');
     }
     else {
         // Create new record
         attendance = await attendanceModel_1.Attendance.create({
-            project: type === "project" ? projectId : undefined,
+            project: (type === "project" && !isPaidLeave) ? projectId : undefined,
             user: userId,
             present,
             workingHours: workingHoursValue,
@@ -137,6 +142,7 @@ exports.createOrUpdateAttendance = (0, asyncHandler_1.asyncHandler)(async (req, 
             markedBy,
             date: attendanceDate,
             type,
+            isPaidLeave,
         });
         console.log('Created new attendance record');
     }

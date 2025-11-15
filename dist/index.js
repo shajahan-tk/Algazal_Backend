@@ -32,31 +32,27 @@ const visaExpenseRoutes_1 = __importDefault(require("./routes/visaExpenseRoutes"
 const reportRoutes_1 = __importDefault(require("./routes/reportRoutes"));
 const employeeSummaryRoutes_1 = __importDefault(require("./routes/employeeSummaryRoutes"));
 const attendanceManagementRoutes_1 = __importDefault(require("./routes/attendanceManagementRoutes"));
+const bankDetailsRoutes_1 = __importDefault(require("./routes/bankDetailsRoutes"));
 const db_1 = require("./config/db");
 const seeder_1 = require("./utils/seeder");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
-// app.use(
-//   // cors({
-//   //   origin: "*", // Allow all origins
-//   //   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], // Allow all common methods
-//   //   allowedHeaders: [
-//   //     "Content-Type",
-//   //     "Authorization",
-//   //     "Origin",
-//   //     "X-Requested-With",
-//   //     "Accept",
-//   //   ], // Allow all common headers
-//   // })
-// );
 app.use((0, cors_1.default)({
-    origin: "*", // 👈 must be specific, not '*'
-    credentials: true, // 👈 required for cookies/auth headers
+    origin: ["https://new.alghazalgroup.com", "https://new.alghazalgroup.com/", "http://localhost:5173", "http://localhost:5173/"], // Ensure NO trailing slash
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+        "Content-Type",
+        "Authorization",
+        "Origin",
+        "X-Requested-With",
+        "Accept",
+    ],
 }));
 // app.use(limiter);
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
-app.use((0, morgan_1.default)("dev")); // Logging
+app.use((0, morgan_1.default)("common")); // Logging
 app.get("/", (req, res) => {
     console.log("Test log route hit"); // This should appear in console
     res.send("Test log");
@@ -82,6 +78,7 @@ app.use("/api/vehicles", vehicleRoutes_1.default);
 app.use("/api/bills", billRoutes_1.default);
 app.use("/api/categories", categoryRoutes_1.default);
 app.use("/api/bank", bankRoutes_1.default);
+app.use("/api/bank-details", bankDetailsRoutes_1.default);
 app.use("/api/project-profit", projectProfitRoutes_1.default);
 app.use("/api/employee-expenses", employeeExpenseRoutes_1.default);
 app.use("/api/payroll", payrollRoutes_1.default);

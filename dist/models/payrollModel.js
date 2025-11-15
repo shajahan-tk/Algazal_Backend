@@ -23,25 +23,71 @@ const payrollSchema = new mongoose_1.Schema({
         required: true,
         trim: true
     },
+    // Earnings
     allowance: {
         type: Number,
         required: true,
-        min: 0
+        min: 0,
+        default: 0
     },
-    deduction: {
+    transport: {
         type: Number,
         required: true,
-        min: 0
+        min: 0,
+        default: 0
     },
+    overtime: {
+        type: Number,
+        required: true,
+        min: 0,
+        default: 0
+    },
+    specialOT: {
+        type: Number,
+        default: 0,
+    },
+    medical: {
+        type: Number,
+        required: true,
+        min: 0,
+        default: 0
+    },
+    bonus: {
+        type: Number,
+        required: true,
+        min: 0,
+        default: 0
+    },
+    // Deductions
     mess: {
         type: Number,
         required: true,
-        min: 0
+        min: 0,
+        default: 0
     },
-    advance: {
+    salaryAdvance: {
         type: Number,
         required: true,
-        min: 0
+        min: 0,
+        default: 0
+    },
+    loanDeduction: {
+        type: Number,
+        required: true,
+        min: 0,
+        default: 0
+    },
+    fineAmount: {
+        type: Number,
+        required: true,
+        min: 0,
+        default: 0
+    },
+    visaDeduction: {
+        type: Number,
+        required: true,
+        min: 0,
+        default: 0
     },
     net: {
         type: Number,

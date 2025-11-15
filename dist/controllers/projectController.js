@@ -54,6 +54,7 @@ const documentNumbers_1 = require("../utils/documentNumbers");
 const expenseModel_1 = require("../models/expenseModel");
 const puppeteer_1 = __importDefault(require("puppeteer"));
 const constant_1 = require("../config/constant");
+const bankDetailsModel_1 = require("../models/bankDetailsModel");
 // Status transition validation
 const validStatusTransitions = {
     draft: ["estimation_prepared"],
@@ -593,6 +594,8 @@ exports.generateInvoiceData = (0, asyncHandler_1.asyncHandler)(async (req, res) 
             firstName: createdByData?.firstName || "N/A",
             lastName: createdByData?.lastName || "N/A",
         },
+        projectName: project.projectName,
+        location: project.location,
     };
     res
         .status(200)
@@ -654,25 +657,45 @@ exports.assignTeamAndDriver = (0, asyncHandler_1.asyncHandler)(async (req, res) 
     const project = await projectModel_1.Project.findById(projectId);
     if (!project)
         throw new apiHandlerHelpers_2.ApiError(404, "Project not found");
-    // Verify project is in correct state
-    if (project.status !== "lpo_received") {
-        throw new apiHandlerHelpers_2.ApiError(400, "Project must be in 'lpo_received' status");
-    }
-    // Verify all workers are engineers
+    // Define all valid worker roles (excluding management and admin roles)
+    const validWorkerRoles = [
+        "worker",
+        "plumber",
+        "electrician",
+        "mason",
+        "carpenter",
+        "painter",
+        "aluminium_fabricator",
+        "plasterer",
+        "ac_technician",
+        "ac_assistant",
+        "building_labourer",
+        "helper",
+        "cleaner",
+        "senior_plumber",
+        "mep_supervisor",
+        "electrical_supervisor",
+        "supervisor",
+    ];
+    // Verify all workers have valid worker roles and are active
     const validWorkers = await userModel_1.User.find({
         _id: { $in: workers },
-        role: "worker",
+        role: { $in: validWorkerRoles },
+        isActive: true
     });
     if (validWorkers.length !== workers.length) {
-        throw new apiHandlerHelpers_2.ApiError(400, "All workers must be engineers");
+        const foundIds = validWorkers.map(w => w._id.toString());
+        const invalidIds = workers.filter(id => !foundIds.includes(id));
+        throw new apiHandlerHelpers_2.ApiError(400, `Invalid or inactive workers found: ${invalidIds.join(', ')}`);
     }
-    // Verify driver exists
+    // Verify driver exists and is active
     const driver = await userModel_1.User.findOne({
         _id: driverId,
         role: "driver",
+        isActive: true
     });
     if (!driver) {
-        throw new apiHandlerHelpers_2.ApiError(400, "Valid driver ID is required");
+        throw new apiHandlerHelpers_2.ApiError(400, "Valid active driver ID is required");
     }
     // Update project
     project.assignedWorkers = workers;
@@ -731,57 +754,112 @@ exports.getAssignedTeam = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
 });
 // Update only workers and driver assignments
 exports.updateWorkersAndDriver = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    console.log('=== UPDATE WORKERS AND DRIVER CALLED ===');
+    console.log('Request Method:', req.method);
+    console.log('Request URL:', req.url);
+    console.log('Request Headers:', req.headers);
+    console.log('Request Params:', req.params);
+    console.log('Request Body:', req.body);
+    console.log('Request Body Type:', typeof req.body);
+    console.log('Content-Type Header:', req.headers['content-type']);
+    console.log('====================================');
     const { id } = req.params;
-    const { workers, driver } = req.body;
+    const { workers, driverId } = req.body;
     // Validation
     if (!id) {
         throw new apiHandlerHelpers_2.ApiError(400, "Project ID is required");
     }
-    // At least one field should be provided
-    if (!workers && !driver) {
-        throw new apiHandlerHelpers_2.ApiError(400, "Either workers or driver must be provided");
+    // Check if body is completely empty
+    if (Object.keys(req.body).length === 0) {
+        throw new apiHandlerHelpers_2.ApiError(400, "Request body is empty. Please send workers and/or driverId");
     }
+    // At least one field should be provided
+    if (workers === undefined && driverId === undefined) {
+        throw new apiHandlerHelpers_2.ApiError(400, "Either workers array or driverId must be provided");
+    }
+    // Rest of your existing code...
     // Find project
     const project = await projectModel_1.Project.findById(id);
     if (!project) {
-        throw new apiHandlerHelpers_2.ApiError(400, "Project not found");
+        throw new apiHandlerHelpers_2.ApiError(404, "Project not found");
     }
+    // Define all valid worker roles (same as assignTeamAndDriver)
+    const validWorkerRoles = [
+        "worker",
+        "plumber",
+        "electrician",
+        "mason",
+        "carpenter",
+        "painter",
+        "aluminium_fabricator",
+        "plasterer",
+        "ac_technician",
+        "ac_assistant",
+        "building_labourer",
+        "helper",
+        "cleaner",
+        "senior_plumber",
+        "mep_supervisor",
+        "electrical_supervisor",
+        "supervisor",
+        "civil_engineer",
+        "mep_engineer",
+        "engineer"
+    ];
     // Validate and update workers if provided
     if (workers !== undefined) {
-        // Explicit check for undefined (empty array is valid)
+        // Explicit check for undefined (empty array is valid to clear all workers)
         if (!Array.isArray(workers)) {
             throw new apiHandlerHelpers_2.ApiError(400, "Workers must be an array");
         }
-        // If workers array is provided (even empty), validate all IDs
-        const workersExist = await userModel_1.User.find({
-            _id: { $in: workers },
-            role: "worker",
-        });
-        if (workersExist.length !== workers.length) {
-            throw new apiHandlerHelpers_2.ApiError(400, "One or more workers not found or not workers");
-        }
-        project.assignedWorkers = workers;
-    }
-    // Validate and update driver if provided
-    if (driver !== undefined) {
-        // Explicit check for undefined (null is valid to clear driver)
-        if (driver) {
-            const driverExists = await userModel_1.User.findOne({
-                _id: driver,
-                role: "driver",
+        // If workers array is not empty, validate all IDs
+        if (workers.length > 0) {
+            // Verify all workers have valid worker roles and are active
+            const validWorkers = await userModel_1.User.find({
+                _id: { $in: workers },
+                role: { $in: validWorkerRoles },
+                isActive: true
             });
-            if (!driverExists) {
-                throw new apiHandlerHelpers_2.ApiError(400, "Driver not found or not a driver");
+            if (validWorkers.length !== workers.length) {
+                const foundIds = validWorkers.map(w => w._id.toString());
+                const invalidIds = workers.filter(id => !foundIds.includes(id));
+                throw new apiHandlerHelpers_2.ApiError(400, `Invalid or inactive workers found: ${invalidIds.join(', ')}`);
             }
-            project.assignedDriver = driver;
+            project.assignedWorkers = workers;
         }
         else {
-            // If driver is explicitly set to null/empty, clear it
+            // If workers array is empty, clear all workers
+            project.assignedWorkers = [];
+        }
+    }
+    // Validate and update driver if provided
+    if (driverId !== undefined) {
+        // Explicit check for undefined (null/empty is valid to clear driver)
+        if (driverId) {
+            // Verify driver exists and is active
+            const driver = await userModel_1.User.findOne({
+                _id: driverId,
+                role: "driver",
+                isActive: true
+            });
+            if (!driver) {
+                throw new apiHandlerHelpers_2.ApiError(400, "Valid active driver ID is required");
+            }
+            project.assignedDriver = driverId;
+        }
+        else {
+            // If driverId is explicitly set to null/empty, clear it
             project.assignedDriver = undefined;
         }
     }
+    // Update the updatedBy field
+    project.updatedBy = req.user?.userId
+        ? new mongoose_1.default.Types.ObjectId(req.user.userId)
+        : undefined;
     const updatedProject = await project.save();
-    // Send notifications
+    console.log('=== UPDATE SUCCESSFUL ===');
+    console.log('Updated Project:', updatedProject);
+    console.log('====================================');
     res
         .status(200)
         .json(new apiHandlerHelpers_1.ApiResponse(200, updatedProject, "Workers and driver assignments updated successfully"));
@@ -908,10 +986,13 @@ exports.getDriverProjects = (0, asyncHandler_1.asyncHandler)(async (req, res) =>
     }, "Driver projects retrieved successfully"));
 });
 exports.generateInvoicePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
-    const { projectId } = req.params;
+    const { projectId, selectedBankId } = req.params;
     // Validate projectId
     if (!projectId || !mongoose_1.Types.ObjectId.isValid(projectId)) {
         throw new apiHandlerHelpers_2.ApiError(400, "Valid project ID is required");
+    }
+    if (!selectedBankId || !mongoose_1.Types.ObjectId.isValid(selectedBankId)) {
+        throw new apiHandlerHelpers_2.ApiError(400, "Valid selectedBank ID is required");
     }
     // Get project data with populated fields
     const project = await projectModel_1.Project.findById(projectId)
@@ -920,6 +1001,10 @@ exports.generateInvoicePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
         select: "clientName clientAddress mobileNumber telephoneNumber email trnNumber",
     })
         .populate("createdBy", "firstName lastName signatureImage");
+    const bankDetails = await bankDetailsModel_1.Bank.findById(selectedBankId);
+    if (!bankDetails) {
+        throw new apiHandlerHelpers_2.ApiError(404, "Bank details not found");
+    }
     if (!project) {
         throw new apiHandlerHelpers_2.ApiError(404, "Project not found");
     }
@@ -1014,141 +1099,232 @@ exports.generateInvoicePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
   <style type="text/css">
     @page {
       size: A4;
-      margin: 1cm;
+      margin: 0.5cm;
     }
     body {
       font-family: 'Arial', sans-serif;
-      font-size: 11pt; /* Increased from 10pt for better readability */
-      line-height: 1.5; /* Increased line height for better readability */
+      font-size: 11pt;
+      line-height: 1.4;
       color: #333;
       margin: 0;
       padding: 0;
     }
+    .container {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+    }
+    .content {
+      margin-bottom: 15px;
+    }
     .header {
       display: flex;
-      align-items: flex-start;
-      margin-bottom: 20px; /* Increased spacing */
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 15px;
       gap: 20px;
+      page-break-after: avoid;
+      padding: 10px 0;
+      border-bottom: 3px solid #94d7f4;
+      position: relative;
     }
     .logo {
-      height: 60px; /* Slightly larger logo */
+      height: 50px;
       width: auto;
-      max-width: 200px;
+      max-width: 150px;
+      object-fit: contain;
+      position: absolute;
+      left: 0;
+     
+      /* Prevent logo from breaking */
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
-    .header-content {
-      flex-grow: 1;
+    .company-names {
       display: flex;
       flex-direction: column;
+      align-items: center;
       justify-content: center;
+      text-align: center;
+      flex-grow: 1;
     }
-    .document-title {
-      font-size: 18pt; /* Larger and more prominent */
+    .company-name-arabic {
+      font-size: 20pt;
       font-weight: bold;
-      margin: 0;
-      text-align: right;
-      color: #000;
-      padding-top: 5px;
+      color: #1a1a1a;
+      line-height: 1.3;
+      direction: rtl;
+      unicode-bidi: bidi-override;
+      letter-spacing: 0;
+      margin-bottom: 5px;
+    }
+    .company-name-english {
+      font-size: 10pt;
+      font-weight: bold;
+      color: #1a1a1a;
+      line-height: 1.3;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .invoice-title {
+      text-align: center;
+      font-size: 20pt;
+      font-weight: bold;
+      color: #2c3e50;
+      margin: 20px 0 15px 0;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      padding: 12px;
+      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+      border-radius: 6px;
+      border-left: 4px solid #94d7f4;
+      border-right: 4px solid #94d7f4;
+      /* Prevent title from breaking */
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
     .invoice-header {
       display: flex;
       justify-content: space-between;
-      margin-bottom: 20px;
-      padding-bottom: 15px;
-      border-bottom: 2px solid #94d7f4;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #eee;
       align-items: flex-start;
+      /* Prevent header from breaking */
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
     .invoice-info {
       text-align: right;
-      font-size: 10pt; /* Consistent font size */
+      font-size: 10pt;
     }
     .invoice-info p {
-      margin: 3px 0; /* Tighter paragraph spacing */
+      margin: 3px 0;
     }
     .service-period {
-      margin: 10px 0 15px 0;
-      padding: 8px 0;
-      font-weight: bold;
-      font-size: 10.5pt; /* Slightly larger than body text */
-      border-bottom: 1px solid #eee;
-      background-color: #f8f9fa;
+      margin: 8px 0;
       padding: 8px 12px;
+      font-weight: bold;
+      font-size: 10pt;
+      background-color: #f8f9fa;
+      border-left: 4px solid #94d7f4;
+      border-right: 4px solid #94d7f4;
       border-radius: 4px;
+      /* Prevent service period from breaking */
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
     .client-info-container {
       display: flex;
-      margin-bottom: 25px;
-      gap: 25px;
+      margin-bottom: 15px;
+      gap: 15px;
+      /* Prevent client info from breaking */
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
     .client-info, .company-info {
       flex: 1;
-      padding: 12px 15px;
+      padding: 10px 12px;
       border: 1px solid #ddd;
-      border-radius: 5px;
-      font-size: 10.5pt; /* Slightly larger for better readability */
+      border-radius: 4px;
+      font-size: 10pt;
+      background-color: #f8f9fa;
     }
     .client-info h3, .company-info h3 {
-      font-size: 12pt; /* Larger section headers */
-      margin: 0 0 10px 0;
+      font-size: 11pt;
+      margin: 0 0 8px 0;
       color: #2c3e50;
       border-bottom: 1px solid #94d7f4;
-      padding-bottom: 5px;
+      padding-bottom: 4px;
+    }
+    .client-info p, .company-info p {
+      margin: 4px 0;
+      line-height: 1.3;
     }
     .section {
-      margin-bottom: 20px;
-      page-break-inside: avoid;
+      margin-bottom: 12px;
     }
     .section-title {
-      font-size: 13pt; /* Larger section titles */
+      font-size: 11pt;
       font-weight: bold;
-      padding: 8px 0;
-      margin: 15px 0 8px 0;
+      padding: 4px 0;
+      margin: 12px 0 8px 0;
       border-bottom: 2px solid #94d7f4;
       color: #2c3e50;
+      page-break-after: avoid;
+    }
+    /* MODIFIED: Allow table to break across pages */
+    .table-container {
+      /* REMOVED: page-break-inside: avoid - Allow table to break */
+      overflow: visible;
     }
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 20px;
+      margin-bottom: 10px;
+      font-size: 9.5pt;
+      table-layout: fixed;
+      /* REMOVED: page-break-inside: avoid - Allow table to break */
+    }
+    /* CHANGED: Prevent header from repeating on each page */
+    thead {
+      display: table-header-group;
+      /* Prevent header from repeating on each page */
+      page-break-after: avoid;
+      break-inside: avoid;
+    }
+    tbody {
+      display: table-row-group;
+    }
+    /* Keep individual rows from breaking */
+    tr {
       page-break-inside: avoid;
-      font-size: 10.5pt; /* Better table font size */
+      break-inside: avoid;
+    }
+    th, td {
+      page-break-inside: avoid;
     }
     th {
       background-color: #94d7f4;
       color: #000;
       font-weight: bold;
-      padding: 8px 10px; /* More padding for better readability */
-      text-align: left;
+      padding: 6px 8px;
+      text-align: center;
       border: 1px solid #ddd;
-      font-size: 10.5pt;
+      font-size: 9.5pt;
+      vertical-align: middle;
     }
     td {
-      padding: 8px 10px; /* More padding for better readability */
+      padding: 6px 8px;
       border: 1px solid #ddd;
       vertical-align: top;
-      font-size: 10.5pt;
+      font-size: 9.5pt;
     }
     .amount-summary {
-      margin-top: 15px;
+      margin-top: 10px;
       width: 100%;
       text-align: right;
-      font-size: 11pt;
+      font-size: 10pt;
+      /* Prevent amount summary from breaking */
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
     .amount-summary-row {
       display: flex;
       justify-content: flex-end;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
     .amount-label {
-      width: 180px; /* Slightly wider for better alignment */
+      width: 140px;
       font-weight: bold;
       text-align: right;
-      padding-right: 15px;
-      font-size: 10.5pt;
+      padding-right: 10px;
+      font-size: 9.5pt;
     }
     .amount-value {
-      width: 120px; /* Slightly wider for better alignment */
+      width: 100px;
       text-align: right;
-      font-size: 10.5pt;
+      font-size: 9.5pt;
     }
     .net-amount-row {
       display: flex;
@@ -1156,32 +1332,79 @@ exports.generateInvoicePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
       background-color: #94d7f4;
       color: #000;
       font-weight: bold;
-      font-size: 12pt; /* Larger for emphasis */
-      margin-top: 8px;
-      padding: 8px 0;
+      font-size: 10pt;
+      margin-top: 4px;
+      padding: 6px 0;
       border-top: 2px solid #333;
+      /* Prevent net amount row from breaking */
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .amount-in-words {
+      margin: 10px 0;
+      padding: 8px 12px;
+      background-color: #f8f9fa;
+      border-left: 4px solid #94d7f4;
+      border-right: 4px solid #94d7f4;
+      border-radius: 4px;
+      font-size: 10pt;
+      /* Prevent amount in words from breaking */
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .bank-details {
+      margin-top: 15px;
+      padding: 12px 15px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background-color: #f8f9fa;
+      font-size: 10pt;
+      /* Prevent bank details from breaking */
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .bank-details h3 {
+      font-size: 11pt;
+      margin: 0 0 8px 0;
+      color: #2c3e50;
+      border-bottom: 1px solid #94d7f4;
+      padding-bottom: 4px;
+    }
+    .bank-details p {
+      margin: 4px 0;
+      line-height: 1.3;
+    }
+    /* Added for terms and conditions */
+    .terms-section {
+      margin-top: 15px;
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
     .terms-box {
       border: 1px solid #000;
-      padding: 12px;
-      margin-top: 20px;
-      display: inline-block;
-      width: auto;
-      min-width: 50%;
-      font-size: 10.5pt;
-    }
-    .bank-details {
-      margin-top: 25px;
-      padding: 15px;
-      border: 1px solid #ddd;
-      border-radius: 5px;
+      padding: 8px 12px;
       background-color: #f8f9fa;
-      font-size: 10.5pt;
+      font-size: 10pt;
+      line-height: 1.4;
     }
-    .bank-details h3 {
-      font-size: 12pt;
-      margin: 0 0 12px 0;
-      color: #2c3e50;
+    .terms-box ol {
+      margin: 0;
+      padding-left: 15px;
+    }
+    .terms-box li {
+      margin-bottom: 5px;
+    }
+    .payment-terms {
+      margin-top: 10px;
+      padding: 8px 12px;
+      background-color: #f8f9fa;
+      border-left: 4px solid #94d7f4;
+      border-right: 4px solid #94d7f4;
+      border-radius: 4px;
+      font-size: 10pt;
+      /* Prevent payment terms from breaking */
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
     .text-center {
       text-align: center;
@@ -1189,152 +1412,203 @@ exports.generateInvoicePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
     .text-right {
       text-align: right;
     }
-    .terms-page {
-      page-break-before: always;
-      padding-top: 20px;
-    }
-    .footer {
-      font-size: 9.5pt; /* Slightly larger footer */
-      color: #555;
-      text-align: center;
-      border-top: 2px solid #ddd;
-      padding-top: 15px;
-      margin-top: 35px;
-      line-height: 1.6;
+    .footer-container {
+      page-break-inside: avoid;
+      margin-top: 20px;
     }
     .tagline {
       text-align: center;
       font-weight: bold;
-      font-size: 13pt; /* More prominent tagline */
-      margin: 25px 0 15px 0;
+      font-size: 11pt;
+      color: #2c3e50;
+      border-top: 2px solid #ddd;
+      padding-top: 10px;
+      page-break-inside: avoid;
+    }
+    .footer {
+      font-size: 8.5pt;
+      color: #555;
+      text-align: center;
+      padding-top: 8px;
+      line-height: 1.3;
+      page-break-inside: avoid;
+    }
+    .footer p {
+      margin: 4px 0;
+    }
+    .footer strong {
       color: #2c3e50;
     }
     p {
-      margin: 6px 0; /* Consistent paragraph spacing */
-      line-height: 1.5;
-    }
-    h3 {
-      margin: 0 0 12px 0;
-      color: #2c3e50;
-      font-size: 12pt;
+      margin: 4px 0;
+      line-height: 1.3;
     }
     strong {
-      font-weight: 600; /* Slightly bolder strong text */
+      font-weight: 600;
     }
-    /* Ensure no text is too small */
-    .no-small-text {
-      font-size: 10pt !important;
-      min-font-size: 10pt;
+    @media print {
+      body {
+        font-size: 10pt;
+      }
+      /* CHANGED: Prevent header from repeating on each page in print */
+      thead { 
+        display: table-row-group;
+        page-break-after: avoid;
+        break-inside: avoid;
+      }
+      tfoot { 
+        display: table-footer-group; 
+      }
+      
+      /* Allow table to break in print */
+      table {
+        page-break-inside: auto;
+      }
+      
+      /* Keep rows from breaking individually */
+      tr {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+
+      tbody tr {
+        page-break-inside: avoid;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="header">
-    <img class="logo" src="https://agats.s3.ap-south-1.amazonaws.com/logo/logo.jpeg" alt="Company Logo">
-    <div class="header-content">
-      <div class="document-title">TAX INVOICE</div>
-    </div>
-  </div>
+  <div class="container">
+    <div class="content">
+      <div class="header">
+        <img class="logo" src="https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg" alt="Company Logo">
+        <div class="company-names">
+          <div class="company-name-arabic">الغزال الأبيض للخدمات الفنية</div>
+          <div class="company-name-english">AL GHAZAL AL ABYAD TECHNICAL SERVICES</div>
+        </div>
+      </div>
 
-  <div class="invoice-header">
-    <div class="no-small-text">
-      <p><strong>Invoice #:</strong> ${invoiceNumber}</p>
-      <p><strong>Date:</strong> ${formatDate(new Date())}</p>
-      ${lpo ? `<p><strong>LPO #:</strong> ${lpo.lpoNumber}</p>` : ''}
-      ${project.grnNumber ? `<p><strong>GRN #:</strong> ${project.grnNumber}</p>` : ''}
-    </div>
-    <div class="invoice-info no-small-text">
-      <p><strong>Project:</strong> ${project.projectName || "N/A"}</p>
-      <!-- Service Period moved to top below project name -->
+      <div class="invoice-title">Tax Invoice</div>
+
+      <div class="invoice-header">
+        <div>
+          <p><strong>Invoice :</strong> ${invoiceNumber}</p>
+          <p><strong>Date:</strong> ${formatDate(new Date())}</p>
+          ${lpo ? `<p><strong>LPO :</strong> ${lpo.lpoNumber}</p>` : ''}
+          ${project.grnNumber ? `<p><strong>GRN :</strong> ${project.grnNumber}</p>` : ''}
+        </div>
+        <div class="invoice-info">
+          <p><strong>Service Period:</strong> ${formatDate(project.workStartDate)} to ${formatDate(project.workEndDate || new Date())}</p>
+        </div>
+      </div>
+
       <div class="service-period">
-        <strong>Service Period:</strong> ${formatDate(project.workStartDate)} - ${formatDate(project.workEndDate || new Date())}
+        <strong>Project:</strong> ${project.projectName || "N/A"}
+      </div>
+
+      <div class="client-info-container">
+        <div class="client-info">
+          <h3>BILL TO</h3>
+          <p><strong>CLIENT:</strong> ${client.clientName || "N/A"}</p>
+          <p><strong>ADDRESS:</strong> ${client.clientAddress || "N/A"}</p>
+          <p><strong>CONTACT:</strong> ${client.mobileNumber || client.telephoneNumber || "N/A"}</p>
+          <p><strong>EMAIL:</strong> ${client.email || "N/A"}</p>
+          <p><strong>TRN:</strong> ${client.trnNumber || "N/A"}</p>
+        </div>
+
+        <div class="company-info">
+          <h3>COMPANY DETAILS</h3>
+          <p><strong>Name:</strong> AL GHAZAL AL ABYAD TECHNICAL SERVICES</p>
+          <p><strong>Address:</strong> Office No:04, R09-France Cluster</p>
+          <p>International City-Dubai</p>
+          <p>P.O.Box:262760, Dubai-U.A.E</p>
+          <p><strong>Tel:</strong> 044102555</p>
+          <p><strong>TRN:</strong> 104037793700003</p>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">INVOICE ITEMS</div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th width="5%">No.</th>
+                <th width="45%">Description</th>
+                <th width="10%">UOM</th>
+                <th width="10%">Qty</th>
+                <th width="15%">Unit Price (AED)</th>
+                <th width="15%" class="text-right">Total (AED)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${quotation.items.map((item, index) => `
+                <tr>
+                  <td class="text-center">${index + 1}</td>
+                  <td>${item.description}</td>
+                  <td class="text-center">${item.uom || "NOS"}</td>
+                  <td class="text-center">${item.quantity.toFixed(2)}</td>
+                  <td class="text-right">${item.unitPrice.toFixed(2)}</td>
+                  <td class="text-right">${item.totalPrice.toFixed(2)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="amount-summary">
+          <div class="amount-summary-row">
+            <div class="amount-label">SUBTOTAL:</div>
+            <div class="amount-value">${subtotal.toFixed(2)} AED&nbsp;</div>
+          </div>
+          <div class="amount-summary-row">
+            <div class="amount-label">VAT ${quotation.vatPercentage}%:</div>
+            <div class="amount-value">${vatAmount.toFixed(2)} AED&nbsp;</div>
+          </div>
+          <div class="net-amount-row">
+            <div class="amount-label">TOTAL AMOUNT:</div>
+            <div class="amount-value">${totalAmount.toFixed(2)} AED&nbsp;</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="amount-in-words">
+        <p><strong>Amount in words:</strong> ${convertToWords(totalAmount)} AED only</p>
+      </div>
+
+      <div class="bank-details">
+        <h3>BANK DETAILS</h3>
+        <p><strong>Bank Name:</strong> ${bankDetails.bankName}</p>
+        <p><strong>Account Name:</strong> ${bankDetails.accountName}</p>
+        <p><strong>Account Number:</strong> ${bankDetails.accountNumber}</p>
+        <p><strong>IBAN:</strong> ${bankDetails.iban}</p>
+        <p><strong>Swift Code:</strong> ${bankDetails.swiftCode}</p>
+      </div>
+
+      <!-- FIXED: Terms and Conditions Section -->
+      ${quotation.termsAndConditions && quotation.termsAndConditions.length > 0 ? `
+      <div class="terms-section">
+        <div class="section-title">TERMS & CONDITIONS</div>
+        <div class="terms-box">
+          <ol>
+            ${quotation.termsAndConditions.map((term) => `<li>${term}</li>`).join("")}
+          </ol>
+        </div>
+      </div>
+      ` : ''}
+
+     
+    </div>
+
+    <div class="footer-container">
+      <div class="tagline">We work U Relax</div>
+      <div class="footer">
+        <p><strong>AL GHAZAL AL ABYAD TECHNICAL SERVICES</strong></p>
+        <p>Office No:04, R09-France Cluster, International City-Dubai | P.O.Box:262760, Dubai-U.A.E</p>
+        <p>Tel: 044102555 | <a href="http://www.alghazalgroup.com/">www.alghazalgroup.com</a></p>
+        <p>Generated on ${formatDate(new Date())}</p>
       </div>
     </div>
-  </div>
-
-  <div class="client-info-container">
-    <div class="client-info">
-      <h3>BILL TO:</h3>
-      <p><strong>CLIENT:</strong> ${client.clientName || "N/A"}</p>
-      <p><strong>ADDRESS:</strong> ${client.clientAddress || "N/A"}</p>
-      <p><strong>CONTACT:</strong> ${client.mobileNumber || client.telephoneNumber || "N/A"}</p>
-      <p><strong>EMAIL:</strong> ${client.email || "N/A"}</p>
-      <p><strong>TRN:</strong> ${client.trnNumber || "N/A"}</p>
-    </div>
-
-    <div class="company-info">
-      <h3>AL GHAZAL AL ABYAD TECHNICAL SERVICES</h3>
-      <p>Office No:04, R09-France Cluster</p>
-      <p>International City-Dubai</p>
-      <p>P.O.Box:262760, Dubai-U.A.E</p>
-      <p>Tel: 044102555</p>
-      <p>TRN: 104037793700003</p>
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">INVOICE ITEMS</div>
-    <table>
-      <thead>
-        <tr>
-          <th width="5%">No.</th>
-          <th width="45%">Description</th>
-          <th width="10%">UOM</th>
-          <th width="10%">Qty</th>
-          <th width="15%">Unit Price (AED)</th>
-          <th width="15%" class="text-right">Total (AED)</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${quotation.items.map((item, index) => `
-          <tr>
-            <td class="text-center">${index + 1}</td>
-            <td>${item.description}</td>
-            <td class="text-center">${item.uom || "NOS"}</td>
-            <td class="text-center">${item.quantity.toFixed(2)}</td>
-            <td class="text-right">${item.unitPrice.toFixed(2)}</td>
-            <td class="text-right">${item.totalPrice.toFixed(2)}</td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>
-
-    <div class="amount-summary">
-      <div class="amount-summary-row">
-        <div class="amount-label">SUBTOTAL:</div>
-        <div class="amount-value">${subtotal.toFixed(2)} AED</div>
-      </div>
-      <div class="amount-summary-row">
-        <div class="amount-label">VAT ${quotation.vatPercentage}%:</div>
-        <div class="amount-value">${vatAmount.toFixed(2)} AED</div>
-      </div>
-      <div class="net-amount-row">
-        <div class="amount-label">TOTAL AMOUNT:</div>
-        <div class="amount-value">${totalAmount.toFixed(2)} AED</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="bank-details">
-    <h3>BANK DETAILS</h3>
-    <p><strong>Bank Name:</strong> Emirates NBD</p>
-    <p><strong>Account Name:</strong> AL GHAZAL AL ABYAD TECHNICAL SERVICES</p>
-    <p><strong>Account Number:</strong> 1015489374101</p>
-    <p><strong>IBAN:</strong> AE580260001015489374101</p>
-    <p><strong>Swift Code:</strong> EBILAEAD</p>
-  </div>
-
-  <div class="section">
-    <p><strong>Amount in words:</strong> ${convertToWords(totalAmount)} AED only</p>
-    <p><strong>Payment Terms:</strong> ${"30 days from invoice date"}</p>
-  </div>
-    
-  <div class="footer">
-    <div class="tagline">We work U Relax</div>
-    <p><strong>AL GHAZAL AL ABYAD TECHNICAL SERVICES</strong></p>
-    <p>Office No:04, R09-France Cluster, International City-Dubai | P.O.Box:262760, Dubai-U.A.E</p>
-    <p>Tel: 044102555 | <a href="http://www.alghazalgroup.com/">www.alghazalgroup.com</a></p>
-    <p>Generated on ${formatDate(new Date())}</p>
   </div>
 </body>
 </html>
@@ -1345,7 +1619,6 @@ exports.generateInvoicePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
     });
     try {
         const page = await browser.newPage();
-        // Set viewport for consistent rendering
         await page.setViewport({ width: 1200, height: 1600 });
         await page.setContent(htmlContent, {
             waitUntil: ["load", "networkidle0", "domcontentloaded"],
@@ -1355,10 +1628,10 @@ exports.generateInvoicePdf = (0, asyncHandler_1.asyncHandler)(async (req, res) =
             format: "A4",
             printBackground: true,
             margin: {
-                top: "1cm",
-                right: "1cm",
-                bottom: "1cm",
-                left: "1cm",
+                top: "0.5cm",
+                right: "0.5cm",
+                bottom: "0.5cm",
+                left: "0.5cm",
             },
             displayHeaderFooter: false,
             preferCSSPageSize: true,
