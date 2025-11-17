@@ -107,14 +107,28 @@ export const getProjects = asyncHandler(async (req: Request, res: Response) => {
   // Search functionality
   if (req.query.search) {
     const searchTerm = req.query.search as string;
+    
+    // Search for matching clients by name
+    const matchingClients = await Client.find({
+      clientName: { $regex: searchTerm, $options: "i" }
+    }).select("_id");
+    
+    const clientIds = matchingClients.map(client => client._id);
+    
+    // Build $or array with all searchable fields
     filter.$or = [
       { projectName: { $regex: searchTerm, $options: "i" } },
       { projectDescription: { $regex: searchTerm, $options: "i" } },
       { location: { $regex: searchTerm, $options: "i" } },
       { building: { $regex: searchTerm, $options: "i" } },
       { apartmentNumber: { $regex: searchTerm, $options: "i" } },
-      { projectNumber: { $regex: searchTerm, $options: "i" } }, // Added projectNumber to search
+      { projectNumber: { $regex: searchTerm, $options: "i" } },
     ];
+    
+    // Add client IDs to search if any matching clients found
+    if (clientIds.length > 0) {
+      filter.$or.push({ client: { $in: clientIds } });
+    }
   }
 
   const total = await Project.countDocuments(filter);
