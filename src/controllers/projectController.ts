@@ -1282,7 +1282,7 @@ export const generateInvoicePdf = asyncHandler(
     const createdBy = project.createdBy as IUser;
 
     // Generate invoice number
-    const invoiceNumber = `INV${project.projectNumber.slice(3, 10)}`;
+    const invoiceNumber = `INV${project.projectNumber.slice(3,20)}`;
 
     // Format dates
     const formatDate = (date: Date | string | undefined): string => {
@@ -1766,7 +1766,7 @@ export const generateInvoicePdf = asyncHandler(
 
       <div class="invoice-header">
         <div>
-          <p><strong>Invoice :</strong> ${invoiceNumber}</p>
+          <p><strong>Invoice No:</strong> ${invoiceNumber}</p>
           <p><strong>Date:</strong> ${formatDate(new Date())}</p>
           ${lpo ? `<p><strong>LPO :</strong> ${lpo.lpoNumber}</p>` : ''}
           ${project.grnNumber ? `<p><strong>GRN :</strong> ${project.grnNumber}</p>` : ''}
@@ -1861,7 +1861,7 @@ export const generateInvoicePdf = asyncHandler(
 <!-- FIXED: Terms and Conditions Section -->
 ${quotation.termsAndConditions && quotation.termsAndConditions.length > 1 ? `
 <div class="terms-section">
-  <div class="section-title">TERMS & CONDITIONS</div>
+  <div class="section-title">COMMENTS OR SPECIAL INSTRUCTIONS</div>
   <div class="terms-box">
     <ol>
       <li>${quotation.termsAndConditions[1]}</li>
