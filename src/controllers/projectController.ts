@@ -1858,18 +1858,18 @@ export const generateInvoicePdf = asyncHandler(
         <p><strong>IBAN:</strong> ${bankDetails.iban}</p>
         <p><strong>Swift Code:</strong> ${bankDetails.swiftCode}</p>
       </div>
+<!-- FIXED: Terms and Conditions Section -->
+${quotation.termsAndConditions && quotation.termsAndConditions.length > 1 ? `
+<div class="terms-section">
+  <div class="section-title">TERMS & CONDITIONS</div>
+  <div class="terms-box">
+    <ol>
+      <li>${quotation.termsAndConditions[1]}</li>
+    </ol>
+  </div>
+</div>
+` : ''}
 
-      <!-- FIXED: Terms and Conditions Section -->
-      ${quotation.termsAndConditions && quotation.termsAndConditions.length > 0 ? `
-      <div class="terms-section">
-        <div class="section-title">TERMS & CONDITIONS</div>
-        <div class="terms-box">
-          <ol>
-            ${quotation.termsAndConditions.map((term) => `<li>${term}</li>`).join("")}
-          </ol>
-        </div>
-      </div>
-      ` : ''}
 
      
     </div>
