@@ -111,18 +111,20 @@ const calculateLaborDetails = async (projectId: string) => {
     }
   });
 
-  const workers = workersToProcess.map((worker) => {
-    const daysPresent = userDaysMap.get(worker._id.toString()) || 0;
-    return {
-      user: worker._id,
-      firstName: worker.firstName,
-      lastName: worker.lastName,
-      profileImage: worker.profileImage,
-      daysPresent: Number(daysPresent.toFixed(2)),
-      dailySalary: worker.salary || 0,
-      totalSalary: daysPresent * (worker.salary || 0),
-    };
-  });
+  const workers = workersToProcess
+    .map((worker) => {
+      const daysPresent = userDaysMap.get(worker._id.toString()) || 0;
+      return {
+        user: worker._id,
+        firstName: worker.firstName,
+        lastName: worker.lastName,
+        profileImage: worker.profileImage,
+        daysPresent: Number(daysPresent.toFixed(2)),
+        dailySalary: worker.salary || 0,
+        totalSalary: daysPresent * (worker.salary || 0),
+      };
+    })
+    .filter((worker) => worker.daysPresent > 0); // Only include workers with days > 0
 
   const driverDaysPresent = project.assignedDriver
     ? userDaysMap.get(project.assignedDriver._id.toString()) || 0
