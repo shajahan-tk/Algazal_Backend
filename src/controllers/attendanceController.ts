@@ -3,7 +3,7 @@ import { asyncHandler } from "../utils/asyncHandler";
 import { ApiResponse } from "../utils/apiHandlerHelpers";
 import { ApiError } from "../utils/apiHandlerHelpers";
 import { Attendance } from "../models/attendanceModel";
-import { IProject, Project } from "../models/projectModel";
+import { Project } from "../models/projectModel";
 import dayjs from "dayjs";
 import { IUser, User } from "../models/userModel";
 import { Types } from "mongoose";
@@ -16,7 +16,7 @@ export const markAttendance = asyncHandler(
 
     console.log('Request body:', req.body);
 
-    // NEW: Validate paid leave cannot have project type
+    // Validate paid leave cannot have project type
     if (isPaidLeave && type === "project") {
       throw new ApiError(400, "Paid leave cannot be associated with a project");
     }
@@ -35,10 +35,10 @@ export const markAttendance = asyncHandler(
     if (!["project", "normal"].includes(type)) {
       throw new ApiError(400, "Invalid attendance type");
     }
-    
+
     let workingHoursValue = 0;
-    
-    // NEW: For paid leave, force hours to 0
+
+    // For paid leave, force hours to 0
     if (isPaidLeave) {
       workingHoursValue = 0;
       present = false;
@@ -94,33 +94,67 @@ export const markAttendance = asyncHandler(
     const nextDay = new Date(today);
     nextDay.setDate(today.getDate() + 1);
 
+    // Find existing attendance for the day and type
     const query: any = {
       user: userId,
       date: { $gte: today, $lt: nextDay },
       type,
     };
 
-    if (type === "project" && !isPaidLeave) {
-      query.project = projectId;
-    }
-
     let attendance = await Attendance.findOne(query);
 
     if (attendance) {
-      attendance.present = present;
-      attendance.workingHours = workingHours;
+      // Update existing record
+      attendance.present = present; // If marked present for any project, day is present
       attendance.markedBy = markedBy;
       attendance.isPaidLeave = isPaidLeave;
+
       if (isPaidLeave) {
+        attendance.projects = [];
+        attendance.workingHours = 0;
+        attendance.overtimeHours = 0;
         attendance.project = undefined;
+      } else if (type === "project") {
+        // Handle project array
+        if (!attendance.projects) attendance.projects = [];
+
+        const projectIndex = attendance.projects.findIndex(p => p.project.toString() === projectId);
+
+        if (projectIndex > -1) {
+          // Update existing project entry
+          attendance.projects[projectIndex].workingHours = workingHours;
+          attendance.projects[projectIndex].markedBy = markedBy;
+          attendance.projects[projectIndex].present = present;
+        } else {
+          // Add new project entry
+          attendance.projects.push({
+            project: new Types.ObjectId(projectId),
+            workingHours: workingHours,
+            markedBy: markedBy,
+            present: present
+          });
+        }
+      } else {
+        // Normal attendance (no project)
+        attendance.workingHours = workingHours;
       }
+
       await attendance.save();
     } else {
+      // Create new record
+      const initialProjects = (type === "project" && !isPaidLeave) ? [{
+        project: new Types.ObjectId(projectId),
+        workingHours: workingHours,
+        markedBy: markedBy,
+        present: present
+      }] : [];
+
       attendance = await Attendance.create({
-        project: (type === "project" && !isPaidLeave) ? projectId : undefined,
+        projects: initialProjects,
+        project: (type === "project" && !isPaidLeave) ? projectId : undefined, // Set deprecated field for compat
         user: userId,
         present,
-        workingHours,
+        workingHours, // Will be overwritten by hook for projects
         markedBy,
         date: today,
         type,
@@ -147,7 +181,7 @@ export const getAttendance = asyncHandler(
 
     // Add project filter if type is project
     if (type === "project" && projectId) {
-      filter.project = projectId;
+      filter["projects.project"] = projectId;
     }
 
     // Add date range if provided
@@ -161,6 +195,7 @@ export const getAttendance = asyncHandler(
     const attendance = await Attendance.find(filter)
       .sort({ date: 1 })
       .populate("markedBy", "firstName lastName")
+      .populate("projects.project", "projectName")
       .populate("project", "projectName");
 
     res
@@ -176,14 +211,15 @@ export const getProjectAttendance = asyncHandler(
     const { date } = req.query;
 
     const filter: any = {
-      project: projectId,
+      "projects.project": projectId,
       type: "project",
     };
     if (date) filter.date = new Date(date as string);
 
     const attendance = await Attendance.find(filter)
       .populate("user", "firstName lastName")
-      .populate("markedBy", "firstName lastName");
+      .populate("markedBy", "firstName lastName")
+      .populate("projects.markedBy", "firstName lastName");
 
     res
       .status(200)
@@ -192,7 +228,6 @@ export const getProjectAttendance = asyncHandler(
 );
 
 // Get today's project attendance (only for project type)
-
 export const getTodayProjectAttendance = asyncHandler(
   async (req: Request, res: Response) => {
     const { projectId } = req.params;
@@ -217,9 +252,9 @@ export const getTodayProjectAttendance = asyncHandler(
       throw new ApiError(404, "Project not found");
     }
 
-    // Get today's attendance records
+    // Get today's attendance records where this project is involved
     const attendance = await Attendance.find({
-      project: projectId,
+      "projects.project": projectId,
       type: "project",
       date: {
         $gte: today,
@@ -233,17 +268,28 @@ export const getTodayProjectAttendance = asyncHandler(
         const attendanceRecord = attendance.find((record) =>
           record.user.equals(worker._id)
         );
+
+        // Find specific project entry
+        const projectEntry = attendanceRecord?.projects?.find(p => p.project.toString() === projectId);
+
+        // Fallback to legacy field if not in array (during migration/mixed state)
+        const isLegacyMatch = attendanceRecord?.project?.toString() === projectId;
+
+        const isPresentForProject = !!projectEntry || (attendanceRecord?.present && isLegacyMatch);
+        const workingHours = projectEntry?.workingHours ?? (isLegacyMatch ? attendanceRecord?.workingHours : 0);
+        const markedBy = projectEntry?.markedBy ?? attendanceRecord?.markedBy;
+
         return {
           _id: worker._id,
           firstName: worker.firstName,
           lastName: worker.lastName,
           profileImage: worker.profileImage,
           phoneNumbers: worker.phoneNumbers,
-          present: attendanceRecord?.present || false,
-          isPaidLeave: attendanceRecord?.isPaidLeave || false, // ADDED THIS LINE
-          workingHours: attendanceRecord?.workingHours || 0,
-          overtimeHours: attendanceRecord?.overtimeHours || 0,
-          markedBy: attendanceRecord?.markedBy || null,
+          present: isPresentForProject,
+          isPaidLeave: attendanceRecord?.isPaidLeave || false,
+          workingHours: workingHours || 0,
+          overtimeHours: attendanceRecord?.overtimeHours || 0, // Daily overtime
+          markedBy: markedBy || null,
           markedAt: attendanceRecord?.createdAt || null,
         };
       }) || [];
@@ -283,7 +329,7 @@ export const getAttendanceSummary = asyncHandler(
           "Project ID is required for project attendance summary"
         );
       }
-      dateFilter.project = projectId;
+      dateFilter["projects.project"] = projectId;
     }
 
     // Date range handling
@@ -297,6 +343,7 @@ export const getAttendanceSummary = asyncHandler(
     // Get all attendance records
     const attendanceRecords = await Attendance.find(dateFilter)
       .populate("user", "firstName lastName profileImage")
+      .populate("projects.project", "projectName")
       .populate("project", "projectName")
       .sort({ date: 1 });
 
@@ -325,13 +372,29 @@ export const getAttendanceSummary = asyncHandler(
             record.user._id.toString() === user._id.toString()
         );
 
-        dateObj[user._id.toString()] = attendance
-          ? {
+        let projectData = null;
+        if (attendance) {
+          if (type === 'project') {
+            const projectEntry = attendance.projects?.find((p: any) => p.project?._id.toString() === projectId || p.project.toString() === projectId);
+            const isLegacyMatch = attendance.project?._id.toString() === projectId || attendance.project?.toString() === projectId;
+
+            if (projectEntry || isLegacyMatch) {
+              projectData = {
+                present: true,
+                workingHours: projectEntry?.workingHours ?? (isLegacyMatch ? attendance.workingHours : 0),
+                overtimeHours: attendance.overtimeHours // Daily overtime
+              };
+            }
+          } else {
+            projectData = {
               present: attendance.present,
               workingHours: attendance.workingHours,
               overtimeHours: attendance.overtimeHours,
-            }
-          : null;
+            };
+          }
+        }
+
+        dateObj[user._id.toString()] = projectData;
       });
 
       return dateObj;
@@ -344,14 +407,32 @@ export const getAttendanceSummary = asyncHandler(
         (record) => record.user._id.toString() === user._id.toString()
       );
 
+      // Filter records relevant to this project for totals
+      const relevantRecords = userRecords.map(record => {
+        if (type === 'project') {
+          const projectEntry = record.projects?.find((p: any) => p.project?._id.toString() === projectId || p.project.toString() === projectId);
+          const isLegacyMatch = record.project?._id.toString() === projectId || record.project?.toString() === projectId;
+
+          if (projectEntry || isLegacyMatch) {
+            return {
+              present: true,
+              workingHours: projectEntry?.workingHours ?? (isLegacyMatch ? record.workingHours : 0),
+              overtimeHours: record.overtimeHours
+            };
+          }
+          return null;
+        }
+        return record;
+      }).filter(Boolean);
+
       totals[user._id.toString()] = {
-        presentDays: userRecords.filter((record) => record.present).length,
-        totalWorkingHours: userRecords.reduce(
-          (sum, record) => sum + record.workingHours,
+        presentDays: relevantRecords.length,
+        totalWorkingHours: relevantRecords.reduce(
+          (sum, record: any) => sum + (record.workingHours || 0),
           0
         ),
-        totalOvertimeHours: userRecords.reduce(
-          (sum, record) => sum + record.overtimeHours,
+        totalOvertimeHours: relevantRecords.reduce(
+          (sum, record: any) => sum + (record.overtimeHours || 0),
           0
         ),
       };
@@ -422,7 +503,7 @@ export const dailyNormalAttendance = asyncHandler(
           role: user.role,
         },
         present: attendance?.present || false,
-        isPaidLeave: attendance?.isPaidLeave || false, // ADDED THIS LINE
+        isPaidLeave: attendance?.isPaidLeave || false,
         workingHours: attendance?.workingHours || 0,
         overtimeHours: attendance?.overtimeHours || 0,
         markedBy: attendance?.markedBy || null,
@@ -442,7 +523,8 @@ export const dailyNormalAttendance = asyncHandler(
     );
   }
 );
-// FIXED: Get user's monthly attendance (both project and normal types)
+
+// Get user's monthly attendance (both project and normal types)
 export const getNormalMonthlyAttendance = asyncHandler(
   async (req: Request, res: Response) => {
     const { userId } = req.params;
@@ -477,6 +559,7 @@ export const getNormalMonthlyAttendance = asyncHandler(
     })
       .sort({ date: 1, type: 1 }) // Sort by date, then type for consistent ordering
       .populate("markedBy", "firstName lastName")
+      .populate("projects.project", "projectName")
       .populate("project", "projectName");
 
     // Separate attendance by type
@@ -523,7 +606,7 @@ export const getNormalMonthlyAttendance = asyncHandler(
   }
 );
 
-// NEW: Get user's monthly attendance by type
+// Get user's monthly attendance by type
 export const getUserMonthlyAttendanceByType = asyncHandler(
   async (req: Request, res: Response) => {
     const { userId } = req.params;
@@ -564,6 +647,7 @@ export const getUserMonthlyAttendanceByType = asyncHandler(
     const attendance = await Attendance.find(filter)
       .sort({ date: 1, type: 1 })
       .populate("markedBy", "firstName lastName")
+      .populate("projects.project", "projectName")
       .populate("project", "projectName");
 
     // Calculate totals

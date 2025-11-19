@@ -83,68 +83,64 @@ const calculateLaborDetails = async (projectId: string) => {
   const workersToProcess = project.assignedWorkers || [];
   const workerIds = workersToProcess.map((worker) => worker._id);
 
-  const workerAttendanceRecords = await Attendance.find({
-    project: projectId,
-    present: true,
-    user: { $in: workerIds },
-  }).populate<{ user: PopulatedUser }>("user", "firstName lastName");
-
-  const workerDaysMap = new Map<string, number>();
-  workerAttendanceRecords.forEach((record) => {
-    const userIdStr = record.user._id.toString();
-    workerDaysMap.set(userIdStr, (workerDaysMap.get(userIdStr) || 0) + 1);
+  // Fetch all attendance records for this project
+  const projectAttendanceRecords = await Attendance.find({
+    "projects.project": projectId,
   });
 
-  const projectAttendanceDates = await Attendance.aggregate([
-    {
-      $match: {
-        project: new Types.ObjectId(projectId),
-        present: true,
-      },
-    },
-    {
-      $group: {
-        _id: {
-          $dateToString: { format: "%Y-%m-%d", date: "$date" },
-        },
-      },
-    },
-    {
-      $count: "uniqueDates",
-    },
-  ]);
+  const userDaysMap = new Map<string, number>();
 
-  const driverDaysPresent = projectAttendanceDates[0]?.uniqueDates || 0;
+  projectAttendanceRecords.forEach((record) => {
+    // Find the specific project entry
+    const projectEntry = record.projects.find(
+      (p) => p.project.toString() === projectId.toString()
+    );
 
-  const workers = workersToProcess.map((worker) => ({
-    user: worker._id,
-    firstName: worker.firstName,
-    lastName: worker.lastName,
-    profileImage: worker.profileImage,
-    daysPresent: workerDaysMap.get(worker._id.toString()) || 0,
-    dailySalary: worker.salary || 0,
-    totalSalary:
-      (workerDaysMap.get(worker._id.toString()) || 0) * (worker.salary || 0),
-  }));
+    if (projectEntry && projectEntry.present) {
+      const hours = projectEntry.workingHours || 0;
+      // Calculate days: 10 hours = 1 day. Cap at 1 day.
+      const days = Math.min(hours / 10, 1);
+
+      const userIdStr = record.user.toString();
+      userDaysMap.set(userIdStr, (userDaysMap.get(userIdStr) || 0) + days);
+    }
+  });
+
+  const workers = workersToProcess.map((worker) => {
+    const daysPresent = userDaysMap.get(worker._id.toString()) || 0;
+    return {
+      user: worker._id,
+      firstName: worker.firstName,
+      lastName: worker.lastName,
+      profileImage: worker.profileImage,
+      daysPresent: Number(daysPresent.toFixed(2)),
+      dailySalary: worker.salary || 0,
+      totalSalary: daysPresent * (worker.salary || 0),
+    };
+  });
+
+  const driverDaysPresent = project.assignedDriver
+    ? userDaysMap.get(project.assignedDriver._id.toString()) || 0
+    : 0;
 
   const driver = project.assignedDriver
     ? {
-        user: project.assignedDriver._id,
-        firstName: project.assignedDriver.firstName,
-        lastName: project.assignedDriver.lastName,
-        profileImage: project.assignedDriver.profileImage,
-        daysPresent: driverDaysPresent,
-        dailySalary: project.assignedDriver.salary || 0,
-        totalSalary: driverDaysPresent * (project.assignedDriver.salary || 0),
-      }
+      user: project.assignedDriver._id,
+      firstName: project.assignedDriver.firstName,
+      lastName: project.assignedDriver.lastName,
+      profileImage: project.assignedDriver.profileImage,
+      daysPresent: Number(driverDaysPresent.toFixed(2)),
+      dailySalary: project.assignedDriver.salary || 0,
+      totalSalary: driverDaysPresent * (project.assignedDriver.salary || 0),
+    }
     : {
-        user: new Types.ObjectId(),
-        firstName: "No",
-        lastName: "Driver",
-        daysPresent: 0,
-        dailySalary: 0,
-        totalSalary: 0,
-      };
+      user: new Types.ObjectId(),
+      firstName: "No",
+      lastName: "Driver",
+      daysPresent: 0,
+      dailySalary: 0,
+      totalSalary: 0,
+    };
 
   const totalLaborCost =
     workers.reduce((sum, worker) => sum + worker.totalSalary, 0) +
@@ -317,9 +313,8 @@ export const getProjectExpenses = asyncHandler(
       materials: expense.materials.map((material) => ({
         ...material,
         documentDownloadUrl: material.documentKey
-          ? `${req.protocol}://${req.get("host")}/api/expenses/document/${
-              material.documentKey
-            }`
+          ? `${req.protocol}://${req.get("host")}/api/expenses/document/${material.documentKey
+          }`
           : null,
       })),
     }));
@@ -371,9 +366,8 @@ export const getExpenseById = asyncHandler(
       materials: expense.materials.map((material) => ({
         ...material,
         documentDownloadUrl: material.documentKey
-          ? `${req.protocol}://${req.get("host")}/api/expenses/document/${
-              material.documentKey
-            }`
+          ? `${req.protocol}://${req.get("host")}/api/expenses/document/${material.documentKey
+          }`
           : null,
       })),
       quotation: await Quotation.findOne({ project: expense.project }).select(
@@ -482,7 +476,7 @@ export const updateExpense = asyncHandler(
           },
           updatedAt: new Date(),
         },
-        { 
+        {
           new: true,
           runValidators: true // This ensures schema validations run
         }
@@ -796,9 +790,8 @@ export const generateExpensePdf = asyncHandler(
       <div class="header">
         <img class="logo" src="https://agats.s3.ap-south-1.amazonaws.com/logo/logo.jpeg" alt="Company Logo">
         <div class="document-title">EXPENSE REPORT</div>
-        <div class="project-info">${expense.project.projectName} (${
-      expense.project.projectNumber
-    })</div>
+        <div class="project-info">${expense.project.projectName} (${expense.project.projectNumber
+      })</div>
       </div>
 
       <div class="section">
@@ -817,8 +810,8 @@ export const generateExpensePdf = asyncHandler(
           </thead>
           <tbody>
             ${expense.materials
-              .map(
-                (material, index) => `
+        .map(
+          (material, index) => `
               <tr>
                 <td>${index + 1}</td>
                 <td>${material.description}</td>
@@ -829,8 +822,8 @@ export const generateExpensePdf = asyncHandler(
                 <td class="text-right">${material.amount.toFixed(2)}</td>
               </tr>
             `
-              )
-              .join("")}
+        )
+        .join("")}
           </tbody>
           <tfoot>
             <tr class="total-row">
@@ -855,8 +848,8 @@ export const generateExpensePdf = asyncHandler(
           </thead>
           <tbody>
             ${expense.miscellaneous
-              .map(
-                (item, index) => `
+        .map(
+          (item, index) => `
               <tr>
                 <td>${index + 1}</td>
                 <td>${item.description}</td>
@@ -865,8 +858,8 @@ export const generateExpensePdf = asyncHandler(
                 <td class="text-right">${item.total.toFixed(2)}</td>
               </tr>
             `
-              )
-              .join("")}
+        )
+        .join("")}
           </tbody>
           <tfoot>
             <tr class="total-row">
@@ -891,8 +884,8 @@ export const generateExpensePdf = asyncHandler(
           </thead>
           <tbody>
             ${expense.laborDetails.workers
-              .map(
-                (worker, index) => `
+        .map(
+          (worker, index) => `
               <tr>
                 <td>${index + 1}</td>
                 <td>${worker.user.firstName} ${worker.user.lastName}</td>
@@ -901,15 +894,15 @@ export const generateExpensePdf = asyncHandler(
                 <td class="text-right">${worker.totalSalary.toFixed(2)}</td>
               </tr>
             `
-              )
-              .join("")}
+        )
+        .join("")}
           </tbody>
           <tfoot>
             <tr class="total-row">
               <td colspan="4">TOTAL WORKERS COST</td>
               <td class="text-right">${expense.laborDetails.workers
-                .reduce((sum, w) => sum + w.totalSalary, 0)
-                .toFixed(2)}</td>
+        .reduce((sum, w) => sum + w.totalSalary, 0)
+        .toFixed(2)}</td>
             </tr>
           </tfoot>
         </table>
@@ -950,8 +943,8 @@ export const generateExpensePdf = asyncHandler(
             <tr>
               <td>Total Workers Cost</td>
               <td class="text-right">${expense.laborDetails.workers
-                .reduce((sum, w) => sum + w.totalSalary, 0)
-                .toFixed(2)}</td>
+        .reduce((sum, w) => sum + w.totalSalary, 0)
+        .toFixed(2)}</td>
             </tr>
             <tr>
               <td>Total Driver Cost</td>
@@ -987,21 +980,19 @@ export const generateExpensePdf = asyncHandler(
               <td>TOTAL EXPENSES</td>
               <td class="text-right">${totalExpense.toFixed(2)}</td>
             </tr>
-            ${
-              quotation
-                ? `
+            ${quotation
+        ? `
             <tr>
               <td>Project Quotation Amount (before VAT) </td>
               <td class="text-right">${quotationAmount.toFixed(2)}</td>
             </tr>
-            ${
-              commissionAmount > 0
-                ? `<tr>
+            ${commissionAmount > 0
+          ? `<tr>
                     <td>Commission Amount</td>
                     <td class="text-right">${commissionAmount.toFixed(2)}</td>
                   </tr>`
-                : ""
-            }
+          : ""
+        }
             <tr class="total-row">
               <td>${profit >= 0 ? "NET PROFIT" : "NET LOSS"}</td>
               <td class="text-right" style="color: ${profit >= 0 ? '#28a745' : '#dc3545'}">
@@ -1009,16 +1000,15 @@ export const generateExpensePdf = asyncHandler(
               </td>
             </tr>
             `
-                : ""
-            }
+        : ""
+      }
           </tbody>
         </table>
       </div>
 
       <div class="footer">
-        <p>Generated on ${formatDate(new Date())} by ${
-      expense.createdBy.firstName
-    } ${expense.createdBy.lastName}</p>
+        <p>Generated on ${formatDate(new Date())} by ${expense.createdBy.firstName
+      } ${expense.createdBy.lastName}</p>
       </div>
     </body>
     </html>

@@ -1,37 +1,55 @@
+
 import { Document, Schema, model, Types } from "mongoose";
 
 export interface IAttendance extends Document {
-  project?: Types.ObjectId; // Make optional for normal type and day off
+  projects: {
+    project: Types.ObjectId;
+    workingHours: number;
+    markedBy: Types.ObjectId;
+    present: boolean;
+  }[];
+  project?: Types.ObjectId; // Deprecated: Kept for backward compatibility during migration
   user: Types.ObjectId;
   date: Date;
   present: boolean;
-  isPaidLeave: boolean; // NEW: Flag for day off/paid leave
-  markedBy: Types.ObjectId;
+  isPaidLeave: boolean;
+  markedBy: Types.ObjectId; // This field is still needed for normal/paid leave entries
   type: "project" | "normal";
-  workingHours: number;
-  overtimeHours: number;
+  workingHours: number; // Total daily working hours
+  overtimeHours: number; // Total daily overtime hours
   createdAt: Date;
 }
 
 const attendanceSchema = new Schema<IAttendance>(
   {
+    projects: [
+      {
+        project: {
+          type: Schema.Types.ObjectId,
+          ref: "Project",
+          required: true,
+        },
+        workingHours: {
+          type: Number,
+          required: true,
+          min: 0,
+          default: 0,
+        },
+        markedBy: {
+          type: Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        present: {
+          type: Boolean,
+          default: true
+        }
+      },
+    ],
+    // Deprecated field, kept for reference or migration
     project: {
       type: Schema.Types.ObjectId,
       ref: "Project",
-      required: function () {
-        // Project is required only for project type AND when not a paid leave
-        return this.type === "project" && !this.isPaidLeave;
-      },
-      validate: {
-        validator: function(value: Types.ObjectId | undefined) {
-          // Project must NOT exist when isPaidLeave is true
-          if (this.isPaidLeave && value) {
-            return false;
-          }
-          return true;
-        },
-        message: "Paid leave cannot be associated with a project"
-      }
     },
     user: {
       type: Schema.Types.ObjectId,
@@ -80,42 +98,50 @@ const attendanceSchema = new Schema<IAttendance>(
   { timestamps: true }
 );
 
-// Calculate overtime before saving
+// Calculate overtime and totals before saving
 attendanceSchema.pre<IAttendance>("save", function (next) {
-  // For paid leave (day off), set hours to 0 and no project
+  // For paid leave (day off), set hours to 0 and clear projects
   if (this.isPaidLeave) {
     this.workingHours = 0;
     this.overtimeHours = 0;
+    this.projects = [];
     this.project = undefined;
-  } else if (this.isModified("workingHours")) {
-    const basicHours = 10;
-    this.overtimeHours = Math.max(0, this.workingHours - basicHours);
+  } else {
+    // If projects array exists and has items, calculate total working hours
+    if (this.projects && this.projects.length > 0) {
+      const totalProjectHours = this.projects.reduce(
+        (sum, p) => sum + (p.workingHours || 0),
+        0
+      );
+      this.workingHours = totalProjectHours;
+
+      // Sync the deprecated 'project' field with the first project for backward compat if needed
+      // or leave it. Let's set it to the first project if available.
+      this.project = this.projects[0].project;
+    }
+
+    // Calculate overtime based on total working hours
+    if (this.isModified("workingHours") || this.isModified("projects")) {
+      const basicHours = 10;
+      this.overtimeHours = Math.max(0, this.workingHours - basicHours);
+    }
   }
   next();
 });
 
-// Indexes remain the same
-attendanceSchema.index(
-  { project: 1, user: 1, date: 1, type: 1 },
-  {
-    unique: true,
-    partialFilterExpression: { type: "project" },
-    name: "project_attendance_unique"
-  }
-);
-
+// Indexes
+// Modified unique index: User + Date + Type should be unique.
+// We no longer include 'project' in the unique index because multiple projects are now in one document.
 attendanceSchema.index(
   { user: 1, date: 1, type: 1 },
   {
     unique: true,
-    partialFilterExpression: { type: "normal" },
-    name: "normal_attendance_unique"
+    name: "user_date_type_unique"
   }
 );
 
 attendanceSchema.index({ user: 1, date: 1 }, { name: "user_date_lookup" });
-attendanceSchema.index({ user: 1, type: 1, date: 1 }, { name: "user_type_date_lookup" });
-attendanceSchema.index({ project: 1, date: 1 }, { name: "project_date_lookup" });
+attendanceSchema.index({ "projects.project": 1, date: 1 }, { name: "project_date_lookup" });
 attendanceSchema.index({ date: 1, type: 1 }, { name: "date_type_lookup" });
 
 export const Attendance = model<IAttendance>("Attendance", attendanceSchema);

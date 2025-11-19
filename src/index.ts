@@ -36,6 +36,7 @@ import attendanceManagementRouter from "./routes/attendanceManagementRoutes";
 import bankDetailsRouter from "./routes/bankDetailsRoutes";
 import dashboardRoutes from "./routes/dashboardAnalyticsRoutes";
 
+import utilsRouter from "./routes/utilsRoutes";
 
 import { connectDb } from "./config/db";
 import { seedSuperAdmin } from "./utils/seeder";
@@ -45,7 +46,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: ["https://new.alghazalgroup.com","https://new.alghazalgroup.com/","http://localhost:5173","http://localhost:5173/"], // Ensure NO trailing slash
+    origin: ["https://new.alghazalgroup.com", "https://new.alghazalgroup.com/", "http://localhost:5173", "http://localhost:5173/"], // Ensure NO trailing slash
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: [
@@ -67,11 +68,12 @@ app.get("/", (req, res) => {
   res.send("Test log");
 });
 // app.use(helmet()); // Security
-app.get("/seed",(_req:Request,res:Response)=>{
+app.get("/seed", (_req: Request, res: Response) => {
   seedSuperAdmin();
   res.send("ok")
 })
-app.use("/api/dashboard-analytics",dashboardRoutes)
+
+app.use("/api/dashboard-analytics", dashboardRoutes)
 app.use("/api/user", userRouter);
 app.use("/api/estimation", estimationRouter);
 app.use("/api/client", clientRouter);
@@ -96,6 +98,7 @@ app.use("/api/visa-expenses", visaRouter);
 app.use("/api/reports", reportTouter);
 app.use("/api/employee-summary", employeeSummaryRouter);
 app.use("/api/attendance-management", attendanceManagementRouter);
+app.use("/api/utils", utilsRouter);
 app.use(errorHandler as ErrorRequestHandler);
 
 app.use((req: Request, res: Response, next: NextFunction) => {

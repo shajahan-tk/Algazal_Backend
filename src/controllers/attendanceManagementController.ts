@@ -10,7 +10,7 @@ import { Types } from "mongoose";
 import { Request, Response } from "express";
 
 // Create or Update attendance record
-export const createOrUpdateAttendance = asyncHandler(async (req:Request, res:Response) => {
+export const createOrUpdateAttendance = asyncHandler(async (req: Request, res: Response) => {
   const { userId, date, type = "normal" } = req.body;
   let { present, workingHours = 0, overtimeHours = 0, projectId, isPaidLeave = false } = req.body;
 
@@ -25,7 +25,7 @@ export const createOrUpdateAttendance = asyncHandler(async (req:Request, res:Res
     throw new ApiError(400, "Invalid attendance type");
   }
 
-  // NEW: Validate paid leave cannot have project
+  // Validate paid leave cannot have project
   if (isPaidLeave && projectId) {
     throw new ApiError(400, "Paid leave cannot be associated with a project");
   }
@@ -35,7 +35,7 @@ export const createOrUpdateAttendance = asyncHandler(async (req:Request, res:Res
     if (!projectId) {
       throw new ApiError(400, "Project ID is required for project attendance");
     }
-    
+
     const project = await Project.findById(projectId);
     if (!project) {
       throw new ApiError(404, "Project not found");
@@ -73,7 +73,7 @@ export const createOrUpdateAttendance = asyncHandler(async (req:Request, res:Res
   let workingHoursValue = 0;
   let overtimeHoursValue = 0;
 
-  // NEW: For paid leave (day off), force hours to 0
+  // For paid leave (day off), force hours to 0
   if (isPaidLeave) {
     workingHoursValue = 0;
     overtimeHoursValue = 0;
@@ -90,7 +90,7 @@ export const createOrUpdateAttendance = asyncHandler(async (req:Request, res:Res
     } else if (typeof workingHours === 'number') {
       workingHoursValue = workingHours;
     }
-    
+
     if (isNaN(workingHoursValue) || workingHoursValue < 0 || workingHoursValue > 24) {
       throw new ApiError(400, "Working hours must be between 0 and 24");
     }
@@ -123,40 +123,69 @@ export const createOrUpdateAttendance = asyncHandler(async (req:Request, res:Res
   console.log('Processed hours - Working:', workingHoursValue, 'Overtime:', overtimeHoursValue, 'PaidLeave:', isPaidLeave);
 
   // Find existing attendance record
-  const query = {
+  const query: any = {
     user: userId,
     date: { $gte: attendanceDate, $lt: nextDay },
     type,
-  } as any;
-
-  // Only include project in query if not paid leave
-  if (type === "project" && !isPaidLeave) {
-    query.project = projectId;
-  }
+  };
 
   let attendance = await Attendance.findOne(query);
 
   if (attendance) {
     // Update existing record
     attendance.present = present;
-    attendance.workingHours = workingHoursValue;
-    attendance.overtimeHours = overtimeHoursValue;
     attendance.markedBy = markedBy;
     attendance.isPaidLeave = isPaidLeave;
-    // Remove project if it's paid leave
+
     if (isPaidLeave) {
+      attendance.projects = [];
+      attendance.workingHours = 0;
+      attendance.overtimeHours = 0;
       attendance.project = undefined;
+    } else if (type === "project") {
+      // Handle project array
+      if (!attendance.projects) attendance.projects = [];
+
+      const projectIndex = attendance.projects.findIndex(p => p.project.toString() === projectId);
+
+      if (projectIndex > -1) {
+        // Update existing project entry
+        attendance.projects[projectIndex].workingHours = workingHoursValue;
+        attendance.projects[projectIndex].markedBy = markedBy;
+        attendance.projects[projectIndex].present = present;
+      } else {
+        // Add new project entry
+        attendance.projects.push({
+          project: new Types.ObjectId(projectId),
+          workingHours: workingHoursValue,
+          markedBy: markedBy,
+          present: present
+        });
+      }
+    } else {
+      // Normal attendance
+      attendance.workingHours = workingHoursValue;
+      attendance.overtimeHours = overtimeHoursValue;
     }
+
     await attendance.save();
     console.log('Updated existing attendance record');
   } else {
     // Create new record
+    const initialProjects = (type === "project" && !isPaidLeave) ? [{
+      project: new Types.ObjectId(projectId),
+      workingHours: workingHoursValue,
+      markedBy: markedBy,
+      present: present
+    }] : [];
+
     attendance = await Attendance.create({
+      projects: initialProjects,
       project: (type === "project" && !isPaidLeave) ? projectId : undefined,
       user: userId,
       present,
-      workingHours: workingHoursValue,
-      overtimeHours: overtimeHoursValue,
+      workingHours: workingHoursValue, // Will be overwritten by hook for projects
+      overtimeHours: overtimeHoursValue, // Will be overwritten by hook for projects
       markedBy,
       date: attendanceDate,
       type,
@@ -168,6 +197,7 @@ export const createOrUpdateAttendance = asyncHandler(async (req:Request, res:Res
   // Populate the response
   const populatedAttendance = await Attendance.findById(attendance._id)
     .populate("markedBy", "firstName lastName")
+    .populate("projects.project", "projectName")
     .populate("project", "projectName")
     .populate("user", "firstName lastName");
 
@@ -176,10 +206,53 @@ export const createOrUpdateAttendance = asyncHandler(async (req:Request, res:Res
     .json(new ApiResponse(200, populatedAttendance, "Attendance saved successfully"));
 });
 
+// Remove a specific project from attendance
+export const removeProjectAttendance = asyncHandler(async (req: Request, res: Response) => {
+  const { userId, date, projectId } = req.body;
 
+  if (!userId || !date || !projectId) {
+    throw new ApiError(400, "User ID, date, and Project ID are required");
+  }
 
-// Delete attendance record
-export const deleteAttendanceRecord = asyncHandler(async (req:Request, res:Response) => {
+  const attendanceDate = new Date(date);
+  if (isNaN(attendanceDate.getTime())) {
+    throw new ApiError(400, "Invalid date format");
+  }
+  attendanceDate.setHours(0, 0, 0, 0);
+  const nextDay = new Date(attendanceDate);
+  nextDay.setDate(attendanceDate.getDate() + 1);
+
+  const attendance = await Attendance.findOne({
+    user: userId,
+    date: { $gte: attendanceDate, $lt: nextDay },
+    type: "project"
+  });
+
+  if (!attendance) {
+    throw new ApiError(404, "Attendance record not found");
+  }
+
+  // Remove the project from the projects array
+  attendance.projects = attendance.projects.filter(p => p.project.toString() !== projectId);
+
+  // If no projects left, what should we do?
+  // Maybe mark as absent? Or just leave it with 0 hours?
+  // Let's leave it as is, the pre-save hook will set workingHours to 0 if projects is empty.
+  // If projects is empty, we might want to set present to false?
+  if (attendance.projects.length === 0) {
+    attendance.present = false;
+    attendance.workingHours = 0;
+    attendance.overtimeHours = 0;
+    attendance.project = undefined; // Clear legacy field
+  }
+
+  await attendance.save();
+
+  res.status(200).json(new ApiResponse(200, attendance, "Project attendance removed successfully"));
+});
+
+// Delete attendance record (entire day)
+export const deleteAttendanceRecord = asyncHandler(async (req: Request, res: Response) => {
   const { attendanceId } = req.params;
 
   if (!attendanceId) {
@@ -187,7 +260,7 @@ export const deleteAttendanceRecord = asyncHandler(async (req:Request, res:Respo
   }
 
   const attendance = await Attendance.findById(attendanceId);
-  
+
   if (!attendance) {
     throw new ApiError(404, "Attendance record not found");
   }
@@ -211,7 +284,7 @@ export const getUserDateAttendance = asyncHandler(async (req: Request, res: Resp
   // safely cast date to string
   const dateStr = Array.isArray(date) ? date[0] : String(date);
 
- const attendanceDate = new Date(Array.isArray(date) ? String(date[0]) : String(date));
+  const attendanceDate = new Date(Array.isArray(date) ? String(date[0]) : String(date));
 
 
   if (isNaN(attendanceDate.getTime())) {
@@ -228,6 +301,7 @@ export const getUserDateAttendance = asyncHandler(async (req: Request, res: Resp
     date: { $gte: attendanceDate, $lt: nextDay },
   })
     .populate("markedBy", "firstName lastName")
+    .populate("projects.project", "projectName")
     .populate("project", "projectName")
     .sort({ type: 1 });
 
@@ -237,7 +311,7 @@ export const getUserDateAttendance = asyncHandler(async (req: Request, res: Resp
 });
 
 
-export const getUserProjects = asyncHandler(async (req:Request, res:Response) => {
+export const getUserProjects = asyncHandler(async (req: Request, res: Response) => {
   const { userId } = req.params;
 
   if (!userId) {
@@ -256,25 +330,25 @@ export const getUserProjects = asyncHandler(async (req:Request, res:Response) =>
       { assignedWorkers: userId },
       { assignedDriver: userId }
     ],
-    status: { 
+    status: {
       $in: [
-        'team_assigned', 
-        'work_started', 
-        'in_progress', 
+        'team_assigned',
+        'work_started',
+        'in_progress',
         'work_completed',
         'quality_check'
-      ] 
+      ]
     } // Only active projects
   })
-  .select("_id projectName projectNumber location building apartmentNumber client assignedWorkers assignedDriver")
-  .populate("client", "clientName")
-  .sort({ projectName: 1 });
+    .select("_id projectName projectNumber location building apartmentNumber client assignedWorkers assignedDriver")
+    .populate("client", "clientName")
+    .sort({ projectName: 1 });
 
   // Format the response with assignment type
-  const formattedProjects = projects.map((project:any) => {
-    const isWorker = project.assignedWorkers?.some((worker:any) => worker.equals(userId));
+  const formattedProjects = projects.map((project: any) => {
+    const isWorker = project.assignedWorkers?.some((worker: any) => worker.equals(userId));
     const isDriver = project.assignedDriver?.equals(userId);
-    
+
     let assignmentType = '';
     if (isWorker && isDriver) {
       assignmentType = 'Worker & Driver';
