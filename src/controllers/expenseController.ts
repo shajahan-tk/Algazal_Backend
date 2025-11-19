@@ -97,12 +97,17 @@ const calculateLaborDetails = async (projectId: string) => {
     );
 
     if (projectEntry && projectEntry.present) {
-      const hours = projectEntry.workingHours || 0;
-      // Calculate days: 10 hours = 1 day. Cap at 1 day.
-      const days = Math.min(hours / 10, 1);
+      // Count how many projects the user was present for on this day
+      const presentProjectsCount = record.projects.filter(p => p.present).length;
 
-      const userIdStr = record.user.toString();
-      userDaysMap.set(userIdStr, (userDaysMap.get(userIdStr) || 0) + days);
+      if (presentProjectsCount > 0) {
+        // Split the day equally among all present projects
+        // e.g., 2 projects = 0.5 days each, 3 projects = 0.33 days each
+        const days = 1 / presentProjectsCount;
+
+        const userIdStr = record.user.toString();
+        userDaysMap.set(userIdStr, (userDaysMap.get(userIdStr) || 0) + days);
+      }
     }
   });
 
