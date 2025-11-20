@@ -1,15 +1,11 @@
-import express, {
-  Request,
-  Response,
-  NextFunction,
-  ErrorRequestHandler,
-} from "express";
+import express, { Request, Response, NextFunction, ErrorRequestHandler, } from "express";
 import helmet from "helmet";
 import morgan from "morgan";
 import cors from "cors";
 import dotenv from "dotenv";
 import { ApiError } from "./utils/apiHandlerHelpers";
 import { errorHandler } from "./utils/errorHandler";
+import { checkBackendStatus } from "./middlewares/checkBackendStatus";
 import userRouter from "./routes/userRoutes";
 import estimationRouter from "./routes/estimationRoutes";
 import clientRouter from "./routes/clientRoutes";
@@ -35,18 +31,18 @@ import employeeSummaryRouter from "./routes/employeeSummaryRoutes";
 import attendanceManagementRouter from "./routes/attendanceManagementRoutes";
 import bankDetailsRouter from "./routes/bankDetailsRoutes";
 import dashboardRoutes from "./routes/dashboardAnalyticsRoutes";
-
 import utilsRouter from "./routes/utilsRoutes";
-
+import restrictionRouter from "./routes/restrictionRoutes";
 import { connectDb } from "./config/db";
 import { seedSuperAdmin } from "./utils/seeder";
+
 dotenv.config();
 
 const app = express();
 
 app.use(
   cors({
-    origin: ["https://new.alghazalgroup.com", "https://new.alghazalgroup.com/", "http://localhost:5173", "http://localhost:5173/"], // Ensure NO trailing slash
+    origin: ["https://new.alghazalgroup.com", "https://new.alghazalgroup.com/", "http://localhost:5173", "http://localhost:5173/"],
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: [
@@ -58,22 +54,31 @@ app.use(
     ],
   })
 );
-// app.use(limiter);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(morgan("common"));
 
-app.use(morgan("common")); // Logging
+// Test route
 app.get("/", (req, res) => {
-  console.log("Test log route hit"); // This should appear in console
+  console.log("Test log route hit");
   res.send("Test log");
 });
-// app.use(helmet()); // Security
+
+// Seed route
 app.get("/seed", (_req: Request, res: Response) => {
   seedSuperAdmin();
   res.send("ok")
-})
+});
 
-app.use("/api/dashboard-analytics", dashboardRoutes)
+// IMPORTANT: Restriction route MUST be registered BEFORE the checkBackendStatus middleware
+app.use("/api/restriction", restrictionRouter);
+
+// Apply backend status check to ALL other routes
+app.use(checkBackendStatus as any);
+
+// All other routes
+app.use("/api/dashboard-analytics", dashboardRoutes);
 app.use("/api/user", userRouter);
 app.use("/api/estimation", estimationRouter);
 app.use("/api/client", clientRouter);
@@ -99,17 +104,13 @@ app.use("/api/reports", reportTouter);
 app.use("/api/employee-summary", employeeSummaryRouter);
 app.use("/api/attendance-management", attendanceManagementRouter);
 app.use("/api/utils", utilsRouter);
+
 app.use(errorHandler as ErrorRequestHandler);
 
 app.use((req: Request, res: Response, next: NextFunction) => {
   throw new ApiError(404, "Route not found");
 });
 
-// Error-handling middleware
-
-// app.get("*", (req, res) => {
-//   res.sendFile("/var/www/kmcc-frontend/dist/index.html");
-// });
 connectDb().then(() => {
   app.listen(4001, () => {
     console.log(`Server is running on port ${process.env.PORT}`);
