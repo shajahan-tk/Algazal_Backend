@@ -3,7 +3,8 @@ import {
   createOrUpdateAttendance,
   deleteAttendanceRecord,
   getUserProjects,
-  getUserDateAttendance,  // ← ADD THIS IMPORT
+  getUserDateAttendance,
+  removeProjectAttendance,  // ← ADD THIS IMPORT
 } from "../controllers/attendanceManagementController";
 import { authenticate } from "../middlewares/authMiddleware";
 
@@ -14,7 +15,7 @@ router.post("/create-update", authenticate, createOrUpdateAttendance);
 
 // Delete attendance record
 router.delete("/delete/:attendanceId", authenticate, deleteAttendanceRecord);
-
+router.post("/remove-project", authenticate, removeProjectAttendance);
 // Get user's projects for dropdown
 router.get("/user/:userId/projects", authenticate, getUserProjects);
 
