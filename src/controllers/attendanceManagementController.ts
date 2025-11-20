@@ -272,6 +272,9 @@ export const deleteAttendanceRecord = asyncHandler(async (req: Request, res: Res
     .json(new ApiResponse(200, null, "Attendance record deleted successfully"));
 });
 
+// controllers/attendanceManagementController.js
+
+
 // Get user attendance for specific date
 export const getUserDateAttendance = asyncHandler(async (req: Request, res: Response) => {
   const { userId } = req.params;
