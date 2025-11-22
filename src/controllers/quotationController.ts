@@ -21,6 +21,7 @@ export const createQuotation = asyncHandler(
       items = [],
       termsAndConditions = [],
       vatPercentage = 5,
+      discountAmount = 0, // NEW: Discount amount parameter
     } = req.body;
 
     // Validate items is an array
@@ -46,8 +47,15 @@ export const createQuotation = asyncHandler(
       (sum, item) => sum + item.totalPrice,
       0
     );
-    const vatAmount = subtotal * (vatPercentage / 100);
-    const total = subtotal + vatAmount;
+
+    // NEW: Calculate amount after discount
+    const amountAfterDiscount = subtotal - discountAmount;
+
+    // NEW: Calculate VAT on discounted amount
+    const vatAmount = amountAfterDiscount * (vatPercentage / 100);
+
+    // NEW: Calculate net amount (discounted amount + VAT)
+    const total = amountAfterDiscount + vatAmount;
 
     const quotation = await Quotation.create({
       project: projectId,
@@ -60,6 +68,7 @@ export const createQuotation = asyncHandler(
       images: [], // Start with empty images array
       termsAndConditions,
       vatPercentage,
+      discountAmount, // NEW: Include discount amount
       subtotal,
       vatAmount,
       netAmount: total,
@@ -76,6 +85,70 @@ export const createQuotation = asyncHandler(
   }
 );
 
+export const updateQuotation = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const {
+      items = [],
+      validUntil,
+      scopeOfWork,
+      termsAndConditions,
+      vatPercentage,
+      discountAmount, // NEW: Discount amount parameter
+    } = req.body;
+
+    // Validate items is an array
+    if (!Array.isArray(items)) {
+      throw new ApiError(400, "Items must be an array");
+    }
+
+    const quotation = await Quotation.findById(id);
+    if (!quotation) throw new ApiError(404, "Quotation not found");
+
+    // Calculate item totals (no image processing)
+    const processedItems = items.map((item: any) => {
+      item.totalPrice = item.quantity * item.unitPrice;
+      return item;
+    });
+
+    // Calculate financial totals
+    const subtotal = processedItems.reduce(
+      (sum, item) => sum + item.totalPrice,
+      0
+    );
+
+    // NEW: Use provided discount or existing discount
+    const finalDiscountAmount = discountAmount !== undefined ? discountAmount : quotation.discountAmount;
+
+    // NEW: Calculate amount after discount
+    const amountAfterDiscount = subtotal - finalDiscountAmount;
+
+    // NEW: Calculate VAT on discounted amount
+    const vatAmount = amountAfterDiscount * ((vatPercentage || quotation.vatPercentage) / 100);
+
+    // NEW: Calculate net amount (discounted amount + VAT)
+    const total = amountAfterDiscount + vatAmount;
+
+    // Update quotation fields
+    quotation.items = processedItems;
+    if (validUntil) quotation.validUntil = new Date(validUntil);
+    if (scopeOfWork) quotation.scopeOfWork = scopeOfWork;
+    if (termsAndConditions) quotation.termsAndConditions = termsAndConditions;
+    if (vatPercentage) quotation.vatPercentage = vatPercentage;
+    if (discountAmount !== undefined) quotation.discountAmount = discountAmount; // NEW: Update discount amount
+    quotation.subtotal = subtotal;
+    quotation.vatAmount = vatAmount;
+    quotation.netAmount = total;
+
+    await quotation.save();
+
+    const updatedQuotation = await Quotation.findById(id)
+      .populate("project", "projectName")
+      .populate("preparedBy", "firstName lastName");
+
+    res.status(200).json(new ApiResponse(200, updatedQuotation, "Quotation updated"));
+  }
+);
 
 export const replaceQuotationImage = asyncHandler(
   async (req: Request, res: Response) => {
@@ -344,59 +417,6 @@ export const getQuotationByProject = asyncHandler(
   }
 );
 
-export const updateQuotation = asyncHandler(
-  async (req: Request, res: Response) => {
-    const { id } = req.params;
-    const {
-      items = [],
-      validUntil,
-      scopeOfWork,
-      termsAndConditions,
-      vatPercentage,
-    } = req.body;
-
-    // Validate items is an array
-    if (!Array.isArray(items)) {
-      throw new ApiError(400, "Items must be an array");
-    }
-
-    const quotation = await Quotation.findById(id);
-    if (!quotation) throw new ApiError(404, "Quotation not found");
-
-    // Calculate item totals (no image processing)
-    const processedItems = items.map((item: any) => {
-      item.totalPrice = item.quantity * item.unitPrice;
-      return item;
-    });
-
-    // Calculate financial totals
-    const subtotal = processedItems.reduce(
-      (sum, item) => sum + item.totalPrice,
-      0
-    );
-    const vatAmount = subtotal * ((vatPercentage || quotation.vatPercentage) / 100);
-    const total = subtotal + vatAmount;
-
-    // Update quotation fields
-    quotation.items = processedItems;
-    if (validUntil) quotation.validUntil = new Date(validUntil);
-    if (scopeOfWork) quotation.scopeOfWork = scopeOfWork;
-    if (termsAndConditions) quotation.termsAndConditions = termsAndConditions;
-    if (vatPercentage) quotation.vatPercentage = vatPercentage;
-    quotation.subtotal = subtotal;
-    quotation.vatAmount = vatAmount;
-    quotation.netAmount = total;
-
-    await quotation.save();
-
-    const updatedQuotation = await Quotation.findById(id)
-      .populate("project", "projectName")
-      .populate("preparedBy", "firstName lastName");
-
-    res.status(200).json(new ApiResponse(200, updatedQuotation, "Quotation updated"));
-  }
-);
-
 export const approveQuotation = asyncHandler(
   async (req: Request, res: Response) => {
     const { id } = req.params;
@@ -497,20 +517,28 @@ export const generateQuotationPdf = asyncHandler(
 
     const site = `${project.location} ${project.building} ${project.apartmentNumber}`;
 
+    // NEW: Updated calculations for discount
     const subtotal = quotation.items.reduce(
       (sum, item) => sum + item.totalPrice,
       0
     );
-    const vatAmount = subtotal * (quotation.vatPercentage / 100);
-    const netAmount = subtotal + vatAmount;
+
+    // NEW: Calculate amount after discount
+    const amountAfterDiscount = subtotal - quotation.discountAmount;
+
+    // NEW: Calculate VAT on discounted amount
+    const vatAmount = amountAfterDiscount * (quotation.vatPercentage / 100);
+
+    // NEW: Calculate net amount (discounted amount + VAT)
+    const netAmount = amountAfterDiscount + vatAmount;
 
     const formatDate = (date: Date) => {
       return date
         ? new Date(date).toLocaleDateString("en-GB", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-          })
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        })
         : "";
     };
 
@@ -529,6 +557,7 @@ export const generateQuotationPdf = asyncHandler(
     const formatCurrency = (n: number) =>
       n.toFixed(2).replace(/\d(?=(\d{3})+\.)/g, "$&,");
 
+    // Generate HTML content for PDF (updated to include discount)
     let htmlContent = `<!DOCTYPE html>
 <html>
 <head>
@@ -818,25 +847,22 @@ td {
   font-family: 'Arial', sans-serif;
 }
 
-/* ==================== IMAGE SECTION (FIXED - NO BREAK PROBLEMS) ==================== */
+/* ==================== IMAGE SECTION ==================== */
 
 .images-section {
   margin-top: 8px;
-  /* REMOVED: page-break-inside: avoid - Let it break naturally */
 }
 
 .images-grid {
   display: block;
   margin-top: 4px;
-  /* REMOVED: page-break-inside rules - Let it flow naturally */
 }
 
 .images-row {
   display: flex;
   gap: 8px;
   margin-bottom: 8px;
-  /* REMOVED ALL page-break rules - Let rows break naturally between pages */
-  min-height: 140px; /* Ensure minimum height for better breaking */
+  min-height: 140px;
 }
 
 .image-item {
@@ -846,14 +872,12 @@ td {
   display: flex;
   flex-direction: column;
   align-items: center;
-  /* REMOVED: page-break-inside: avoid - Let items break naturally */
   border: 1px solid #ddd;
   border-radius: 4px;
   padding: 6px;
   background: #fafafa;
   min-height: 140px;
   box-sizing: border-box;
-  /* Allow breaking inside image items if needed */
   page-break-inside: auto;
 }
 
@@ -867,7 +891,6 @@ td {
   margin-bottom: 4px;
   background: #fff;
   border-radius: 3px;
-  /* Prevent images from breaking */
   page-break-inside: avoid;
   break-inside: avoid;
 }
@@ -876,7 +899,6 @@ td {
   max-height: 100%;
   max-width: 100%;
   object-fit: contain;
-  /* Ensure images don't break */
   page-break-inside: avoid;
   break-inside: avoid;
 }
@@ -894,7 +916,6 @@ td {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-  /* Allow title to break with the image */
   page-break-inside: auto;
 }
 
@@ -1109,11 +1130,22 @@ strong {
         </table>
       </div>
 
+      <!-- UPDATED: Financial Summary Section -->
       <div class="amount-summary">
         <div class="amount-summary-row">
           <div class="amount-label">SUBTOTAL:</div>
           <div class="amount-value">${formatCurrency(subtotal)} AED</div>
         </div>
+        ${quotation.discountAmount > 0 ? `
+        <div class="amount-summary-row">
+          <div class="amount-label" style="color: #8D278B;">SPECIALDISCOUNT:</div>
+          <div class="amount-value" style="color: #8D278B;">${formatCurrency(quotation.discountAmount)} AED</div>
+        </div>
+        <div class="amount-summary-row">
+          <div class="amount-label">AMOUNT AFTER DISCOUNT:</div>
+          <div class="amount-value">${formatCurrency(amountAfterDiscount)} AED</div>
+        </div>
+        ` : ''}
         <div class="amount-summary-row">
           <div class="amount-label">VAT ${quotation.vatPercentage}%:</div>
           <div class="amount-value">${formatCurrency(vatAmount)} AED</div>
@@ -1126,21 +1158,20 @@ strong {
     </div>
 
     <!-- IMAGES SECTION -->
-    ${
-      quotation.images.length > 0 ? `
+    ${quotation.images.length > 0 ? `
       <div class="images-section">
         <div class="section-title">QUOTATION IMAGES</div>
         <div class="images-grid">
           ${(() => {
-            let html = '';
-            for (let i = 0; i < quotation.images.length; i += 3) {
-              const rowImages = quotation.images.slice(i, i + 3);
-              html += '<div class="images-row">';
-              
-              for (let j = 0; j < 3; j++) {
-                if (j < rowImages.length) {
-                  const image = rowImages[j];
-                  html += `
+          let html = '';
+          for (let i = 0; i < quotation.images.length; i += 3) {
+            const rowImages = quotation.images.slice(i, i + 3);
+            html += '<div class="images-row">';
+
+            for (let j = 0; j < 3; j++) {
+              if (j < rowImages.length) {
+                const image = rowImages[j];
+                html += `
                     <div class="image-item">
                       <div class="image-container">
                         <img src="${image.imageUrl}" alt="${image.title}" />
@@ -1148,27 +1179,26 @@ strong {
                       <div class="image-title">${image.title}</div>
                     </div>
                   `;
-                } else {
-                  html += `
+              } else {
+                html += `
                     <div class="image-item" style="visibility: hidden;">
                       <div class="image-container"></div>
                       <div class="image-title"></div>
                     </div>
                   `;
-                }
               }
-              html += '</div>';
             }
-            return html;
-          })()}
+            html += '</div>';
+          }
+          return html;
+        })()}
         </div>
       </div>
       ` : ''
-    }
+      }
 
     <!-- TERMS & PREPARED BY SECTION -->
-    ${
-      quotation.termsAndConditions.length > 0 ? `
+    ${quotation.termsAndConditions.length > 0 ? `
       <div class="terms-prepared-section no-break">
         <div class="terms-prepared-header">
           <div class="terms-title">TERMS & CONDITIONS</div>
@@ -1201,7 +1231,7 @@ strong {
         </div>
       </div>
       `
-    }
+      }
   </div>
 
   <!-- FOOTER -->

@@ -29,6 +29,7 @@ export interface IQuotation extends Document {
   items: IQuotationItem[];
   images: IQuotationImage[];
   subtotal: number;
+  discountAmount: number; // NEW: Discount amount field
   vatPercentage: number;
   vatAmount: number;
   netAmount: number;
@@ -120,6 +121,13 @@ const quotationSchema = new Schema<IQuotation>(
       min: 0,
       default: 0,
     },
+    // NEW: Discount amount field with default value of 0
+    discountAmount: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0,
+    },
     vatPercentage: {
       type: Number,
       default: 5,
@@ -161,10 +169,20 @@ const quotationSchema = new Schema<IQuotation>(
   { timestamps: true }
 );
 
+// Updated pre-save hook to include discount in calculations
 quotationSchema.pre<IQuotation>("save", function (next) {
+  // Calculate subtotal
   this.subtotal = this.items.reduce((sum, item) => sum + item.totalPrice, 0);
-  this.vatAmount = this.subtotal * (this.vatPercentage / 100);
-  this.netAmount = this.subtotal + this.vatAmount;
+
+  // Calculate amount after discount
+  const amountAfterDiscount = this.subtotal - this.discountAmount;
+
+  // Calculate VAT on discounted amount
+  this.vatAmount = amountAfterDiscount * (this.vatPercentage / 100);
+
+  // Calculate net amount (discounted amount + VAT)
+  this.netAmount = amountAfterDiscount + this.vatAmount;
+
   next();
 });
 

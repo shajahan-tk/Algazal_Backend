@@ -5,7 +5,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "nodemon"
+    "dev": "nodemon",
+    "migrate-discount": "node migrations/addDiscountToQuotations.js"
   },
   "keywords": [],
   "author": "",

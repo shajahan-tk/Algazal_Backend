@@ -9,8 +9,8 @@ import {
   uploadQuotationImages,
   deleteQuotationImage,
   getQuotationImages,
-  updateQuotationImage, // Add this import
-  replaceQuotationImage, // Add this import
+  updateQuotationImage,
+  replaceQuotationImage,
 } from "../controllers/quotationController";
 import { authenticate, authorize } from "../middlewares/authMiddleware";
 import { upload } from "../config/multer";
@@ -48,6 +48,7 @@ router.patch(
   authorize(["admin", "super_admin", "engineer"]),
   updateQuotationImage
 );
+
 // Replace image file
 router.put(
   "/:id/images/:imageId/replace",
@@ -63,33 +64,38 @@ router.delete(
   deleteQuotationImage
 );
 
-// ... other existing routes
+// Get quotation by project
 router.get(
   "/project/:projectId",
   authorize(["admin", "super_admin", "engineer", "finance"]),
   getQuotationByProject
 );
 
+// Update quotation
 router.put(
   "/:id",
   authorize(["admin", "super_admin", "engineer"]),
   updateQuotation
 );
 
+// Approve/reject quotation
 router.patch(
   "/:id/approval",
   authorize(["admin", "super_admin"]),
   approveQuotation
 );
 
+// Delete quotation
 router.delete("/:id", authorize(["admin", "super_admin"]), deleteQuotation);
 
+// Send quotation email
 router.post(
   "/:id/send-email",
   authorize(["admin", "super_admin", "engineer"]),
   sendQuotationEmail
 );
 
+// Generate quotation PDF
 router.get(
   "/:id/generate-pdf",
   authorize(["admin", "super_admin", "engineer"]),
