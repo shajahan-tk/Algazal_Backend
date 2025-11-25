@@ -34,7 +34,7 @@ export interface IProject extends Document {
   updatedBy?: Types.ObjectId;
   assignedTo?: Types.ObjectId;
   assignedWorkers?: Types.ObjectId[];
-  assignedDriver?: Types.ObjectId;
+  assignedDrivers?: Types.ObjectId[];
   // New fields for completion dates
   completionDate?: Date;
   handoverDate?: Date;
@@ -141,16 +141,18 @@ const projectSchema = new Schema<IProject>(
         ref: "User",
       },
     ],
-    assignedDriver: {
-      type: Schema.Types.ObjectId,
-      ref: "User",
-    },
+    assignedDrivers: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
     grnNumber: {
       type: String,
     },
     workStartDate: { type: Date },
     workEndDate: { type: Date },
-    attention:{ type: String  },
+    attention: { type: String },
   },
   { timestamps: true }
 );

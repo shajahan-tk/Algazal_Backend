@@ -1,3 +1,5 @@
+// src/models/expenseModel.ts
+
 import { Document, Schema, model, Types } from "mongoose";
 import { IProject } from "./projectModel";
 import { IUser } from "./userModel";
@@ -15,8 +17,10 @@ export interface IMaterialItem {
   documentKey?: string;
 }
 
+// CHANGE: Added 'date' field to the interface
 export interface IMiscellaneousExpense {
   description: string;
+  date: Date; // <-- ADDED
   quantity: number;
   unitPrice: number;
   total: number;
@@ -46,7 +50,7 @@ export interface IExpense extends Document {
   totalMiscellaneousCost: number;
   laborDetails: {
     workers: IWorkerLabor[];
-    driver: IDriverLabor;
+    drivers: IDriverLabor[];
     totalLaborCost: number;
   };
   createdBy: Types.ObjectId | IUser;
@@ -75,9 +79,11 @@ const expenseSchema = new Schema<IExpense>(
       },
     ],
     totalMaterialCost: { type: Number, default: 0 },
+    // CHANGE: Added 'date' field to the schema
     miscellaneous: [
       {
         description: { type: String, required: true },
+        date: { type: Date, required: true, default: Date.now }, // <-- ADDED
         quantity: { type: Number, required: true, min: 0 },
         unitPrice: { type: Number, required: true, min: 0 },
         total: { type: Number, required: true, min: 0 },
@@ -93,12 +99,14 @@ const expenseSchema = new Schema<IExpense>(
           totalSalary: { type: Number, required: true, min: 0 },
         },
       ],
-      driver: {
-        user: { type: Schema.Types.ObjectId, ref: "User", required: true },
-        daysPresent: { type: Number, required: true, min: 0 },
-        dailySalary: { type: Number, required: true, min: 0 },
-        totalSalary: { type: Number, required: true, min: 0 },
-      },
+      drivers: [
+        {
+          user: { type: Schema.Types.ObjectId, ref: "User", required: true },
+          daysPresent: { type: Number, required: true, min: 0 },
+          dailySalary: { type: Number, required: true, min: 0 },
+          totalSalary: { type: Number, required: true, min: 0 },
+        },
+      ],
       totalLaborCost: { type: Number, default: 0 },
     },
     createdBy: {
@@ -125,8 +133,11 @@ expenseSchema.pre<IExpense>("save", function (next) {
     (sum, worker) => sum + worker.totalSalary,
     0
   );
-  const driverTotal = this.laborDetails.driver.totalSalary;
-  this.laborDetails.totalLaborCost = workersTotal + driverTotal;
+  const driversTotal = this.laborDetails.drivers.reduce(
+    (sum, driver) => sum + driver.totalSalary,
+    0
+  );
+  this.laborDetails.totalLaborCost = workersTotal + driversTotal;
 
   next();
 });

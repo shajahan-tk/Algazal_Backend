@@ -43,7 +43,7 @@ export const createOrUpdateAttendance = asyncHandler(async (req: Request, res: R
 
     const isAssigned =
       (project.assignedWorkers?.some((w) => w.equals(userId)) ?? false) ||
-      (project.assignedDriver?.equals(userId) ?? false);
+      (project.assignedDrivers?.some((d) => d.equals(userId)) ?? false);
 
     if (!isAssigned) {
       throw new ApiError(400, "User is not assigned to this project");
@@ -272,8 +272,6 @@ export const deleteAttendanceRecord = asyncHandler(async (req: Request, res: Res
     .json(new ApiResponse(200, null, "Attendance record deleted successfully"));
 });
 
-// controllers/attendanceManagementController.js
-
 
 // Get user attendance for specific date
 export const getUserDateAttendance = asyncHandler(async (req: Request, res: Response) => {
@@ -331,7 +329,7 @@ export const getUserProjects = asyncHandler(async (req: Request, res: Response) 
   const projects = await Project.find({
     $or: [
       { assignedWorkers: userId },
-      { assignedDriver: userId }
+      { assignedDrivers: userId }
     ],
     status: {
       $in: [
@@ -343,14 +341,14 @@ export const getUserProjects = asyncHandler(async (req: Request, res: Response) 
       ]
     } // Only active projects
   })
-    .select("_id projectName projectNumber location building apartmentNumber client assignedWorkers assignedDriver")
+    .select("_id projectName projectNumber location building apartmentNumber client assignedWorkers assignedDrivers")
     .populate("client", "clientName")
     .sort({ projectName: 1 });
 
   // Format the response with assignment type
   const formattedProjects = projects.map((project: any) => {
     const isWorker = project.assignedWorkers?.some((worker: any) => worker.equals(userId));
-    const isDriver = project.assignedDriver?.equals(userId);
+    const isDriver = project.assignedDrivers?.some((driver: any) => driver.equals(userId));
 
     let assignmentType = '';
     if (isWorker && isDriver) {

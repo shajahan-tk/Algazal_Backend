@@ -80,13 +80,14 @@ export const markAttendance = asyncHandler(
 
       const isAssigned =
         (project.assignedWorkers?.some((w) => w.equals(userId)) ?? false) ||
-        (project.assignedDriver?.equals(userId) ?? false);
+        (project.assignedDrivers?.some((d) => d.equals(userId)) ?? false);
 
       if (!isAssigned) {
         throw new ApiError(400, "User is not assigned to this project");
       }
 
-      if (!project.assignedDriver?.equals(markedBy)) {
+      const isDriver = project.assignedDrivers?.some((d) => d.equals(markedBy));
+      if (!isDriver) {
         throw new ApiError(403, "Only assigned driver can mark project attendance");
       }
     }
@@ -243,10 +244,10 @@ export const getTodayProjectAttendance = asyncHandler(
         > & { _id: Types.ObjectId })[];
       }>("assignedWorkers", "_id firstName lastName profileImage phoneNumbers")
       .populate<{
-        assignedDriver: Pick<IUser, "_id" | "firstName" | "lastName"> & {
+        assignedDrivers: (Pick<IUser, "_id" | "firstName" | "lastName"> & {
           _id: Types.ObjectId;
-        };
-      }>("assignedDriver", "_id firstName lastName");
+        })[];
+      }>("assignedDrivers", "_id firstName lastName");
 
     if (!project) {
       throw new ApiError(404, "Project not found");
@@ -301,7 +302,7 @@ export const getTodayProjectAttendance = asyncHandler(
           project: {
             _id: project._id,
             projectName: project.projectName,
-            assignedDriver: project.assignedDriver,
+            assignedDrivers: project.assignedDrivers,
           },
           workers: workersWithAttendance,
           date: today,

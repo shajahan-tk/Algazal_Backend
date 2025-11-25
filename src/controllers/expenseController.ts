@@ -38,8 +38,10 @@ interface MaterialInput {
   documentKey?: string;
 }
 
+// Updated interface to include date field
 interface MiscellaneousInput {
   description: string;
+  date: Date; // Added date field
   quantity: number;
   unitPrice: number;
   total: number;
@@ -71,8 +73,8 @@ const calculateLaborDetails = async (projectId: string) => {
       "assignedWorkers",
       "firstName lastName profileImage salary"
     )
-    .populate<{ assignedDriver: PopulatedUser }>(
-      "assignedDriver",
+    .populate<{ assignedDrivers: PopulatedUser[] }>(
+      "assignedDrivers",
       "firstName lastName profileImage salary"
     );
 
@@ -81,7 +83,7 @@ const calculateLaborDetails = async (projectId: string) => {
   }
 
   const workersToProcess = project.assignedWorkers || [];
-  const workerIds = workersToProcess.map((worker) => worker._id);
+  const driversToProcess = project.assignedDrivers || [];
 
   // Fetch all attendance records for this project
   const projectAttendanceRecords = await Attendance.find({
@@ -126,36 +128,28 @@ const calculateLaborDetails = async (projectId: string) => {
     })
     .filter((worker) => worker.daysPresent > 0); // Only include workers with days > 0
 
-  const driverDaysPresent = project.assignedDriver
-    ? userDaysMap.get(project.assignedDriver._id.toString()) || 0
-    : 0;
-
-  const driver = project.assignedDriver
-    ? {
-      user: project.assignedDriver._id,
-      firstName: project.assignedDriver.firstName,
-      lastName: project.assignedDriver.lastName,
-      profileImage: project.assignedDriver.profileImage,
-      daysPresent: Number(driverDaysPresent.toFixed(2)),
-      dailySalary: project.assignedDriver.salary || 0,
-      totalSalary: driverDaysPresent * (project.assignedDriver.salary || 0),
-    }
-    : {
-      user: new Types.ObjectId(),
-      firstName: "No",
-      lastName: "Driver",
-      daysPresent: 0,
-      dailySalary: 0,
-      totalSalary: 0,
-    };
+  const drivers = driversToProcess
+    .map((driver) => {
+      const daysPresent = userDaysMap.get(driver._id.toString()) || 0;
+      return {
+        user: driver._id,
+        firstName: driver.firstName,
+        lastName: driver.lastName,
+        profileImage: driver.profileImage,
+        daysPresent: Number(daysPresent.toFixed(2)),
+        dailySalary: driver.salary || 0,
+        totalSalary: daysPresent * (driver.salary || 0),
+      };
+    })
+    .filter((driver) => driver.daysPresent > 0);
 
   const totalLaborCost =
     workers.reduce((sum, worker) => sum + worker.totalSalary, 0) +
-    driver.totalSalary;
+    drivers.reduce((sum, driver) => sum + driver.totalSalary, 0);
 
   return {
     workers,
-    driver,
+    drivers,
     totalLaborCost,
   };
 };
@@ -250,6 +244,12 @@ export const createExpense = asyncHandler(
         typeof req.body.miscellaneous === "string"
           ? JSON.parse(req.body.miscellaneous)
           : req.body.miscellaneous;
+
+      // Process date field for miscellaneous items
+      miscellaneous = miscellaneous.map(item => ({
+        ...item,
+        date: new Date(item.date)
+      }));
     } catch (err) {
       throw new ApiError(
         400,
@@ -260,7 +260,7 @@ export const createExpense = asyncHandler(
     const files = req.files as
       | { [fieldname: string]: Express.Multer.File[] }
       | undefined;
-    const materialFiles = files?.materialFiles ? [...files.materialFiles] : [];
+    const materialFiles = files?.files ? [...files.files] : [];
 
     try {
       const laborDetails = await calculateLaborDetails(projectId);
@@ -307,7 +307,7 @@ export const getProjectExpenses = asyncHandler(
         "firstName lastName profileImage salary"
       )
       .populate(
-        "laborDetails.driver.user",
+        "laborDetails.drivers.user",
         "firstName lastName profileImage salary"
       )
       .populate("createdBy", "firstName lastName")
@@ -356,7 +356,7 @@ export const getExpenseById = asyncHandler(
         "firstName lastName profileImage salary"
       )
       .populate(
-        "laborDetails.driver.user",
+        "laborDetails.drivers.user",
         "firstName lastName profileImage salary"
       )
       .populate("createdBy", "firstName lastName")
@@ -419,6 +419,12 @@ export const updateExpense = asyncHandler(
         typeof req.body.miscellaneous === "string"
           ? JSON.parse(req.body.miscellaneous)
           : req.body.miscellaneous;
+
+      // Process date field for miscellaneous items
+      miscellaneous = miscellaneous.map(item => ({
+        ...item,
+        date: new Date(item.date)
+      }));
     } catch (err) {
       throw new ApiError(
         400,
@@ -465,8 +471,11 @@ export const updateExpense = asyncHandler(
         (sum, worker) => sum + worker.totalSalary,
         0
       );
-      const driverTotal = laborDetails.driver.totalSalary;
-      const totalLaborCost = workersTotal + driverTotal;
+      const driversTotal = laborDetails.drivers.reduce(
+        (sum, driver) => sum + driver.totalSalary,
+        0
+      );
+      const totalLaborCost = workersTotal + driversTotal;
 
       // Update the expense with calculated totals
       const updatedExpense = await Expense.findByIdAndUpdate(
@@ -478,7 +487,7 @@ export const updateExpense = asyncHandler(
           totalMiscellaneousCost: totalMiscellaneousCost,
           laborDetails: {
             workers: laborDetails.workers,
-            driver: laborDetails.driver,
+            drivers: laborDetails.drivers,
             totalLaborCost: totalLaborCost,
           },
           updatedAt: new Date(),
@@ -493,7 +502,7 @@ export const updateExpense = asyncHandler(
           "firstName lastName profileImage salary"
         )
         .populate(
-          "laborDetails.driver.user",
+          "laborDetails.drivers.user",
           "firstName lastName profileImage salary"
         )
         .populate("createdBy", "firstName lastName")
@@ -568,7 +577,9 @@ export const getExpenseSummary = asyncHandler(
         0
       ),
       driverCost: expenses.reduce(
-        (sum, e) => sum + e.laborDetails.driver.totalSalary,
+        (sum, e) =>
+          sum +
+          e.laborDetails.drivers.reduce((dSum, d) => dSum + d.totalSalary, 0),
         0
       ),
       commissionAmount: estimation?.commissionAmount || 0,
@@ -589,8 +600,6 @@ export const getExpenseSummary = asyncHandler(
       );
   }
 );
-
-
 
 export const generateExpensePdf = asyncHandler(
   async (req: Request, res: Response) => {
@@ -614,6 +623,7 @@ export const generateExpensePdf = asyncHandler(
       totalMaterialCost: number;
       miscellaneous: {
         description: string;
+        date: Date; // Added date field
         quantity: number;
         unitPrice: number;
         total: number;
@@ -629,7 +639,7 @@ export const generateExpensePdf = asyncHandler(
           dailySalary: number;
           totalSalary: number;
         }[];
-        driver: {
+        drivers: {
           user: {
             firstName: string;
             lastName: string;
@@ -637,7 +647,7 @@ export const generateExpensePdf = asyncHandler(
           daysPresent: number;
           dailySalary: number;
           totalSalary: number;
-        };
+        }[];
         totalLaborCost: number;
       };
       createdBy: {
@@ -659,7 +669,7 @@ export const generateExpensePdf = asyncHandler(
       )
       .populate("laborDetails.workers.user", "firstName lastName")
       .populate(
-        "laborDetails.driver.user",
+        "laborDetails.drivers.user",
         "firstName lastName"
       )) as unknown as PopulatedExpense;
 
@@ -847,10 +857,11 @@ export const generateExpensePdf = asyncHandler(
           <thead>
             <tr>
               <th width="5%">No.</th>
-              <th width="40%">Description</th>
+              <th width="25%">Description</th>
+              <th width="12%">Date</th>
               <th width="15%">Qty</th>
               <th width="15%">Unit Price (AED)</th>
-              <th width="25%" class="text-right">Amount (AED)</th>
+              <th width="18%" class="text-right">Amount (AED)</th>
             </tr>
           </thead>
           <tbody>
@@ -860,6 +871,7 @@ export const generateExpensePdf = asyncHandler(
               <tr>
                 <td>${index + 1}</td>
                 <td>${item.description}</td>
+                <td>${formatDate(item.date)}</td>
                 <td>${item.quantity}</td>
                 <td>${item.unitPrice.toFixed(2)}</td>
                 <td class="text-right">${item.total.toFixed(2)}</td>
@@ -870,7 +882,7 @@ export const generateExpensePdf = asyncHandler(
           </tbody>
           <tfoot>
             <tr class="total-row">
-              <td colspan="4">TOTAL MISCELLANEOUS COST</td>
+              <td colspan="5">TOTAL MISCELLANEOUS COST</td>
               <td class="text-right">${totalMiscellaneousCost.toFixed(2)}</td>
             </tr>
           </tfoot>
@@ -927,17 +939,25 @@ export const generateExpensePdf = asyncHandler(
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td>${expense.laborDetails.driver.user.firstName} ${expense.laborDetails.driver.user.lastName}</td>
-              <td>${expense.laborDetails.driver.daysPresent}</td>
-              <td>${expense.laborDetails.driver.dailySalary.toFixed(2)}</td>
-              <td class="text-right">${expense.laborDetails.driver.totalSalary.toFixed(2)}</td>
-            </tr>
+            ${expense.laborDetails.drivers
+        .map(
+          (driver) => `
+              <tr>
+                <td>${driver.user.firstName} ${driver.user.lastName}</td>
+                <td>${driver.daysPresent}</td>
+                <td>${driver.dailySalary.toFixed(2)}</td>
+                <td class="text-right">${driver.totalSalary.toFixed(2)}</td>
+              </tr>
+            `
+        )
+        .join("")}
           </tbody>
           <tfoot>
             <tr class="total-row">
               <td colspan="3">TOTAL DRIVER COST</td>
-              <td class="text-right">${expense.laborDetails.driver.totalSalary.toFixed(2)}</td>
+              <td class="text-right">${expense.laborDetails.drivers
+        .reduce((sum, d) => sum + d.totalSalary, 0)
+        .toFixed(2)}</td>
             </tr>
           </tfoot>
         </table>
@@ -955,7 +975,9 @@ export const generateExpensePdf = asyncHandler(
             </tr>
             <tr>
               <td>Total Driver Cost</td>
-              <td class="text-right">${expense.laborDetails.driver.totalSalary.toFixed(2)}</td>
+              <td class="text-right">${expense.laborDetails.drivers
+        .reduce((sum, d) => sum + d.totalSalary, 0)
+        .toFixed(2)}</td>
             </tr>
           </tbody>
           <tfoot>

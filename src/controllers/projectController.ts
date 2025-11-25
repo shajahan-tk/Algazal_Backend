@@ -107,14 +107,14 @@ export const getProjects = asyncHandler(async (req: Request, res: Response) => {
   // Search functionality
   if (req.query.search) {
     const searchTerm = req.query.search as string;
-    
+
     // Search for matching clients by name
     const matchingClients = await Client.find({
       clientName: { $regex: searchTerm, $options: "i" }
     }).select("_id");
-    
+
     const clientIds = matchingClients.map(client => client._id);
-    
+
     // Build $or array with all searchable fields
     filter.$or = [
       { projectName: { $regex: searchTerm, $options: "i" } },
@@ -124,7 +124,7 @@ export const getProjects = asyncHandler(async (req: Request, res: Response) => {
       { apartmentNumber: { $regex: searchTerm, $options: "i" } },
       { projectNumber: { $regex: searchTerm, $options: "i" } },
     ];
-    
+
     // Add client IDs to search if any matching clients found
     if (clientIds.length > 0) {
       filter.$or.push({ client: { $in: clientIds } });
@@ -830,11 +830,11 @@ const convertToWords = (num: number): string => {
 export const assignTeamAndDriver = asyncHandler(
   async (req: Request, res: Response) => {
     const { projectId } = req.params;
-    const { workers, driverId } = req.body;
+    const { workers, driverIds } = req.body;
 
     // Validation
-    if (!Array.isArray(workers) || workers.length === 0 || !driverId) {
-      throw new ApiError(400, "Both workers array and driverId are required");
+    if (!Array.isArray(workers) || workers.length === 0 || !Array.isArray(driverIds) || driverIds.length === 0) {
+      throw new ApiError(400, "Both workers array and driverIds array are required");
     }
 
     const project = await Project.findById(projectId);
@@ -877,19 +877,19 @@ export const assignTeamAndDriver = asyncHandler(
       throw new ApiError(400, `Invalid or inactive workers found: ${invalidIds.join(', ')}`);
     }
 
-    // Verify driver exists and is active
-    const driver = await User.findOne({
-      _id: driverId,
+    // Verify drivers exist and are active
+    const drivers = await User.find({
+      _id: { $in: driverIds },
       role: "driver",
       isActive: true
     });
-    if (!driver) {
-      throw new ApiError(400, "Valid active driver ID is required");
+    if (drivers.length !== driverIds.length) {
+      throw new ApiError(400, "All driver IDs must be valid active drivers");
     }
 
     // Update project
     project.assignedWorkers = workers;
-    project.assignedDriver = driverId;
+    project.assignedDrivers = driverIds;
     project.status = "team_assigned";
     project.updatedBy = req.user?.userId
       ? new mongoose.Types.ObjectId(req.user.userId)
@@ -898,12 +898,12 @@ export const assignTeamAndDriver = asyncHandler(
     await project.save();
 
     // Send notifications (implementation depends on your mailer service)
-    // await sendAssignmentNotifications(project, workers, driverId);
+    // await sendAssignmentNotifications(project, workers, driverIds);
 
     res
       .status(200)
       .json(
-        new ApiResponse(200, project, "Team and driver assigned successfully")
+        new ApiResponse(200, project, "Team and drivers assigned successfully")
       );
   }
 );
@@ -944,7 +944,7 @@ export const getAssignedTeam = asyncHandler(
 
     const project = await Project.findById(projectId)
       .populate("assignedWorkers", "firstName lastName profileImage")
-      .populate("assignedDriver", "firstName lastName profileImage");
+      .populate("assignedDrivers", "firstName lastName profileImage");
 
     if (!project) throw new ApiError(404, "Project not found");
 
@@ -953,7 +953,7 @@ export const getAssignedTeam = asyncHandler(
         200,
         {
           workers: project.assignedWorkers,
-          driver: project.assignedDriver,
+          drivers: project.assignedDrivers,
         },
         "Assigned team fetched successfully"
       )
@@ -974,32 +974,29 @@ export const updateWorkersAndDriver = asyncHandler(
     console.log('====================================');
 
     const { id } = req.params;
-    const { workers, driverId } = req.body;
+    const { workers, driverIds } = req.body;
 
     // Validation
-    if (!id) {
-      throw new ApiError(400, "Project ID is required");
+    if (!id || !Types.ObjectId.isValid(id)) {
+      throw new ApiError(400, "Valid project ID is required");
     }
 
-    // Check if body is completely empty
     if (Object.keys(req.body).length === 0) {
-      throw new ApiError(400, "Request body is empty. Please send workers and/or driverId");
+      throw new ApiError(400, "Request body is empty. Please send workers and/or driverIds");
     }
 
     // At least one field should be provided
-    if (workers === undefined && driverId === undefined) {
-      throw new ApiError(400, "Either workers array or driverId must be provided");
+    if (workers === undefined && driverIds === undefined) {
+      throw new ApiError(400, "Either workers array or driverIds array must be provided");
     }
 
-    // Rest of your existing code...
     // Find project
     const project = await Project.findById(id);
     if (!project) {
       throw new ApiError(404, "Project not found");
     }
 
-
-    // Define all valid worker roles (same as assignTeamAndDriver)
+    // Define all valid worker roles
     const validWorkerRoles = [
       "worker",
       "plumber",
@@ -1025,14 +1022,11 @@ export const updateWorkersAndDriver = asyncHandler(
 
     // Validate and update workers if provided
     if (workers !== undefined) {
-      // Explicit check for undefined (empty array is valid to clear all workers)
       if (!Array.isArray(workers)) {
         throw new ApiError(400, "Workers must be an array");
       }
 
-      // If workers array is not empty, validate all IDs
       if (workers.length > 0) {
-        // Verify all workers have valid worker roles and are active
         const validWorkers = await User.find({
           _id: { $in: workers },
           role: { $in: validWorkerRoles },
@@ -1047,28 +1041,28 @@ export const updateWorkersAndDriver = asyncHandler(
 
         project.assignedWorkers = workers;
       } else {
-        // If workers array is empty, clear all workers
         project.assignedWorkers = [];
       }
     }
 
-    // Validate and update driver if provided
-    if (driverId !== undefined) {
-      // Explicit check for undefined (null/empty is valid to clear driver)
-      if (driverId) {
-        // Verify driver exists and is active
-        const driver = await User.findOne({
-          _id: driverId,
+    // Validate and update drivers if provided
+    if (driverIds !== undefined) {
+      if (!Array.isArray(driverIds)) {
+        throw new ApiError(400, "driverIds must be an array");
+      }
+
+      if (driverIds.length > 0) {
+        const drivers = await User.find({
+          _id: { $in: driverIds },
           role: "driver",
           isActive: true
         });
-        if (!driver) {
-          throw new ApiError(400, "Valid active driver ID is required");
+        if (drivers.length !== driverIds.length) {
+          throw new ApiError(400, "All driver IDs must be valid active drivers");
         }
-        project.assignedDriver = driverId;
+        project.assignedDrivers = driverIds;
       } else {
-        // If driverId is explicitly set to null/empty, clear it
-        project.assignedDriver = undefined;
+        project.assignedDrivers = [];
       }
     }
 
@@ -1188,7 +1182,7 @@ export const getDriverProjects = asyncHandler(
     const skip = (page - 1) * limit;
 
     // Build filter - only projects assigned to this driver
-    const filter: any = { assignedDriver: driverId };
+    const filter: any = { assignedDrivers: driverId };
 
     // Status filter
     if (req.query.status) {
@@ -1213,7 +1207,7 @@ export const getDriverProjects = asyncHandler(
     const projects = await Project.find(filter)
       .populate("client", "clientName clientAddress mobileNumber")
       .populate("assignedWorkers", "firstName lastName profileImage")
-      .populate("assignedDriver", "firstName lastName profileImage")
+      .populate("assignedDrivers", "firstName lastName profileImage")
       .skip(skip)
       .limit(limit)
       .sort({ createdAt: -1 });
@@ -1282,7 +1276,7 @@ export const generateInvoicePdf = asyncHandler(
     const createdBy = project.createdBy as IUser;
 
     // Generate invoice number
-    const invoiceNumber = `INV${project.projectNumber.slice(3,20)}`;
+    const invoiceNumber = `INV${project.projectNumber.slice(3, 20)}`;
 
     // Format dates
     const formatDate = (date: Date | string | undefined): string => {

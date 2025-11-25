@@ -3,13 +3,13 @@ import { asyncHandler } from "../utils/asyncHandler";
 import { ApiResponse } from "../utils/apiHandlerHelpers";
 import { ApiError } from "../utils/apiHandlerHelpers";
 import {
-  IWorkCompletionImage,
-  WorkCompletion,
+    IWorkCompletionImage,
+    WorkCompletion,
 } from "../models/workCompletionModel";
 import { IProject, Project } from "../models/projectModel";
 import {
-  uploadWorkCompletionImagesToS3,
-  deleteFileFromS3,
+    uploadWorkCompletionImagesToS3,
+    deleteFileFromS3,
 } from "../utils/uploadConf";
 import { Client, IClient } from "../models/clientModel";
 import { LPO } from "../models/lpoModel";
@@ -20,568 +20,568 @@ import { Types } from "mongoose";
 
 // Helper function to get completion data
 async function getCompletionDataForProject(projectId: string) {
-  type PopulatedProject = Omit<
-    IProject,
-    "client" | "assignedTo" | "createdBy"
-  > & {
-    client: IClient;
-    assignedTo?: IUser;
-    createdBy: IUser;
-  };
+    type PopulatedProject = Omit<
+        IProject,
+        "client" | "assignedTo" | "createdBy"
+    > & {
+        client: IClient;
+        assignedTo?: IUser;
+        createdBy: IUser;
+    };
 
-  const project = await Project.findById(projectId)
-    .populate<{ client: IClient }>("client", "clientName")
-    .populate<{ assignedTo: IUser }>("assignedTo", "firstName lastName")
-    .populate<{ createdBy: IUser }>("createdBy", "firstName lastName");
+    const project = await Project.findById(projectId)
+        .populate<{ client: IClient }>("client", "clientName")
+        .populate<{ assignedTo: IUser }>("assignedTo", "firstName lastName")
+        .populate<{ createdBy: IUser }>("createdBy", "firstName lastName");
 
-  if (!project) {
-    throw new ApiError(404, "Project not found");
-  }
+    if (!project) {
+        throw new ApiError(404, "Project not found");
+    }
 
-  const populatedProject = project as unknown as PopulatedProject;
-  const client = populatedProject.client;
-  const lpo = await LPO.findOne({ project: projectId })
-    .sort({ createdAt: -1 })
-    .limit(1);
-  const workCompletion = await WorkCompletion.findOne({ project: projectId })
-    .populate("createdBy", "firstName lastName")
-    .sort({ createdAt: -1 });
+    const populatedProject = project as unknown as PopulatedProject;
+    const client = populatedProject.client;
+    const lpo = await LPO.findOne({ project: projectId })
+        .sort({ createdAt: -1 })
+        .limit(1);
+    const workCompletion = await WorkCompletion.findOne({ project: projectId })
+        .populate("createdBy", "firstName lastName")
+        .sort({ createdAt: -1 });
 
-  return {
-    _id: populatedProject._id.toString(),
-    referenceNumber: `COMP-${populatedProject._id
-      .toString()
-      .slice(-6)
-      .toUpperCase()}`,
-    fmContractor: "Al Ghazal Al Abyad Technical Services",
-    subContractor: client.clientName,
-    projectDescription:
-      populatedProject.projectDescription || "No description provided",
-    location: `${populatedProject.location}, ${populatedProject.building}, ${populatedProject.apartmentNumber}`,
-    completionDate:
-      populatedProject.completionDate?.toISOString() ||
-      populatedProject.updatedAt?.toISOString() ||
-      new Date().toISOString(),
-    lpoNumber: lpo?.lpoNumber || "Not available",
-    lpoDate: lpo?.lpoDate?.toISOString() || "Not available",
-    handover: {
-      company: "AL GHAZAL AL ABYAD TECHNICAL SERVICES",
-      name: populatedProject.assignedTo
-        ? `${populatedProject.assignedTo.firstName} ${populatedProject.assignedTo.lastName}`
-        : "Not assigned",
-      signature: "",
-      date:
-        populatedProject.handoverDate?.toISOString() ||
-        populatedProject.updatedAt?.toISOString() ||
-        new Date().toISOString(),
-    },
-    acceptance: {
-      company: client.clientName,
-      name: client.clientName,
-      signature: "",
-      date:
-        populatedProject.acceptanceDate?.toISOString() ||
-        new Date().toISOString(),
-    },
-    sitePictures:
-      workCompletion?.images.map((img) => ({
-        url: img.imageUrl,
-        title: img.title,
-        _id: img._id
-      })) || [],
-    project: {
-      _id: populatedProject._id.toString(),
-      projectName: populatedProject.projectName,
-    },
-    preparedBy: {
-      _id: populatedProject.createdBy._id.toString(),
-      firstName: populatedProject.createdBy.firstName,
-      lastName: populatedProject.createdBy.lastName,
-    },
-    createdAt:
-      workCompletion?.createdAt?.toISOString() || new Date().toISOString(),
-    updatedAt:
-      workCompletion?.updatedAt?.toISOString() || new Date().toISOString(),
-  };
+    return {
+        _id: populatedProject._id.toString(),
+        referenceNumber: `COMP-${populatedProject._id
+            .toString()
+            .slice(-6)
+            .toUpperCase()}`,
+        fmContractor: "Al Ghazal Al Abyad Technical Services",
+        subContractor: client.clientName,
+        projectDescription:
+            populatedProject.projectDescription || "No description provided",
+        location: `${populatedProject.location}, ${populatedProject.building}, ${populatedProject.apartmentNumber}`,
+        completionDate:
+            populatedProject.completionDate?.toISOString() ||
+            populatedProject.updatedAt?.toISOString() ||
+            new Date().toISOString(),
+        lpoNumber: lpo?.lpoNumber || "Not available",
+        lpoDate: lpo?.lpoDate?.toISOString() || "Not available",
+        handover: {
+            company: "AL GHAZAL AL ABYAD TECHNICAL SERVICES",
+            name: populatedProject.assignedTo
+                ? `${populatedProject.assignedTo.firstName} ${populatedProject.assignedTo.lastName}`
+                : "Not assigned",
+            signature: "",
+            date:
+                populatedProject.handoverDate?.toISOString() ||
+                populatedProject.updatedAt?.toISOString() ||
+                new Date().toISOString(),
+        },
+        acceptance: {
+            company: client.clientName,
+            name: client.clientName,
+            signature: "",
+            date:
+                populatedProject.acceptanceDate?.toISOString() ||
+                new Date().toISOString(),
+        },
+        sitePictures:
+            workCompletion?.images.map((img) => ({
+                url: img.imageUrl,
+                title: img.title,
+                _id: img._id
+            })) || [],
+        project: {
+            _id: populatedProject._id.toString(),
+            projectName: populatedProject.projectName,
+        },
+        preparedBy: {
+            _id: populatedProject.createdBy._id.toString(),
+            firstName: populatedProject.createdBy.firstName,
+            lastName: populatedProject.createdBy.lastName,
+        },
+        createdAt:
+            workCompletion?.createdAt?.toISOString() || new Date().toISOString(),
+        updatedAt:
+            workCompletion?.updatedAt?.toISOString() || new Date().toISOString(),
+    };
 }
 
 export const createWorkCompletion = asyncHandler(
-  async (req: Request, res: Response) => {
-    const { projectId } = req.body;
+    async (req: Request, res: Response) => {
+        const { projectId } = req.body;
 
-    if (!projectId) {
-      throw new ApiError(400, "Project ID is required");
+        if (!projectId) {
+            throw new ApiError(400, "Project ID is required");
+        }
+
+        const project = await Project.findById(projectId);
+        if (!project) {
+            throw new ApiError(404, "Project not found");
+        }
+
+        const workCompletion = await WorkCompletion.create({
+            project: projectId,
+            completionNumber: await generateRelatedDocumentNumber(projectId, "WCPAGA"),
+            createdBy: req.user?.userId,
+        });
+
+        res
+            .status(201)
+            .json(
+                new ApiResponse(
+                    201,
+                    workCompletion,
+                    "Work completion created successfully"
+                )
+            );
     }
-
-    const project = await Project.findById(projectId);
-    if (!project) {
-      throw new ApiError(404, "Project not found");
-    }
-
-    const workCompletion = await WorkCompletion.create({
-      project: projectId,
-      completionNumber: await generateRelatedDocumentNumber(projectId, "WCPAGA"),
-      createdBy: req.user?.userId,
-    });
-
-    res
-      .status(201)
-      .json(
-        new ApiResponse(
-          201,
-          workCompletion,
-          "Work completion created successfully"
-        )
-      );
-  }
 );
 export const replaceWorkCompletionImage = asyncHandler(
-  async (req: Request, res: Response) => {
-    const { projectId, imageId } = req.params;
-    const file = req.file as Express.Multer.File;
+    async (req: Request, res: Response) => {
+        const { projectId, imageId } = req.params;
+        const file = req.file as Express.Multer.File;
 
-    if (!projectId || !imageId) {
-      throw new ApiError(400, "Project ID and image ID are required");
-    }
+        if (!projectId || !imageId) {
+            throw new ApiError(400, "Project ID and image ID are required");
+        }
 
-    if (!file) {
-      throw new ApiError(400, "Image file is required");
-    }
+        if (!file) {
+            throw new ApiError(400, "Image file is required");
+        }
 
-    const workCompletion = await WorkCompletion.findOne({ project: projectId });
-    if (!workCompletion) {
-      throw new ApiError(404, "Work completion not found");
-    }
+        const workCompletion = await WorkCompletion.findOne({ project: projectId });
+        if (!workCompletion) {
+            throw new ApiError(404, "Work completion not found");
+        }
 
-    // Check if user is authorized to update this work completion
-    if (workCompletion.createdBy.toString() !== req.user?.userId.toString()) {
-      throw new ApiError(403, "Not authorized to update this work completion");
-    }
+        // Check if user is authorized to update this work completion
+        if (workCompletion.createdBy.toString() !== req.user?.userId.toString()) {
+            throw new ApiError(403, "Not authorized to update this work completion");
+        }
 
-    const imageIndex = workCompletion.images.findIndex(
-      (img) => img._id.toString() === imageId
-    );
+        const imageIndex = workCompletion.images.findIndex(
+            (img) => img._id.toString() === imageId
+        );
 
-    if (imageIndex === -1) {
-      throw new ApiError(404, "Image not found");
-    }
+        if (imageIndex === -1) {
+            throw new ApiError(404, "Image not found");
+        }
 
-    const oldImage = workCompletion.images[imageIndex];
+        const oldImage = workCompletion.images[imageIndex];
 
-    // Upload new image
-    const uploadResult = await uploadWorkCompletionImagesToS3([file]);
+        // Upload new image
+        const uploadResult = await uploadWorkCompletionImagesToS3([file]);
 
-    if (!uploadResult.success || !uploadResult.uploadData?.[0]) {
-      throw new ApiError(500, "Failed to upload new image to S3");
-    }
+        if (!uploadResult.success || !uploadResult.uploadData?.[0]) {
+            throw new ApiError(500, "Failed to upload new image to S3");
+        }
 
-    const newImageData = uploadResult.uploadData[0];
+        const newImageData = uploadResult.uploadData[0];
 
-    // Delete old image from S3
-    if (oldImage.s3Key) {
-      await deleteFileFromS3(oldImage.s3Key);
-    }
+        // Delete old image from S3
+        if (oldImage.s3Key) {
+            await deleteFileFromS3(oldImage.s3Key);
+        }
 
-    // Update image with new file
-    workCompletion.images[imageIndex].imageUrl = newImageData.url;
-    workCompletion.images[imageIndex].s3Key = newImageData.key;
-    workCompletion.images[imageIndex].uploadedAt = new Date();
+        // Update image with new file
+        workCompletion.images[imageIndex].imageUrl = newImageData.url;
+        workCompletion.images[imageIndex].s3Key = newImageData.key;
+        workCompletion.images[imageIndex].uploadedAt = new Date();
 
-    await workCompletion.save();
-    const updatedData = await getCompletionDataForProject(projectId);
+        await workCompletion.save();
+        const updatedData = await getCompletionDataForProject(projectId);
 
-    res.status(200).json(
-      new ApiResponse(200, updatedData, "Image replaced successfully")
-    );
-  }
-);
-export const uploadWorkCompletionImages = asyncHandler(
-  async (req: Request, res: Response) => {
-    const { projectId } = req.params;
-    const files = req.files as Express.Multer.File[];
-    const { titles = [], descriptions = [] } = req.body;
-
-    if (!projectId) {
-      throw new ApiError(400, "Project ID is required");
-    }
-
-    if (!files || files.length === 0) {
-      throw new ApiError(400, "No images uploaded");
-    }
-
-    if (!req.user?.userId) {
-      throw new ApiError(401, "Unauthorized");
-    }
-
-    const titlesArray: string[] = Array.isArray(titles) ? titles : [titles];
-    const descriptionsArray: string[] = Array.isArray(descriptions)
-      ? descriptions
-      : [descriptions];
-
-    if (titlesArray.length !== files.length) {
-      throw new ApiError(400, "Number of titles must match number of images");
-    }
-
-    if (titlesArray.some((title) => !title?.trim())) {
-      throw new ApiError(400, "All images must have a non-empty title");
-    }
-
-    let workCompletion = await WorkCompletion.findOne({ project: projectId });
-
-    if (!workCompletion) {
-      workCompletion = await WorkCompletion.create({
-        project: projectId,
-        createdBy: req.user.userId,
-        images: [],
-      });
-    } else if (
-      workCompletion.createdBy.toString() !== req.user.userId.toString()
-    ) {
-      throw new ApiError(403, "Not authorized to update this work completion");
-    }
-
-    const uploadResults = await uploadWorkCompletionImagesToS3(files);
-
-    if (!uploadResults.success || !uploadResults.uploadData) {
-      throw new ApiError(500, "Failed to upload images to S3");
-    }
-
-    const newImages: any[] = uploadResults.uploadData.map(
-      (fileData, index) => ({
-        _id: new Types.ObjectId(),
-        title: titlesArray[index],
-        imageUrl: fileData.url,
-        s3Key: fileData.key,
-        description: descriptionsArray[index] || "",
-        uploadedAt: new Date(),
-      })
-    );
-
-    workCompletion.images.push(...newImages);
-    await workCompletion.save();
-
-    const updatedData = await getCompletionDataForProject(projectId);
-
-    res
-      .status(200)
-      .json(new ApiResponse(200, updatedData, "Images uploaded successfully"));
-  }
-);
-export const updateWorkCompletionImage = asyncHandler(
-  async (req: Request, res: Response) => {
-    const { projectId, imageId } = req.params;
-    const { title } = req.body;
-
-    if (!projectId || !imageId) {
-      throw new ApiError(400, "Project ID and image ID are required");
-    }
-
-    if (!title?.trim()) {
-      throw new ApiError(400, "Title is required and cannot be empty");
-    }
-
-    const workCompletion = await WorkCompletion.findOne({ project: projectId });
-    if (!workCompletion) {
-      throw new ApiError(404, "Work completion not found");
-    }
-
-    // Check if user is authorized to update this work completion
-    if (workCompletion.createdBy.toString() !== req.user?.userId.toString()) {
-      throw new ApiError(403, "Not authorized to update this work completion");
-    }
-
-    const imageIndex = workCompletion.images.findIndex(
-      (img) => img._id.toString() === imageId
-    );
-
-    if (imageIndex === -1) {
-      throw new ApiError(404, "Image not found");
-    }
-
-    // Update only the title
-    workCompletion.images[imageIndex].title = title.trim();
-    await workCompletion.save();
-
-    const updatedData = await getCompletionDataForProject(projectId);
-
-    res.status(200).json(
-      new ApiResponse(200, updatedData, "Image title updated successfully")
-    );
-  }
-);
-export const getWorkCompletion = asyncHandler(
-  async (req: Request, res: Response) => {
-    const { projectId } = req.params;
-
-    if (!projectId) {
-      throw new ApiError(400, "Project ID is required");
-    }
-
-    const workCompletion = await WorkCompletion.findOne({ project: projectId })
-      .populate("createdBy", "firstName lastName")
-      .sort({ createdAt: -1 });
-
-    if (!workCompletion) {
-      return res
-        .status(200)
-        .json(
-          new ApiResponse(
-            200,
-            null,
-            "No work completion found for this project"
-          )
+        res.status(200).json(
+            new ApiResponse(200, updatedData, "Image replaced successfully")
         );
     }
+);
+export const uploadWorkCompletionImages = asyncHandler(
+    async (req: Request, res: Response) => {
+        const { projectId } = req.params;
+        const files = req.files as Express.Multer.File[];
+        const { titles = [], descriptions = [] } = req.body;
 
-    const completionData = await getCompletionDataForProject(projectId);
+        if (!projectId) {
+            throw new ApiError(400, "Project ID is required");
+        }
 
-    res
-      .status(200)
-      .json(
-        new ApiResponse(
-          200,
-          completionData,
-          "Work completion retrieved successfully"
-        )
-      );
-  }
+        if (!files || files.length === 0) {
+            throw new ApiError(400, "No images uploaded");
+        }
+
+        if (!req.user?.userId) {
+            throw new ApiError(401, "Unauthorized");
+        }
+
+        const titlesArray: string[] = Array.isArray(titles) ? titles : [titles];
+        const descriptionsArray: string[] = Array.isArray(descriptions)
+            ? descriptions
+            : [descriptions];
+
+        if (titlesArray.length !== files.length) {
+            throw new ApiError(400, "Number of titles must match number of images");
+        }
+
+        if (titlesArray.some((title) => !title?.trim())) {
+            throw new ApiError(400, "All images must have a non-empty title");
+        }
+
+        let workCompletion = await WorkCompletion.findOne({ project: projectId });
+
+        if (!workCompletion) {
+            workCompletion = await WorkCompletion.create({
+                project: projectId,
+                createdBy: req.user.userId,
+                images: [],
+            });
+        } else if (
+            workCompletion.createdBy.toString() !== req.user.userId.toString()
+        ) {
+            throw new ApiError(403, "Not authorized to update this work completion");
+        }
+
+        const uploadResults = await uploadWorkCompletionImagesToS3(files);
+
+        if (!uploadResults.success || !uploadResults.uploadData) {
+            throw new ApiError(500, "Failed to upload images to S3");
+        }
+
+        const newImages: any[] = uploadResults.uploadData.map(
+            (fileData, index) => ({
+                _id: new Types.ObjectId(),
+                title: titlesArray[index],
+                imageUrl: fileData.url,
+                s3Key: fileData.key,
+                description: descriptionsArray[index] || "",
+                uploadedAt: new Date(),
+            })
+        );
+
+        workCompletion.images.push(...newImages);
+        await workCompletion.save();
+
+        const updatedData = await getCompletionDataForProject(projectId);
+
+        res
+            .status(200)
+            .json(new ApiResponse(200, updatedData, "Images uploaded successfully"));
+    }
+);
+export const updateWorkCompletionImage = asyncHandler(
+    async (req: Request, res: Response) => {
+        const { projectId, imageId } = req.params;
+        const { title } = req.body;
+
+        if (!projectId || !imageId) {
+            throw new ApiError(400, "Project ID and image ID are required");
+        }
+
+        if (!title?.trim()) {
+            throw new ApiError(400, "Title is required and cannot be empty");
+        }
+
+        const workCompletion = await WorkCompletion.findOne({ project: projectId });
+        if (!workCompletion) {
+            throw new ApiError(404, "Work completion not found");
+        }
+
+        // Check if user is authorized to update this work completion
+        if (workCompletion.createdBy.toString() !== req.user?.userId.toString()) {
+            throw new ApiError(403, "Not authorized to update this work completion");
+        }
+
+        const imageIndex = workCompletion.images.findIndex(
+            (img) => img._id.toString() === imageId
+        );
+
+        if (imageIndex === -1) {
+            throw new ApiError(404, "Image not found");
+        }
+
+        // Update only the title
+        workCompletion.images[imageIndex].title = title.trim();
+        await workCompletion.save();
+
+        const updatedData = await getCompletionDataForProject(projectId);
+
+        res.status(200).json(
+            new ApiResponse(200, updatedData, "Image title updated successfully")
+        );
+    }
+);
+export const getWorkCompletion = asyncHandler(
+    async (req: Request, res: Response) => {
+        const { projectId } = req.params;
+
+        if (!projectId) {
+            throw new ApiError(400, "Project ID is required");
+        }
+
+        const workCompletion = await WorkCompletion.findOne({ project: projectId })
+            .populate("createdBy", "firstName lastName")
+            .sort({ createdAt: -1 });
+
+        if (!workCompletion) {
+            return res
+                .status(200)
+                .json(
+                    new ApiResponse(
+                        200,
+                        null,
+                        "No work completion found for this project"
+                    )
+                );
+        }
+
+        const completionData = await getCompletionDataForProject(projectId);
+
+        res
+            .status(200)
+            .json(
+                new ApiResponse(
+                    200,
+                    completionData,
+                    "Work completion retrieved successfully"
+                )
+            );
+    }
 );
 
 export const deleteWorkCompletionImage = asyncHandler(
-  async (req: Request, res: Response) => {
-    const { workCompletionId, imageId } = req.params;
+    async (req: Request, res: Response) => {
+        const { workCompletionId, imageId } = req.params;
 
-    if (!workCompletionId || !imageId) {
-      throw new ApiError(400, "Work completion ID and image ID are required");
+        if (!workCompletionId || !imageId) {
+            throw new ApiError(400, "Work completion ID and image ID are required");
+        }
+        let workCompletion = await WorkCompletion.findOne({ project: workCompletionId });
+        if (!workCompletion) {
+            throw new ApiError(404, "Work completion not found");
+        }
+
+        if (workCompletion.createdBy.toString() !== req.user?.userId) {
+            throw new ApiError(403, "Not authorized to modify this work completion");
+        }
+
+        const imageIndex = workCompletion.images.findIndex(
+            (img) => img._id.toString() === imageId
+        );
+
+        if (imageIndex === -1) {
+            throw new ApiError(404, "Image not found");
+        }
+
+        const imageToDelete = workCompletion.images[imageIndex];
+        const deleteResult = await deleteFileFromS3(imageToDelete.s3Key);
+
+        if (!deleteResult.success) {
+            throw new ApiError(500, "Failed to delete image from S3");
+        }
+
+        workCompletion.images.splice(imageIndex, 1);
+        await workCompletion.save();
+
+        const updatedData = await getCompletionDataForProject(
+            workCompletion.project.toString()
+        );
+
+        res
+            .status(200)
+            .json(new ApiResponse(200, updatedData, "Image deleted successfully"));
     }
-    let workCompletion = await WorkCompletion.findOne({ project: workCompletionId });
-    if (!workCompletion) {
-      throw new ApiError(404, "Work completion not found");
-    }
-
-    if (workCompletion.createdBy.toString() !== req.user?.userId) {
-      throw new ApiError(403, "Not authorized to modify this work completion");
-    }
-
-    const imageIndex = workCompletion.images.findIndex(
-      (img) => img._id.toString() === imageId
-    );
-
-    if (imageIndex === -1) {
-      throw new ApiError(404, "Image not found");
-    }
-
-    const imageToDelete = workCompletion.images[imageIndex];
-    const deleteResult = await deleteFileFromS3(imageToDelete.s3Key);
-
-    if (!deleteResult.success) {
-      throw new ApiError(500, "Failed to delete image from S3");
-    }
-
-    workCompletion.images.splice(imageIndex, 1);
-    await workCompletion.save();
-
-    const updatedData = await getCompletionDataForProject(
-      workCompletion.project.toString()
-    );
-
-    res
-      .status(200)
-      .json(new ApiResponse(200, updatedData, "Image deleted successfully"));
-  }
 );
 
 export const getProjectWorkCompletionImages = asyncHandler(
-  async (req: Request, res: Response) => {
-    const { projectId } = req.params;
+    async (req: Request, res: Response) => {
+        const { projectId } = req.params;
 
-    if (!projectId) {
-      throw new ApiError(400, "Project ID is required");
+        if (!projectId) {
+            throw new ApiError(400, "Project ID is required");
+        }
+
+        const workCompletion = await WorkCompletion.findOne({ project: projectId })
+            .populate("createdBy", "firstName lastName")
+            .sort({ createdAt: -1 });
+
+        if (!workCompletion) {
+            return res
+                .status(200)
+                .json(new ApiResponse(200, [], "No work completion images found"));
+        }
+
+        res
+            .status(200)
+            .json(
+                new ApiResponse(
+                    200,
+                    workCompletion.images,
+                    "Work completion images retrieved successfully"
+                )
+            );
     }
-
-    const workCompletion = await WorkCompletion.findOne({ project: projectId })
-      .populate("createdBy", "firstName lastName")
-      .sort({ createdAt: -1 });
-
-    if (!workCompletion) {
-      return res
-        .status(200)
-        .json(new ApiResponse(200, [], "No work completion images found"));
-    }
-
-    res
-      .status(200)
-      .json(
-        new ApiResponse(
-          200,
-          workCompletion.images,
-          "Work completion images retrieved successfully"
-        )
-      );
-  }
 );
 
 export const getCompletionData = asyncHandler(
-  async (req: Request, res: Response) => {
-    const { projectId } = req.params;
+    async (req: Request, res: Response) => {
+        const { projectId } = req.params;
 
-    if (!projectId) {
-      throw new ApiError(400, "Project ID is required");
+        if (!projectId) {
+            throw new ApiError(400, "Project ID is required");
+        }
+
+        const completionData = await getCompletionDataForProject(projectId);
+
+        res
+            .status(200)
+            .json(
+                new ApiResponse(
+                    200,
+                    completionData,
+                    "Completion data retrieved successfully"
+                )
+            );
     }
-
-    const completionData = await getCompletionDataForProject(projectId);
-
-    res
-      .status(200)
-      .json(
-        new ApiResponse(
-          200,
-          completionData,
-          "Completion data retrieved successfully"
-        )
-      );
-  }
 );
 
 export const updateCompletionDate = asyncHandler(
-  async (req: Request, res: Response) => {
-    const { projectId } = req.params;
-    const { date } = req.body;
+    async (req: Request, res: Response) => {
+        const { projectId } = req.params;
+        const { date } = req.body;
 
-    if (!projectId || !date) {
-      throw new ApiError(400, "Project ID and date are required");
+        if (!projectId || !date) {
+            throw new ApiError(400, "Project ID and date are required");
+        }
+
+        const project = await Project.findByIdAndUpdate(
+            projectId,
+            { completionDate: new Date(date) },
+            { new: true }
+        );
+
+        if (!project) {
+            throw new ApiError(404, "Project not found");
+        }
+
+        const updatedData = await getCompletionDataForProject(projectId);
+        res
+            .status(200)
+            .json(
+                new ApiResponse(
+                    200,
+                    updatedData,
+                    "Completion date updated successfully"
+                )
+            );
     }
-
-    const project = await Project.findByIdAndUpdate(
-      projectId,
-      { completionDate: new Date(date) },
-      { new: true }
-    );
-
-    if (!project) {
-      throw new ApiError(404, "Project not found");
-    }
-
-    const updatedData = await getCompletionDataForProject(projectId);
-    res
-      .status(200)
-      .json(
-        new ApiResponse(
-          200,
-          updatedData,
-          "Completion date updated successfully"
-        )
-      );
-  }
 );
 
 export const updateHandoverDate = asyncHandler(
-  async (req: Request, res: Response) => {
-    const { projectId } = req.params;
-    const { date } = req.body;
+    async (req: Request, res: Response) => {
+        const { projectId } = req.params;
+        const { date } = req.body;
 
-    if (!projectId || !date) {
-      throw new ApiError(400, "Project ID and date are required");
+        if (!projectId || !date) {
+            throw new ApiError(400, "Project ID and date are required");
+        }
+
+        const project = await Project.findByIdAndUpdate(
+            projectId,
+            { handoverDate: new Date(date) },
+            { new: true }
+        );
+
+        if (!project) {
+            throw new ApiError(404, "Project not found");
+        }
+
+        const updatedData = await getCompletionDataForProject(projectId);
+        res
+            .status(200)
+            .json(
+                new ApiResponse(200, updatedData, "Handover date updated successfully")
+            );
     }
-
-    const project = await Project.findByIdAndUpdate(
-      projectId,
-      { handoverDate: new Date(date) },
-      { new: true }
-    );
-
-    if (!project) {
-      throw new ApiError(404, "Project not found");
-    }
-
-    const updatedData = await getCompletionDataForProject(projectId);
-    res
-      .status(200)
-      .json(
-        new ApiResponse(200, updatedData, "Handover date updated successfully")
-      );
-  }
 );
 
 export const updateAcceptanceDate = asyncHandler(
-  async (req: Request, res: Response) => {
-    const { projectId } = req.params;
-    const { date } = req.body;
+    async (req: Request, res: Response) => {
+        const { projectId } = req.params;
+        const { date } = req.body;
 
-    if (!projectId || !date) {
-      throw new ApiError(400, "Project ID and date are required");
+        if (!projectId || !date) {
+            throw new ApiError(400, "Project ID and date are required");
+        }
+
+        const project = await Project.findByIdAndUpdate(
+            projectId,
+            { acceptanceDate: new Date(date) },
+            { new: true }
+        );
+
+        if (!project) {
+            throw new ApiError(404, "Project not found");
+        }
+
+        const updatedData = await getCompletionDataForProject(projectId);
+        res
+            .status(200)
+            .json(
+                new ApiResponse(
+                    200,
+                    updatedData,
+                    "Acceptance date updated successfully"
+                )
+            );
     }
-
-    const project = await Project.findByIdAndUpdate(
-      projectId,
-      { acceptanceDate: new Date(date) },
-      { new: true }
-    );
-
-    if (!project) {
-      throw new ApiError(404, "Project not found");
-    }
-
-    const updatedData = await getCompletionDataForProject(projectId);
-    res
-      .status(200)
-      .json(
-        new ApiResponse(
-          200,
-          updatedData,
-          "Acceptance date updated successfully"
-        )
-      );
-  }
 );
 export const generateCompletionCertificatePdf = asyncHandler(
-  async (req: Request, res: Response) => {
-    const { projectId } = req.params;
+    async (req: Request, res: Response) => {
+        const { projectId } = req.params;
 
-    if (!projectId) {
-      throw new ApiError(400, "Project ID is required");
-    }
+        if (!projectId) {
+            throw new ApiError(400, "Project ID is required");
+        }
 
-    // Get all necessary data
-    const project = await Project.findById(projectId)
-      .populate("client", "clientName")
-      .populate("assignedTo", "firstName lastName signatureImage");
+        // Get all necessary data
+        const project = await Project.findById(projectId)
+            .populate("client", "clientName")
+            .populate("assignedTo", "firstName lastName signatureImage");
 
-    if (!project) {
-      throw new ApiError(404, "Project not found");
-    }
+        if (!project) {
+            throw new ApiError(404, "Project not found");
+        }
 
-    const client = await Client.findById(project.client);
-    if (!client) {
-      throw new ApiError(404, "Client not found");
-    }
+        const client = await Client.findById(project.client);
+        if (!client) {
+            throw new ApiError(404, "Client not found");
+        }
 
-    const lpo = await LPO.findOne({ project: projectId })
-      .sort({ createdAt: -1 })
-      .limit(1);
+        const lpo = await LPO.findOne({ project: projectId })
+            .sort({ createdAt: -1 })
+            .limit(1);
 
-    const workCompletion = await WorkCompletion.findOne({ project: projectId })
-      .populate("createdBy", "firstName lastName signatureImage")
-      .sort({ createdAt: -1 });
+        const workCompletion = await WorkCompletion.findOne({ project: projectId })
+            .populate("createdBy", "firstName lastName signatureImage")
+            .sort({ createdAt: -1 });
 
-    const engineer: any = project.assignedTo;
-    const preparedBy: any = workCompletion?.createdBy;
+        const engineer: any = project.assignedTo;
+        const preparedBy: any = workCompletion?.createdBy;
 
-    // Format dates
-    const formatDate = (date: Date | string | undefined) => {
-      if (!date) return "";
-      const dateObj = typeof date === "string" ? new Date(date) : date;
-      return dateObj
-        .toLocaleDateString("en-GB", {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        })
-        .replace(/ /g, "-");
-    };
+        // Format dates
+        const formatDate = (date: Date | string | undefined) => {
+            if (!date) return "";
+            const dateObj = typeof date === "string" ? new Date(date) : date;
+            return dateObj
+                .toLocaleDateString("en-GB", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                })
+                .replace(/ /g, "-");
+        };
 
-    // Prepare HTML content
-    const htmlContent = `
+        // Prepare HTML content
+        const htmlContent = `
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -1017,15 +1017,15 @@ export const generateCompletionCertificatePdf = asyncHandler(
                     <div class="section-title">Site Pictures</div>
                     <div class="images-grid">
                       ${(() => {
-          let html = '';
-          for (let i = 0; i < workCompletion.images.length; i += 3) {
-            const rowImages = workCompletion.images.slice(i, i + 3);
-            html += '<div class="images-row">';
+                    let html = '';
+                    for (let i = 0; i < workCompletion.images.length; i += 3) {
+                        const rowImages = workCompletion.images.slice(i, i + 3);
+                        html += '<div class="images-row">';
 
-            for (let j = 0; j < 3; j++) {
-              if (j < rowImages.length) {
-                const image = rowImages[j];
-                html += `
+                        for (let j = 0; j < 3; j++) {
+                            if (j < rowImages.length) {
+                                const image = rowImages[j];
+                                html += `
                                 <div class="image-item">
                                   <div class="image-container">
                                     <img src="${image.imageUrl}" alt="${image.title || "Site picture"}" />
@@ -1033,19 +1033,19 @@ export const generateCompletionCertificatePdf = asyncHandler(
                                   <div class="image-title">${image.title || "Site Image"}</div>
                                 </div>
                               `;
-              } else {
-                html += `
+                            } else {
+                                html += `
                                 <div class="image-item" style="visibility: hidden;">
                                   <div class="image-container"></div>
                                   <div class="image-title"></div>
                                 </div>
                               `;
-              }
-            }
-            html += '</div>';
-          }
-          return html;
-        })()}
+                            }
+                        }
+                        html += '</div>';
+                    }
+                    return html;
+                })()}
                     </div>
                   </div>
                   ` : `
@@ -1054,7 +1054,7 @@ export const generateCompletionCertificatePdf = asyncHandler(
                     <p style="text-align: center; font-size: 10pt; color: #666; padding: 20px;">No site pictures available</p>
                   </div>
                   `
-      }
+            }
             </div>
 
             <div class="tagline">We work U Relax</div>
@@ -1069,43 +1069,43 @@ export const generateCompletionCertificatePdf = asyncHandler(
     </html>
     `;
 
-    // Generate PDF
-    const browser = await puppeteer.launch({
-      headless: "shell",
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--font-render-hinting=none"],
-    });
+        // Generate PDF
+        const browser = await puppeteer.launch({
+            headless: "shell",
+            args: ["--no-sandbox", "--disable-setuid-sandbox", "--font-render-hinting=none"],
+        });
 
-    try {
-      const page = await browser.newPage();
+        try {
+            const page = await browser.newPage();
 
-      await page.setViewport({ width: 1200, height: 1600 });
+            await page.setViewport({ width: 1200, height: 1600 });
 
-      await page.setContent(htmlContent, {
-        waitUntil: ["networkidle0", "domcontentloaded"],
-        timeout: 30000,
-      });
+            await page.setContent(htmlContent, {
+                waitUntil: ["networkidle0", "domcontentloaded"],
+                timeout: 30000,
+            });
 
-      const pdfBuffer = await page.pdf({
-        format: "A4",
-        printBackground: true,
-        margin: {
-          top: "0.5cm",
-          right: "0.5cm",
-          bottom: "0.5cm",
-          left: "0.5cm",
-        },
-        preferCSSPageSize: true,
-        displayHeaderFooter: false,
-      });
+            const pdfBuffer = await page.pdf({
+                format: "A4",
+                printBackground: true,
+                margin: {
+                    top: "0.5cm",
+                    right: "0.5cm",
+                    bottom: "0.5cm",
+                    left: "0.5cm",
+                },
+                preferCSSPageSize: true,
+                displayHeaderFooter: false,
+            });
 
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename=completion-certificate-${project.projectNumber}.pdf`
-      );
-      res.send(pdfBuffer);
-    } finally {
-      await browser.close();
+            res.setHeader("Content-Type", "application/pdf");
+            res.setHeader(
+                "Content-Disposition",
+                `attachment; filename=completion-certificate-${project.projectNumber}.pdf`
+            );
+            res.send(pdfBuffer);
+        } finally {
+            await browser.close();
+        }
     }
-  }
 );
