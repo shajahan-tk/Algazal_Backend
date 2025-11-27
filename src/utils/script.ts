@@ -8,7 +8,7 @@ dotenv.config({ path: path.join(__dirname, '../../.env') }); // Adjust path base
 
 /**
  * Migrates project data by moving the 'assignedDriver' field
- * into a new 'assignedDrivers' array and unsetting the old field.
+ * into a new 'assigQnedDrivers' array and unsetting the old field.
  * This function is designed to be called from a script or an API endpoint.
  */
 export const migrateProjectDrivers = async () => {

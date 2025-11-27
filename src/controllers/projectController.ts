@@ -174,7 +174,7 @@ export const getEngineerProjects = asyncHandler(
     const skip = (page - 1) * limit;
 
     // Build filter - only projects assigned to this engineer
-    const filter: any = { assignedTo: userId };
+    const filter: any = { assignedEngineers: userId }; // Changed from assignedTo
 
     // Status filter
     if (req.query.status) {
@@ -204,7 +204,7 @@ export const getEngineerProjects = asyncHandler(
       .populate("client", "clientName clientAddress mobileNumber")
       .populate("createdBy", "firstName lastName email")
       .populate("updatedBy", "firstName lastName email")
-      .populate("assignedTo", "firstName lastName email")
+      .populate("assignedEngineers", "firstName lastName email") // Changed from assignedTo
       .skip(skip)
       .limit(limit)
       .sort({ createdAt: -1 });
@@ -236,7 +236,7 @@ export const getProject = asyncHandler(async (req: Request, res: Response) => {
     .populate("client")
     .populate("createdBy", "firstName lastName email")
     .populate("updatedBy", "firstName lastName email")
-    .populate("assignedTo", "-password");
+    .populate("assignedEngineers", "-password") // Changed from assignedTo
 
   if (!project) {
     throw new ApiError(404, "Project not found");
@@ -249,6 +249,8 @@ export const getProject = asyncHandler(async (req: Request, res: Response) => {
   const quotation = await Quotation.findOne({ project: id }).select("_id");
   const Lpo = await LPO.findOne({ project: id }).select("_id");
   const expense = await Expense.findOne({ project: id }).select("_id");
+
+  // Updated response to include assignedEngineers instead of assignedTo
   const responseData = {
     ...project.toObject(),
     estimationId: estimation?._id || null,
@@ -257,6 +259,7 @@ export const getProject = asyncHandler(async (req: Request, res: Response) => {
     isChecked: estimation?.isChecked || false,
     isApproved: estimation?.isApproved || false,
     expenseId: expense?._id || null,
+    assignedEngineers: project.assignedEngineers || [], // Changed from assignedTo
   };
 
   res
@@ -358,11 +361,11 @@ export const updateProjectStatus = asyncHandler(
 export const assignProject = asyncHandler(
   async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { assignedTo } = req.body;
+    const { engineerIds } = req.body; // Changed from assignedTo to engineerIds array
 
     // Validation
-    if (!assignedTo || !id) {
-      throw new ApiError(400, "AssignedTo is required");
+    if (!engineerIds || !Array.isArray(engineerIds) || engineerIds.length === 0 || !id) {
+      throw new ApiError(400, "Engineer IDs are required");
     }
 
     // Find project
@@ -371,14 +374,27 @@ export const assignProject = asyncHandler(
       throw new ApiError(400, "Project not found");
     }
 
-    // Find engineer
-    const engineer = await User.findById(assignedTo);
-    if (!engineer) {
-      throw new ApiError(400, "Engineer not found");
+    // Check if this is an edit (project already has engineers) or new assignment
+    const isEdit = project.assignedEngineers && project.assignedEngineers.length > 0;
+
+    // Find all engineers
+    const engineers = await User.find({
+      _id: { $in: engineerIds },
+      role: { $in: ["engineer", "admin", "super_admin"] }
+    });
+
+    if (engineers.length !== engineerIds.length) {
+      throw new ApiError(400, "One or more engineers not found");
     }
 
     // Update project assignment
-    project.assignedTo = assignedTo;
+    project.assignedEngineers = engineerIds; // Changed from assignedTo
+
+    // Update status if this is a new assignment (not an edit)
+    if (!isEdit && project.status === "quotation_approved") {
+      project.status = "team_assigned";
+    }
+
     await project.save();
 
     try {
@@ -388,19 +404,20 @@ export const assignProject = asyncHandler(
         email: { $exists: true, $ne: "" }, // Only users with emails
       }).select("email firstName");
 
-      // Create list of all recipients (engineer + admins)
-      const allRecipients = [
-        engineer.email,
-        ...adminUsers.map((admin) => admin.email),
-      ];
+      // Create list of all recipients (engineers + admins)
+      const engineerEmails = engineers.map(e => e.email).filter(Boolean);
+      const adminEmails = adminUsers.map(admin => admin.email);
 
-      // Remove duplicates (in case engineer is also an admin)
-      const uniqueRecipients = [...new Set(allRecipients)];
+      // Remove duplicates
+      const allRecipients = [...new Set([...engineerEmails, ...adminEmails])];
 
-      // Send single email to all recipients
+      // Create engineer names list for email
+      const engineerNames = engineers.map(e => `${e.firstName} ${e.lastName}`).join(", ");
+
+      // Send email with appropriate subject based on whether it's an edit or new assignment
       await mailer.sendEmail({
-        to: uniqueRecipients.join(","), // Comma-separated list
-        subject: `Project Assignment: ${project.projectName}`,
+        to: allRecipients.join(","), // Comma-separated list
+        subject: `${isEdit ? 'Project Assignment Updated' : 'Project Assignment'}: ${project.projectName}`,
         templateParams: {
           userName: "Team", // Generic since we're sending to multiple people
           actionUrl: `${FRONTEND_URL}/app/project-view/${project._id}`,
@@ -408,10 +425,11 @@ export const assignProject = asyncHandler(
           logoUrl:
             "https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg",
           projectName: project.projectName || "the project",
+          engineerNames, // Add engineer names to template
+          isEdit, // Pass this flag to template if needed
         },
-        text: `Dear Team,\n\nEngineer ${engineer.firstName || "Engineer"
-          } has been assigned to project "${project.projectName || "the project"
-          }".\n\nView project details: ${FRONTEND_URL}/app/project-view/${project._id
+        text: `Dear Team,\n\n${isEdit ? 'Engineer assignments have been updated' : 'Engineers have been assigned'} for project "${project.projectName || "the project"
+          }": ${engineerNames}.\n\nView project details: ${FRONTEND_URL}/app/project-view/${project._id
           }\n\nBest regards,\nTECHNICAL SERVICE TEAM`,
         headers: {
           "X-Priority": "1",
@@ -424,8 +442,11 @@ export const assignProject = asyncHandler(
         .json(
           new ApiResponse(
             200,
-            {},
-            "Project assigned and notifications sent successfully"
+            {
+              assignedEngineers: engineerIds,
+              isEdit // Include flag to indicate if this was an edit
+            },
+            `Project engineers ${isEdit ? 'updated' : 'assigned'} and notifications sent successfully`
           )
         );
     } catch (emailError) {
@@ -435,8 +456,11 @@ export const assignProject = asyncHandler(
         .json(
           new ApiResponse(
             200,
-            {},
-            "Project assigned successfully but notification emails failed to send"
+            {
+              assignedEngineers: engineerIds,
+              isEdit
+            },
+            `Project engineers ${isEdit ? 'updated' : 'assigned'} successfully but notification emails failed to send`
           )
         );
     }
@@ -453,9 +477,9 @@ export const updateProjectProgress = asyncHandler(
       throw new ApiError(400, "Progress must be between 0 and 100");
     }
 
-    const project = await Project.findById(id)
+    const project: any = await Project.findById(id)
       .populate<{ client: IClient }>("client")
-      .populate<{ assignedTo: IUser }>("assignedTo");
+      .populate("assignedEngineers");
 
     if (!project) {
       throw new ApiError(404, "Project not found");
@@ -465,27 +489,23 @@ export const updateProjectProgress = asyncHandler(
     const oldProgress = project.progress;
 
     // Update project status based on progress
-    if (project.progress >= 0 && project.status === "team_assigned") {
+    if (progress > 0 && project.status === "team_assigned") {
       project.status = "work_started";
     }
-    if (project.progress > 0 && project.status === "work_started") {
+    if (progress > 0 && project.status === "work_started") {
       project.status = "in_progress";
     }
 
-    const updateData: any = {
-      progress,
-      updatedBy: userId,
-    };
+    // Update progress
+    project.progress = progress;
+    project.updatedBy = userId;
 
     // Auto-update status if progress reaches 100%
     if (progress === 100 && project.status !== "work_completed") {
-      updateData.status = "work_completed";
+      project.status = "work_completed";
     }
 
-    await project.save(); // Save the project first to update its status
-    const updatedProject = await Project.findByIdAndUpdate(id, updateData, {
-      new: true,
-    });
+    const updatedProject = await project.save();
 
     // Create a progress update comment
     if (comment || progress !== oldProgress) {
@@ -504,7 +524,7 @@ export const updateProjectProgress = asyncHandler(
     // Send progress update email if progress changed
     if (progress !== oldProgress) {
       try {
-        // Get all recipients (client + assigned engineer + admins + super_admins)
+        // Get all recipients (client + assigned engineers + admins + super_admins)
         const recipients = [];
 
         // Add client if exists
@@ -519,23 +539,24 @@ export const updateProjectProgress = asyncHandler(
           });
         }
 
-        // Add assigned engineer if exists
-        if (
-          project.assignedTo &&
-          typeof project.assignedTo === "object" &&
-          "email" in project.assignedTo
-        ) {
-          recipients.push({
-            email: project.assignedTo.email,
-            name: project.assignedTo.firstName || "Engineer",
-          });
-        }
+        // Add all assigned engineers if they exist
+        if (project.assignedEngineers && Array.isArray(project.assignedEngineers)) {
+          for (const engineer of project.assignedEngineers) {
+            if (typeof engineer === "object" && "email" in engineer) {
+              recipients.push({
+                email: engineer.email,
+                name: `${engineer.firstName} ${engineer.lastName}`,
+              });
+            }
+          }
+        } // <-- This closing brace was missing
 
         // Add admins and super admins
         const admins = await User.find({
           role: { $in: ["admin", "super_admin"] },
           email: { $exists: true, $ne: "" },
         });
+
         admins.forEach((admin) => {
           recipients.push({
             email: admin.email,
@@ -549,7 +570,7 @@ export const updateProjectProgress = asyncHandler(
             index === self.findIndex((r) => r.email === recipient.email)
         );
 
-        // Get the user who updated the progress
+        // Get user who updated progress
         const updatedByUser = await User.findById(userId);
 
         // Prepare email content
@@ -570,10 +591,8 @@ export const updateProjectProgress = asyncHandler(
           bcc: uniqueRecipients.map((r) => r.email).join(","),
           subject: `Progress Update: ${project.projectName} (${progress}% Complete)`,
           templateParams,
-          text: `Dear Team,\n\nThe progress for project ${project.projectName
-            } has been updated to ${progress}%.\n\n${comment ? `Details: ${comment}\n\n` : ""
-            }View project: ${templateParams.actionUrl
-            }\n\nBest regards,\nTECHNICAL SERVICE TEAM`,
+          text: `Dear Team,\n\nThe progress for project ${project.projectName} has been updated to ${progress}%.\n\n${comment ? `Details: ${comment}\n\n` : ""
+            }View project: ${templateParams.actionUrl}\n\nBest regards,\nTECHNICAL SERVICE TEAM`,
           headers: {
             "X-Priority": "1",
             Importance: "high",
@@ -596,6 +615,7 @@ export const updateProjectProgress = asyncHandler(
       );
   }
 );
+
 export const getProjectProgressUpdates = asyncHandler(
   async (req: Request, res: Response) => {
     const { projectId } = req.params;
@@ -640,6 +660,7 @@ export const deleteProject = asyncHandler(
       .json(new ApiResponse(200, null, "Project deleted successfully"));
   }
 );
+
 export const generateInvoiceData = asyncHandler(
   async (req: Request, res: Response) => {
     const { projectId } = req.params;
@@ -656,7 +677,7 @@ export const generateInvoiceData = asyncHandler(
         "clientName clientAddress mobileNumber contactPerson trnNumber pincode workStartDate workEndDate"
       )
       .populate<{ createdBy: IUser }>("createdBy", "firstName lastName")
-      .populate<{ assignedTo: IUser }>("assignedTo", "firstName lastName")
+      .populate("assignedEngineers", "firstName lastName") // Changed from assignedTo
       .lean();
 
     if (!project) {
@@ -683,21 +704,26 @@ export const generateInvoiceData = asyncHandler(
     // Generate invoice number with better format
     const invoiceNumber = `INV${project.projectNumber.slice(3, 10)}`;
 
-
     // Type-safe client data extraction
     const clientData =
       typeof project.client === "object" ? project.client : null;
-    const assignedToData =
-      typeof project.assignedTo === "object" ? project.assignedTo : null;
     const createdByData =
       typeof project.createdBy === "object" ? project.createdBy : null;
+
+    // Handle multiple engineers
+    const engineersData = Array.isArray(project.assignedEngineers)
+      ? project.assignedEngineers
+      : [];
+
+    // Create engineer names string for vendee info
+    const engineerNames = engineersData.length > 0
+      ? engineersData.map((e: any) => `${e.firstName} ${e.lastName}`).join(", ")
+      : "N/A";
 
     // Enhanced vendee information with proper type checking
     const vendeeInfo = {
       name: clientData?.clientName || "IMDAAD LLC",
-      contactPerson: assignedToData
-        ? `Mr. ${assignedToData.firstName} ${assignedToData.lastName}`
-        : clientData?.clientName || "N/A",
+      contactPerson: engineerNames, // Changed to use engineerNames
       poBox: clientData?.pincode || "18220",
       address: clientData?.clientAddress || "DUBAI - UAE",
       phone: clientData?.mobileNumber || "(04) 812 8888",
@@ -728,6 +754,7 @@ export const generateInvoiceData = asyncHandler(
       unitPrice: item.unitPrice || 0,
       total: item.totalPrice || 0,
     }));
+
     function getDaysLeft(validUntil?: Date): string {
       if (!validUntil) return "N/A";
 
@@ -744,6 +771,7 @@ export const generateInvoiceData = asyncHandler(
 
       return `${diffDays} days left`;
     }
+
     // Enhanced response structure with type-safe checks
     const response = {
       _id: project._id.toString(),
@@ -840,8 +868,6 @@ export const assignTeamAndDriver = asyncHandler(
     const project = await Project.findById(projectId);
     if (!project) throw new ApiError(404, "Project not found");
 
-
-
     // Define all valid worker roles (excluding management and admin roles)
     const validWorkerRoles = [
       "worker",
@@ -908,41 +934,12 @@ export const assignTeamAndDriver = asyncHandler(
   }
 );
 
-// Helper function for notifications
-// const sendAssignmentNotifications = async (
-//   project: IProject,
-//   workerIds: Types.ObjectId[],
-//   driverId: Types.ObjectId
-// ) => {
-//   try {
-//     // Get all involved users (workers + driver + admins)
-//     const usersToNotify = await User.find({
-//       $or: [
-//         { _id: { $in: workerIds } },
-//         { _id: driverId },
-//         { role: { $in: ["admin", "super_admin"] } },
-//       ],
-//     });
-
-//     // Send emails
-//     await mailer.sendEmail({
-//       to: usersToNotify.map((u) => u.email).join(","),
-//       subject: `Team Assigned: ${project.projectName}`,
-//       templateParams: {
-//         projectName: project.projectName,
-//         actionUrl: `http://yourfrontend.com/projects/${project._id}`,
-//       },
-//       text: `You've been assigned to project ${project.projectName}`,
-//     });
-//   } catch (error) {
-//     console.error("Notification error:", error);
-//   }
-// };
 export const getAssignedTeam = asyncHandler(
   async (req: Request, res: Response) => {
     const { projectId } = req.params;
 
     const project = await Project.findById(projectId)
+      .populate("assignedEngineers", "firstName lastName profileImage") // Changed from assignedTo
       .populate("assignedWorkers", "firstName lastName profileImage")
       .populate("assignedDrivers", "firstName lastName profileImage");
 
@@ -952,14 +949,16 @@ export const getAssignedTeam = asyncHandler(
       new ApiResponse(
         200,
         {
-          workers: project.assignedWorkers,
-          drivers: project.assignedDrivers,
+          engineers: project.assignedEngineers || [], // Changed from assignedTo
+          workers: project.assignedWorkers || [],
+          drivers: project.assignedDrivers || [],
         },
         "Assigned team fetched successfully"
       )
     );
   }
 );
+
 // Update only workers and driver assignments
 export const updateWorkersAndDriver = asyncHandler(
   async (req: Request, res: Response) => {
@@ -1066,7 +1065,7 @@ export const updateWorkersAndDriver = asyncHandler(
       }
     }
 
-    // Update the updatedBy field
+    // Update updatedBy field
     project.updatedBy = req.user?.userId
       ? new mongoose.Types.ObjectId(req.user.userId)
       : undefined;
@@ -1088,86 +1087,6 @@ export const updateWorkersAndDriver = asyncHandler(
       );
   }
 );
-// Notification helper specifically for workers/driver updates
-// const sendWorkersDriverNotification = async (project: any) => {
-//   try {
-//     // Get all admin and super_admin users
-//     const adminUsers = await User.find({
-//       role: { $in: ["admin", "super_admin"] },
-//       email: { $exists: true, $ne: "" },
-//     }).select("email firstName");
-
-//     // Get all assigned workers and driver details
-//     const assignedUsers = await User.find({
-//       _id: {
-//         $in: [
-//           ...(project.driver ? [project.driver] : []),
-//           ...(project.workers || []),
-//         ].filter(Boolean),
-//       },
-//     }).select("email firstName role");
-
-//     // Create list of all recipients (assigned users + admins)
-//     const allRecipients = [
-//       ...adminUsers.map((admin) => admin.email),
-//       ...assignedUsers.map((user) => user.email),
-//     ];
-
-//     // Remove duplicates
-//     const uniqueRecipients = [...new Set(allRecipients)];
-
-//     // Prepare assignment details for email
-//     const assignmentDetails = [];
-//     if (project.driver) {
-//       const driver = assignedUsers.find((u) => u._id.equals(project.driver));
-//       if (driver) {
-//         assignmentDetails.push(`Driver: ${driver.firstName}`);
-//       }
-//     }
-//     if (project.workers?.length) {
-//       const workers = assignedUsers.filter((u) =>
-//         project.workers.some((w: any) => u._id.equals(w))
-//       );
-//       if (workers.length) {
-//         assignmentDetails.push(
-//           `Workers: ${workers.map((w) => w.firstName).join(", ")}`
-//         );
-//       }
-//     }
-
-//     // Send email if there are recipients and assignments
-//     if (uniqueRecipients.length && assignmentDetails.length) {
-//       await mailer.sendEmail({
-//         to: uniqueRecipients.join(","),
-//         subject: `Project Team Update: ${project.projectName}`,
-//         templateParams: {
-//           userName: "Team",
-//           actionUrl: `${process.env.FRONTEND_URL}/app/project-view/${project._id}`,
-//           contactEmail: "propertymanagement@alhamra.ae",
-//           logoUrl: process.env.LOGO_URL,
-//           projectName: project.projectName || "the project",
-//           assignmentDetails: assignmentDetails.join("\n"),
-//         },
-//         text: `Dear Team,\n\nThe team for project "${
-//           project.projectName
-//         }" has been updated:\n\n${assignmentDetails.join(
-//           "\n"
-//         )}\n\nView project details: ${
-//           process.env.FRONTEND_URL
-//         }/app/project-view/${
-//           project._id
-//         }\n\nBest regards,\nTECHNICAL SERVICE TEAM`,
-//         headers: {
-//           "X-Priority": "1",
-//           Importance: "high",
-//         },
-//       });
-//     }
-//   } catch (error) {
-//     console.error("Error in sendWorkersDriverNotification:", error);
-//     throw error;
-//   }
-// };
 
 export const getDriverProjects = asyncHandler(
   async (req: Request, res: Response) => {
@@ -1208,6 +1127,7 @@ export const getDriverProjects = asyncHandler(
       .populate("client", "clientName clientAddress mobileNumber")
       .populate("assignedWorkers", "firstName lastName profileImage")
       .populate("assignedDrivers", "firstName lastName profileImage")
+      .populate("assignedEngineers", "firstName lastName") // Changed from assignedTo
       .skip(skip)
       .limit(limit)
       .sort({ createdAt: -1 });
@@ -1231,6 +1151,7 @@ export const getDriverProjects = asyncHandler(
     );
   }
 );
+
 export const generateInvoicePdf = asyncHandler(
   async (req: Request, res: Response) => {
     const { projectId, selectedBankId } = req.params;
@@ -1852,8 +1773,9 @@ export const generateInvoicePdf = asyncHandler(
         <p><strong>IBAN:</strong> ${bankDetails.iban}</p>
         <p><strong>Swift Code:</strong> ${bankDetails.swiftCode}</p>
       </div>
+
 <!-- FIXED: Terms and Conditions Section -->
-${quotation.termsAndConditions && quotation.termsAndConditions.length > 1 ? `
+ ${quotation.termsAndConditions && quotation.termsAndConditions.length > 1 ? `
 <div class="terms-section">
   <div class="section-title">COMMENTS OR SPECIAL INSTRUCTIONS</div>
   <div class="terms-box">
@@ -1863,7 +1785,6 @@ ${quotation.termsAndConditions && quotation.termsAndConditions.length > 1 ? `
   </div>
 </div>
 ` : ''}
-
 
      
     </div>
@@ -1924,6 +1845,7 @@ ${quotation.termsAndConditions && quotation.termsAndConditions.length > 1 ? `
     }
   }
 );
+
 // Helper function to convert numbers to words
 function convertToWords1(num: number): string {
   const single = [
@@ -1963,7 +1885,7 @@ function convertToWords1(num: number): string {
     "Ninety",
   ];
   const formatTenth = (digit: number, prev: number) => {
-    return 0 == digit ? "" : " " + (1 == digit ? double[prev] : tens[digit]);
+    return 0 == digit ? "" : " + (1 == digit ? double[prev] : tens[digit])"
   };
   const formatOther = (digit: number, next: string, denom: string) => {
     return (

@@ -1,19 +1,33 @@
 export interface EmailTemplateParams {
-  userName?: string;
-  actionUrl?: string;
-  contactEmail?: string;
-  logoUrl?: string;
-  projectName?: string;
+    userName?: string;
+    actionUrl?: string;
+    contactEmail?: string;
+    logoUrl?: string;
+    projectName?: string;
+    engineerNames?: string; // Add this
+    isEdit?: boolean; // Add this
 }
 
 export const getEmailTemplate = ({
-  userName = "Valued Customer",
-  actionUrl = "#",
-  contactEmail = "info@alghazalgroup.com",
-  logoUrl = "https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg",
-  projectName = "the project",
+    userName = "Valued Customer",
+    actionUrl = "#",
+    contactEmail = "info@alghazalgroup.com",
+    logoUrl = "https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg",
+    projectName = "the project",
+    engineerNames = "", // Add default value
+    isEdit = false, // Add default value
 }: EmailTemplateParams = {}): string => {
-  return `
+    // Determine the message based on context
+    const getMessage = () => {
+        if (engineerNames) {
+            // This is a project assignment email
+            return `You are receiving this notification because ${isEdit ? 'engineer assignments have been updated' : 'engineers have been assigned'} for ${projectName}: ${engineerNames}.`;
+        }
+        // Default message for other notifications
+        return `You are receiving this notification because you have been assigned to ${projectName} by ALGHAZAL ALABYAD TECHNICAL SERVICES.`;
+    };
+
+    return `
       <!DOCTYPE html>
       <html lang="en">
       <head>
@@ -169,7 +183,7 @@ export const getEmailTemplate = ({
                   <div class="greeting">Dear ${userName},</div>
                   
                   <div class="content">
-                      You are receiving this notification because you have been assigned to ${projectName} by ALGHAZAL ALABYAD TECHNICAL SERVICES.
+                      ${getMessage()}
                   </div>
                   
                   <div class="content">

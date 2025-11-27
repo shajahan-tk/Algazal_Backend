@@ -1,6 +1,7 @@
+// src/models/projectModel.ts
+
 import { Document, Schema, model, Types, ObjectId } from "mongoose";
 import { IClient } from "./clientModel";
-
 
 export interface IProject extends Document {
   projectName: string;
@@ -32,18 +33,16 @@ export interface IProject extends Document {
   progress: number;
   createdBy: Types.ObjectId;
   updatedBy?: Types.ObjectId;
-  assignedTo?: Types.ObjectId;
+  // CHANGE: Replace single assignedTo with array of assignedEngineers
+  assignedEngineers?: Types.ObjectId[]; // Changed from assignedTo
   assignedWorkers?: Types.ObjectId[];
   assignedDrivers?: Types.ObjectId[];
-  // New fields for completion dates
+  // Rest of the fields remain the same
   completionDate?: Date;
   handoverDate?: Date;
   acceptanceDate?: Date;
-
-  // New work date fields
   workStartDate?: Date;
   workEndDate?: Date;
-  //for some customers
   grnNumber?: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -112,7 +111,6 @@ const projectSchema = new Schema<IProject>(
       max: 100,
       default: 0,
     },
-    // New date fields
     completionDate: { type: Date },
     handoverDate: { type: Date },
     acceptanceDate: { type: Date },
@@ -125,10 +123,11 @@ const projectSchema = new Schema<IProject>(
       type: Schema.Types.ObjectId,
       ref: "User",
     },
-    assignedTo: {
+    // CHANGE: Replace single assignedTo with array of assignedEngineers
+    assignedEngineers: [{
       type: Schema.Types.ObjectId,
       ref: "User",
-    },
+    }],
     projectNumber: {
       type: String,
       required: true,
