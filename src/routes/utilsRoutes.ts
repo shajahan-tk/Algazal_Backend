@@ -3,7 +3,7 @@ import { migrateProjectDrivers } from "../utils/script";
 import { asyncHandler } from "../utils/asyncHandler";
 import { ApiResponse } from "../utils/apiHandlerHelpers";
 import { authenticate, authorize } from "../middlewares/authMiddleware";
-import { migrateProjectEngineers } from "@/utils/script2";
+import { migrateProjectEngineers } from "../utils/script2";
 
 const router = express.Router();
 
