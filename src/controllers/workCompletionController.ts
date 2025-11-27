@@ -543,7 +543,7 @@ export const generateCompletionCertificatePdf = asyncHandler(
         }
 
         // Get all necessary data
-        const project = await Project.findById(projectId)
+        const project: any = await Project.findById(projectId)
             .populate("client", "clientName")
             .populate("assignedTo", "firstName lastName signatureImage");
 
