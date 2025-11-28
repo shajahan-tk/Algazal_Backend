@@ -22,16 +22,16 @@ import { Types } from "mongoose";
 async function getCompletionDataForProject(projectId: string) {
     type PopulatedProject = Omit<
         IProject,
-        "client" | "assignedTo" | "createdBy"
+        "client" | "assignedEngineers" | "createdBy"
     > & {
         client: IClient;
-        assignedTo?: IUser;
+        assignedEngineers?: IUser[];
         createdBy: IUser;
     };
 
     const project = await Project.findById(projectId)
         .populate<{ client: IClient }>("client", "clientName")
-        .populate<{ assignedTo: IUser }>("assignedTo", "firstName lastName")
+        .populate<{ assignedEngineers: IUser[] }>("assignedEngineers", "firstName lastName")
         .populate<{ createdBy: IUser }>("createdBy", "firstName lastName");
 
     if (!project) {
@@ -46,6 +46,11 @@ async function getCompletionDataForProject(projectId: string) {
     const workCompletion = await WorkCompletion.findOne({ project: projectId })
         .populate("createdBy", "firstName lastName")
         .sort({ createdAt: -1 });
+
+    // Get the first assigned engineer if available
+    const firstEngineer = populatedProject.assignedEngineers && populatedProject.assignedEngineers.length > 0
+        ? populatedProject.assignedEngineers[0]
+        : null;
 
     return {
         _id: populatedProject._id.toString(),
@@ -66,8 +71,8 @@ async function getCompletionDataForProject(projectId: string) {
         lpoDate: lpo?.lpoDate?.toISOString() || "Not available",
         handover: {
             company: "AL GHAZAL AL ABYAD TECHNICAL SERVICES",
-            name: populatedProject.assignedTo
-                ? `${populatedProject.assignedTo.firstName} ${populatedProject.assignedTo.lastName}`
+            name: firstEngineer
+                ? `${firstEngineer.firstName} ${firstEngineer.lastName}`
                 : "Not assigned",
             signature: "",
             date:
@@ -135,6 +140,7 @@ export const createWorkCompletion = asyncHandler(
             );
     }
 );
+
 export const replaceWorkCompletionImage = asyncHandler(
     async (req: Request, res: Response) => {
         const { projectId, imageId } = req.params;
@@ -195,6 +201,7 @@ export const replaceWorkCompletionImage = asyncHandler(
         );
     }
 );
+
 export const uploadWorkCompletionImages = asyncHandler(
     async (req: Request, res: Response) => {
         const { projectId } = req.params;
@@ -267,6 +274,7 @@ export const uploadWorkCompletionImages = asyncHandler(
             .json(new ApiResponse(200, updatedData, "Images uploaded successfully"));
     }
 );
+
 export const updateWorkCompletionImage = asyncHandler(
     async (req: Request, res: Response) => {
         const { projectId, imageId } = req.params;
@@ -309,6 +317,7 @@ export const updateWorkCompletionImage = asyncHandler(
         );
     }
 );
+
 export const getWorkCompletion = asyncHandler(
     async (req: Request, res: Response) => {
         const { projectId } = req.params;
@@ -534,6 +543,7 @@ export const updateAcceptanceDate = asyncHandler(
             );
     }
 );
+
 export const generateCompletionCertificatePdf = asyncHandler(
     async (req: Request, res: Response) => {
         const { projectId } = req.params;
@@ -545,7 +555,7 @@ export const generateCompletionCertificatePdf = asyncHandler(
         // Get all necessary data
         const project: any = await Project.findById(projectId)
             .populate("client", "clientName")
-            .populate("assignedTo", "firstName lastName signatureImage");
+            .populate("assignedEngineers", "firstName lastName signatureImage");
 
         if (!project) {
             throw new ApiError(404, "Project not found");
@@ -564,7 +574,11 @@ export const generateCompletionCertificatePdf = asyncHandler(
             .populate("createdBy", "firstName lastName signatureImage")
             .sort({ createdAt: -1 });
 
-        const engineer: any = project.assignedTo;
+        // Get the first assigned engineer if available
+        const engineer = project.assignedEngineers && project.assignedEngineers.length > 0
+            ? project.assignedEngineers[0]
+            : null;
+
         const preparedBy: any = workCompletion?.createdBy;
 
         // Format dates

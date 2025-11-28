@@ -33,6 +33,7 @@ import bankDetailsRouter from "./routes/bankDetailsRoutes";
 import dashboardRoutes from "./routes/dashboardAnalyticsRoutes";
 import utilsRouter from "./routes/utilsRoutes";
 import restrictionRouter from "./routes/restrictionRoutes";
+import budgetRouter from "./routes/budgetRoutes";
 import { connectDb } from "./config/db";
 import { seedSuperAdmin } from "./utils/seeder";
 
@@ -57,7 +58,7 @@ app.use(
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(morgan("common"));
+app.use(morgan("dev"));
 
 // Test route
 app.get("/", (req, res) => {
@@ -103,6 +104,7 @@ app.use("/api/visa-expenses", visaRouter);
 app.use("/api/reports", reportTouter);
 app.use("/api/employee-summary", employeeSummaryRouter);
 app.use("/api/attendance-management", attendanceManagementRouter);
+app.use("/api/budget", budgetRouter);
 app.use("/api/utils", utilsRouter);
 
 app.use(errorHandler as ErrorRequestHandler);

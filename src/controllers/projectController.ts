@@ -18,6 +18,7 @@ import { Expense } from "../models/expenseModel";
 import puppeteer from "puppeteer";
 import { FRONTEND_URL } from "../config/constant";
 import { Bank } from "../models/bankDetailsModel";
+import { Budget } from "@/models/budgetModel";
 
 // Status transition validation
 const validStatusTransitions: Record<string, string[]> = {
@@ -249,7 +250,7 @@ export const getProject = asyncHandler(async (req: Request, res: Response) => {
   const quotation = await Quotation.findOne({ project: id }).select("_id");
   const Lpo = await LPO.findOne({ project: id }).select("_id");
   const expense = await Expense.findOne({ project: id }).select("_id");
-
+  const budget = await Budget.findOne({ project: id }).select("_id");
   // Updated response to include assignedEngineers instead of assignedTo
   const responseData = {
     ...project.toObject(),
@@ -260,6 +261,7 @@ export const getProject = asyncHandler(async (req: Request, res: Response) => {
     isApproved: estimation?.isApproved || false,
     expenseId: expense?._id || null,
     assignedEngineers: project.assignedEngineers || [], // Changed from assignedTo
+    budgetId: budget?._id || null,
   };
 
   res
