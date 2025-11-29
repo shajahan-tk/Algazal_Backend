@@ -18,7 +18,7 @@ import { Expense } from "../models/expenseModel";
 import puppeteer from "puppeteer";
 import { FRONTEND_URL } from "../config/constant";
 import { Bank } from "../models/bankDetailsModel";
-import { Budget } from "@/models/budgetModel";
+import { Budget } from "../models/budgetModel";
 import ExcelJS from "exceljs";
 // Status transition validation
 const validStatusTransitions: Record<string, string[]> = {
