@@ -19,7 +19,7 @@ import puppeteer from "puppeteer";
 import { FRONTEND_URL } from "../config/constant";
 import { Bank } from "../models/bankDetailsModel";
 import { Budget } from "@/models/budgetModel";
-
+import ExcelJS from "exceljs";
 // Status transition validation
 const validStatusTransitions: Record<string, string[]> = {
   draft: ["estimation_prepared"],
@@ -2121,3 +2121,144 @@ export const getWorkDuration = asyncHandler(
     );
   }
 );
+
+
+export const exportProjectsToExcel = asyncHandler(async (req: Request, res: Response) => {
+  const { search } = req.query;
+
+  // Build filter
+  const filter: any = {};
+
+  if (search) {
+    const searchTerm = search as string;
+
+    // Search for matching clients by name
+    const matchingClients = await Client.find({
+      clientName: { $regex: searchTerm, $options: "i" }
+    }).select("_id");
+
+    const clientIds = matchingClients.map(client => client._id);
+
+    // Build $or array with all searchable fields
+    filter.$or = [
+      { projectName: { $regex: searchTerm, $options: "i" } },
+      { projectDescription: { $regex: searchTerm, $options: "i" } },
+      { location: { $regex: searchTerm, $options: "i" } },
+      { building: { $regex: searchTerm, $options: "i" } },
+      { apartmentNumber: { $regex: searchTerm, $options: "i" } },
+      { projectNumber: { $regex: searchTerm, $options: "i" } },
+    ];
+
+    // Add client IDs to search if any matching clients found
+    if (clientIds.length > 0) {
+      filter.$or.push({ client: { $in: clientIds } });
+    }
+  }
+
+  // Get all projects with populated data
+  const projects = await Project.find(filter)
+    .populate("client", "clientName clientAddress mobileNumber")
+    .populate("assignedEngineers", "firstName lastName")
+    .populate("createdBy", "firstName lastName")
+    .sort({ createdAt: -1 });
+
+  // Get quotation data for all projects
+  const projectIds = projects.map(p => p._id);
+  const quotations = await Quotation.find({
+    project: { $in: projectIds }
+  }).select("project netAmount");
+
+  // Create a map for quick quotation lookup
+  const quotationMap = new Map();
+  quotations.forEach(q => {
+    quotationMap.set(q.project.toString(), q.netAmount);
+  });
+
+  // Create workbook
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Projects');
+
+  // Define columns - Added Quotation Amount column
+  worksheet.columns = [
+    { header: 'Project Number', key: 'projectNumber', width: 15 },
+    { header: 'Project Name', key: 'projectName', width: 30 },
+    { header: 'Client', key: 'clientName', width: 25 },
+    { header: 'Location', key: 'location', width: 20 },
+    { header: 'Building', key: 'building', width: 15 },
+    { header: 'Apartment', key: 'apartmentNumber', width: 12 },
+    { header: 'Status', key: 'status', width: 15 },
+    { header: 'Progress (%)', key: 'progress', width: 12 },
+    { header: 'Quotation Amount (AED)', key: 'quotationAmount', width: 20 },
+    { header: 'Assigned Engineers', key: 'assignedEngineers', width: 25 },
+    { header: 'Created Date', key: 'createdAt', width: 15 },
+    { header: 'Description', key: 'projectDescription', width: 40 }
+  ];
+
+  // Add header style
+  worksheet.getRow(1).font = { bold: true };
+  worksheet.getRow(1).fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FFE6E6FA' }
+  };
+
+  // Add data rows
+  projects.forEach((project: any) => {
+    const clientName = typeof project.client === 'object' ? project.client.clientName : 'N/A';
+    const assignedEngineers = Array.isArray(project.assignedEngineers)
+      ? project.assignedEngineers.map((eng: any) =>
+        typeof eng === 'object' ? `${eng.firstName} ${eng.lastName}` : ''
+      ).filter(Boolean).join(', ')
+      : '';
+
+    // Get quotation amount for this project
+    const quotationAmount = quotationMap.get(project._id.toString()) || 0;
+
+    worksheet.addRow({
+      projectNumber: project.projectNumber,
+      projectName: project.projectName,
+      clientName: clientName,
+      location: project.location,
+      building: project.building,
+      apartmentNumber: project.apartmentNumber,
+      status: project.status,
+      progress: project.progress,
+      quotationAmount: quotationAmount,
+      assignedEngineers: assignedEngineers,
+      createdAt: project.createdAt.toLocaleDateString('en-US'),
+      projectDescription: project.projectDescription || ''
+    });
+  });
+
+  // Format the quotation amount column as currency
+  worksheet.getColumn('quotationAmount').numFmt = '#,##0.00" AED"';
+
+  // Add total row for quotation amounts
+  const lastRow = worksheet.lastRow?.number || 0;
+  if (lastRow > 1) {
+    worksheet.addRow([]); // Empty row
+
+    const totalRow = worksheet.addRow({
+      projectNumber: 'TOTAL',
+      quotationAmount: {
+        formula: `SUM(I2:I${lastRow})`,
+        result: quotations.reduce((sum, q) => sum + (q.netAmount || 0), 0)
+      }
+    });
+
+    totalRow.font = { bold: true };
+    totalRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFF0F8FF' }
+    };
+  }
+
+  // Set response headers
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename=projects_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+  // Send the workbook
+  await workbook.xlsx.write(res);
+  res.end();
+});

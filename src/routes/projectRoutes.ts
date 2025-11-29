@@ -22,6 +22,7 @@ import {
   setWorkStartDate,
   setWorkEndDate,
   getWorkDuration,
+  exportProjectsToExcel,
 } from "../controllers/projectController";
 import { authenticate, authorize } from "../middlewares/authMiddleware";
 
@@ -43,6 +44,12 @@ router.get("/", getProjects);
 // Get projects for the logged-in engineer
 // The controller logic for this has been updated to filter projects where the user's ID is in the `assignedEngineers` array.
 router.get("/engineer", getEngineerProjects);
+router.get(
+  "/export",
+  authenticate,
+  authorize(["admin", "super_admin", "finance"]),
+  exportProjectsToExcel
+);
 
 // Get projects assigned to the logged-in driver
 router.get(

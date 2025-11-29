@@ -9,6 +9,51 @@ import dayjs from "dayjs";
 import { Types } from "mongoose";
 import { Request, Response } from "express";
 
+// Helper function to parse time to decimal hours
+function parseTimeToDecimal(timeValue: string | number): number {
+  if (typeof timeValue === 'number') {
+    // Already in decimal format
+    return Math.round(timeValue * 100) / 100;
+  }
+
+  if (typeof timeValue === 'string') {
+    const trimmed = timeValue.trim();
+
+    // Handle "HH:MM" format (e.g., "13:45")
+    if (trimmed.includes(':')) {
+      const [hours, minutes] = trimmed.split(':').map(Number);
+      if (isNaN(hours) || isNaN(minutes)) {
+        throw new ApiError(400, "Invalid time format. Use HH:MM format (e.g., 13:45)");
+      }
+      if (minutes >= 60) {
+        throw new ApiError(400, "Minutes must be less than 60");
+      }
+      return Math.round((hours + (minutes / 60)) * 100) / 100;
+    }
+
+    // Handle "HH.MM" format (e.g., "13.45" means 13:45)
+    if (trimmed.includes('.')) {
+      const [hours, minutes] = trimmed.split('.').map(Number);
+      if (isNaN(hours) || isNaN(minutes)) {
+        throw new ApiError(400, "Invalid time format. Use HH:MM or HH.MM format");
+      }
+      if (minutes >= 60) {
+        throw new ApiError(400, "Minutes must be less than 60");
+      }
+      return Math.round((hours + (minutes / 60)) * 100) / 100;
+    }
+
+    // Handle pure decimal string (e.g., "13.5" means 13.5 hours)
+    const parsed = parseFloat(trimmed);
+    if (isNaN(parsed)) {
+      throw new ApiError(400, "Invalid time format");
+    }
+    return Math.round(parsed * 100) / 100;
+  }
+
+  return 0;
+}
+
 // Create or Update attendance record
 export const createOrUpdateAttendance = asyncHandler(async (req: Request, res: Response) => {
   const { userId, date, type = "normal" } = req.body;
@@ -69,7 +114,7 @@ export const createOrUpdateAttendance = asyncHandler(async (req: Request, res: R
     throw new ApiError(404, "User not found");
   }
 
-  // Convert working hours
+  // Convert working hours using the new parser
   let workingHoursValue = 0;
   let overtimeHoursValue = 0;
 
@@ -79,41 +124,27 @@ export const createOrUpdateAttendance = asyncHandler(async (req: Request, res: R
     overtimeHoursValue = 0;
     present = false; // Paid leave is technically absent but paid
   } else if (present) {
-    // Handle working hours (existing code)
-    if (typeof workingHours === 'string') {
-      if (workingHours.includes(':')) {
-        const [hours, minutes] = workingHours.split(':').map(Number);
-        workingHoursValue = hours + (minutes / 60);
-      } else {
-        workingHoursValue = parseFloat(workingHours);
-      }
-    } else if (typeof workingHours === 'number') {
-      workingHoursValue = workingHours;
+    // Parse working hours with new format support
+    try {
+      workingHoursValue = parseTimeToDecimal(workingHours);
+    } catch (error: any) {
+      throw new ApiError(400, `Working hours error: ${error.message}`);
     }
 
     if (isNaN(workingHoursValue) || workingHoursValue < 0 || workingHoursValue > 24) {
       throw new ApiError(400, "Working hours must be between 0 and 24");
     }
 
-    workingHoursValue = Math.round(workingHoursValue * 100) / 100;
-
-    // Handle overtime hours
-    if (typeof overtimeHours === 'string') {
-      if (overtimeHours.includes(':')) {
-        const [hours, minutes] = overtimeHours.split(':').map(Number);
-        overtimeHoursValue = hours + (minutes / 60);
-      } else {
-        overtimeHoursValue = parseFloat(overtimeHours);
-      }
-    } else if (typeof overtimeHours === 'number') {
-      overtimeHoursValue = overtimeHours;
+    // Parse overtime hours
+    try {
+      overtimeHoursValue = parseTimeToDecimal(overtimeHours);
+    } catch (error: any) {
+      throw new ApiError(400, `Overtime hours error: ${error.message}`);
     }
 
     if (isNaN(overtimeHoursValue) || overtimeHoursValue < 0) {
       throw new ApiError(400, "Overtime hours cannot be negative");
     }
-
-    overtimeHoursValue = Math.round(overtimeHoursValue * 100) / 100;
   } else {
     // If absent (and not paid leave), set both to 0
     workingHoursValue = 0;
@@ -235,10 +266,7 @@ export const removeProjectAttendance = asyncHandler(async (req: Request, res: Re
   // Remove the project from the projects array
   attendance.projects = attendance.projects.filter(p => p.project.toString() !== projectId);
 
-  // If no projects left, what should we do?
-  // Maybe mark as absent? Or just leave it with 0 hours?
-  // Let's leave it as is, the pre-save hook will set workingHours to 0 if projects is empty.
-  // If projects is empty, we might want to set present to false?
+  // If no projects left, mark as absent
   if (attendance.projects.length === 0) {
     attendance.present = false;
     attendance.workingHours = 0;
@@ -272,7 +300,6 @@ export const deleteAttendanceRecord = asyncHandler(async (req: Request, res: Res
     .json(new ApiResponse(200, null, "Attendance record deleted successfully"));
 });
 
-
 // Get user attendance for specific date
 export const getUserDateAttendance = asyncHandler(async (req: Request, res: Response) => {
   const { userId } = req.params;
@@ -282,11 +309,7 @@ export const getUserDateAttendance = asyncHandler(async (req: Request, res: Resp
     throw new ApiError(400, "User ID and date are required");
   }
 
-  // safely cast date to string
-  const dateStr = Array.isArray(date) ? date[0] : String(date);
-
   const attendanceDate = new Date(Array.isArray(date) ? String(date[0]) : String(date));
-
 
   if (isNaN(attendanceDate.getTime())) {
     throw new ApiError(400, "Invalid date format");
@@ -310,7 +333,6 @@ export const getUserDateAttendance = asyncHandler(async (req: Request, res: Resp
     .status(200)
     .json(new ApiResponse(200, attendance, "Attendance records retrieved successfully"));
 });
-
 
 export const getUserProjects = asyncHandler(async (req: Request, res: Response) => {
   const { userId } = req.params;
@@ -339,7 +361,7 @@ export const getUserProjects = asyncHandler(async (req: Request, res: Response) 
         'work_completed',
         'quality_check'
       ]
-    } // Only active projects
+    }
   })
     .select("_id projectName projectNumber location building apartmentNumber client assignedWorkers assignedDrivers")
     .populate("client", "clientName")

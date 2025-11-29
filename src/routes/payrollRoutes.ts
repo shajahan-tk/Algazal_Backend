@@ -6,10 +6,9 @@ import {
   updatePayroll,
   deletePayroll,
   exportPayrollsToExcel,
-  generatePayslipPDF, 
-  getPayslipData 
+  generatePayslipPDF,
+  getPayslipData
 } from "../controllers/payrollController";
-
 import { authenticate, authorize } from "../middlewares/authMiddleware";
 
 const router = express.Router();

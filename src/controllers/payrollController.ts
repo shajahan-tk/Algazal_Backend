@@ -11,621 +11,248 @@ import { Types } from "mongoose";
 import puppeteer from "puppeteer";
 import { VisaExpense } from "../models/visaExpenseModel";
 
-// Helper function to calculate overtime for previous month
-export const calculatePreviousMonthOvertimeAmount = async (
+// Comprehensive salary calculation based on attendance
+export const calculateSalaryBasedOnAttendance = async (
   userId: Types.ObjectId,
-  basicSalary: number
+  basicSalary: number,
+  allowance: number,
+  period: string
 ) => {
   try {
-    const now = new Date();
-    const previousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const year = previousMonth.getFullYear();
-    const month = previousMonth.getMonth() + 1; // JavaScript months are 0-indexed
+    const [monthStr, yearStr] = period.split('-');
+    const month = parseInt(monthStr);
+    const year = parseInt(yearStr);
 
+    // Get date range for the month
     const startDate = new Date(year, month - 1, 1);
-    startDate.setHours(0, 0, 0, 0);
-
     const endDate = new Date(year, month, 0);
-    endDate.setHours(23, 59, 59, 999);
-
     const daysInMonth = endDate.getDate();
 
-    console.log(`Calculating overtime for user ${userId} for previous month: ${month}-${year}`);
-    console.log(`Days in month: ${daysInMonth}, Basic Salary: ${basicSalary}`);
+    console.log(`Calculating salary for ${period}, Days in month: ${daysInMonth}`);
 
+    // Get all attendance records for the month
     const attendances = await Attendance.find({
       user: userId,
-      date: { $gte: startDate, $lte: endDate },
-      present: true
+      date: { $gte: startDate, $lte: endDate }
     });
 
-    console.log(`Found ${attendances.length} attendance records for previous month`);
+    // Calculate working days and hours
+    let totalWorkingDays = 0;
+    let totalActualHours = 0;
+    let totalOvertimeHours = 0;
+    let sundayWorkingDays = 0;
+    let sundayOvertimeHours = 0;
+    let paidLeaveDays = 0;
+    let absentDays = 0;
 
-    const totalOvertimeHours = attendances.reduce((total, attendance) => {
-      const ot = attendance.overtimeHours || 0;
-      console.log(`Date: ${attendance.date}, OT Hours: ${ot}`);
-      return total + ot;
-    }, 0);
+    // Count Sundays in the month (automatically paid leaves)
+    let totalSundays = 0;
+    let currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+      if (currentDate.getDay() === 0) { // Sunday
+        totalSundays++;
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
 
-    const hourlyRate = (basicSalary / daysInMonth) / 10;
+    // Process each attendance record
+    attendances.forEach(att => {
+      const date = new Date(att.date);
+      const isSunday = date.getDay() === 0;
+
+      if (att.isPaidLeave) {
+        paidLeaveDays++;
+      } else if (!att.present) {
+        absentDays++;
+      } else if (att.present) {
+        // Present day calculation
+        const dailyHours = att.workingHours || 0;
+        const overtime = att.overtimeHours || 0;
+
+        totalActualHours += dailyHours;
+        totalOvertimeHours += overtime;
+
+        if (isSunday) {
+          sundayWorkingDays++;
+          sundayOvertimeHours += overtime;
+        }
+
+        // Count as working day (including Sundays when worked)
+        totalWorkingDays++;
+      }
+    });
+
+    // Calculate effective working days (excluding Sundays and paid leaves from total month days)
+    const totalMonthDays = daysInMonth;
+    const effectiveWorkingDays = totalMonthDays - totalSundays - paidLeaveDays;
+
+    // Calculate daily rate (basic salary + allowance)
+    const totalMonthlySalary = basicSalary + allowance;
+    const dailyRate = effectiveWorkingDays > 0 ? totalMonthlySalary / effectiveWorkingDays : 0;
+    const hourlyRate = dailyRate / 10; // 10 hours per day standard
+
+    console.log('Salary Calculation Details:', {
+      totalMonthDays,
+      totalSundays,
+      paidLeaveDays,
+      absentDays,
+      effectiveWorkingDays,
+      totalWorkingDays,
+      totalActualHours,
+      totalOvertimeHours,
+      sundayWorkingDays,
+      sundayOvertimeHours,
+      dailyRate: dailyRate.toFixed(2),
+      hourlyRate: hourlyRate.toFixed(2)
+    });
+
+    // Calculate base salary based on actual hours worked
+    let baseSalaryAmount = 0;
+
+    if (totalActualHours > 0) {
+      // Convert actual hours to equivalent days
+      const equivalentDays = totalActualHours / 10;
+      baseSalaryAmount = equivalentDays * dailyRate;
+    }
+
+    // Calculate overtime amount
     const overtimeAmount = totalOvertimeHours * hourlyRate;
 
-    console.log(`Total OT hours: ${totalOvertimeHours}, Hourly rate: ${hourlyRate.toFixed(2)}, OT amount: ${overtimeAmount.toFixed(2)}`);
+    // Sunday bonus: Full daily rate for each Sunday worked (regardless of hours)
+    const sundayBonus = sundayWorkingDays * dailyRate;
+
+    // Total earnings
+    const totalEarnings = baseSalaryAmount + overtimeAmount + sundayBonus;
 
     return {
-      overtimeHours: totalOvertimeHours,
+      baseSalaryAmount: Math.round(baseSalaryAmount * 100) / 100,
       overtimeAmount: Math.round(overtimeAmount * 100) / 100,
-      hourlyRate: Math.round(hourlyRate * 100) / 100,
-      daysInMonth
-    };
-  } catch (error) {
-    console.error("Error calculating previous month overtime:", error);
-    return {
-      overtimeHours: 0,
-      overtimeAmount: 0,
-      hourlyRate: 0,
-      daysInMonth: 30
-    };
-  }
-};
-
-// Helper function to get month number from month name
-const getMonthNumber = (monthName: string): number => {
-  const months: { [key: string]: number } = {
-    'January': 1,
-    'February': 2,
-    'March': 3,
-    'April': 4,
-    'May': 5,
-    'June': 6,
-    'July': 7,
-    'August': 8,
-    'September': 9,
-    'October': 10,
-    'November': 11,
-    'December': 12
-  };
-  return months[monthName] || 0;
-};
-
-// Helper function to format date
-const formatDate = (date: Date | string | undefined): string => {
-  if (!date) return 'N/A';
-  const d = new Date(date);
-  return isNaN(d.getTime()) ? 'N/A' : d.toLocaleDateString('en-GB', { 
-    day: '2-digit', 
-    month: '2-digit', 
-    year: 'numeric' 
-  });
-};
-
-// Get attendance details for a specific period with Sunday tracking
-const getAttendanceDetails = async (userId: Types.ObjectId, period: string) => {
-  try {
-    // Validate inputs
-    if (!userId || !period) {
-      return {
-        summary: {
-          totalDays: 0,
-          presentDays: 0,
-          absentDays: 0,
-          holidays: 0,
-          fridays: 0,
-          saturdays: 0,
-          sundays: 0
-        }
-      };
-    }
-
-    const filter: any = {
-      user: userId
-    };
-
-    // Add date filter if period is provided
-    if (period) {
-      // Parse period (expected format: MM-YYYY)
-      const [monthStr, yearStr] = period.split('-');
-      
-      if (!monthStr || !yearStr) {
-        console.log('Invalid period format:', period);
-        return {
-          summary: {
-            totalDays: 0,
-            presentDays: 0,
-            absentDays: 0,
-            holidays: 0,
-            fridays: 0,
-            saturdays: 0,
-            sundays: 0
-          }
-        };
-      }
-
-      const monthNum = parseInt(monthStr, 10);
-      const yearNum = parseInt(yearStr, 10);
-
-      if (isNaN(monthNum) || isNaN(yearNum) || monthNum < 1 || monthNum > 12) {
-        console.log('Invalid month/year in period:', period);
-        return {
-          summary: {
-            totalDays: 0,
-            presentDays: 0,
-            absentDays: 0,
-            holidays: 0,
-            fridays: 0,
-            saturdays: 0,
-            sundays: 0
-          }
-        };
-      }
-
-      // Create VALID date range for the specific month
-      // JavaScript months are 0-indexed (0=Jan, 1=Feb, etc.)
-      const startDate = new Date(yearNum, monthNum - 1, 1);
-      const endDate = new Date(yearNum, monthNum, 0); // 0th day of next month is last day of current month
-      
-      console.log('Date range for attendance:', {
-        period,
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString()
-      });
-
-      filter.date = {
-        $gte: startDate,
-        $lte: endDate
-      };
-    }
-
-    console.log('Attendance filter:', filter);
-
-    const attendances = await Attendance.find(filter)
-      .populate('user', 'firstName lastName')
-      .sort({ date: 1 });
-
-    // Initialize counters
-    let totalDays = 0;
-    let presentDays = 0;
-    let absentDays = 0;
-    let dutyOffDays = 0;
-    let totalHours = 0;
-    let overtimeHours = 0;
-    let sundayWorkingDays = 0;
-    let sundayOvertimeHours = 0;
-
-    const days = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
-
-    // Process attendance records
-    const attendanceRecords = attendances.map((att, index) => {
-      if (!att.date) return;
-
-      totalDays++;
-      
-      const date = new Date(att.date);
-      const dayName = days[date.getDay()];
-      const isSunday = date.getDay() === 0;
-
-      let status = 'ABSENT';
-      let hours = 0;
-
-      if (att.isPaidLeave) {
-        status = 'DUTY OFF';
-        dutyOffDays++;
-      } else if (att.present) {
-        status = 'PRESENT';
-        hours = att.workingHours || 0;
-        totalHours += hours;
-        overtimeHours += att.overtimeHours || 0;
-        presentDays++;
-
-        // Track Sunday working separately
-        if (isSunday) {
-          sundayWorkingDays++;
-          sundayOvertimeHours += att.overtimeHours || 0;
-        }
-      } else {
-        absentDays++;
-      }
-
-      return {
-        sno: index + 1,
-        date: date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-        day: dayName,
-        status,
-        hours: hours.toFixed(2),
-        overtimeHours: (att.overtimeHours || 0).toFixed(2),
-        isSunday
-      };
-    });
-
-    const summary = {
-      totalDays,
-      presentDays,
-      absentDays,
-      dutyOffDays,
-      totalHours: totalHours.toFixed(2),
-      overtimeHours: overtimeHours.toFixed(2),
-      sundayWorkingDays,
-      sundayOvertimeHours: sundayOvertimeHours.toFixed(2)
-    };
-
-    console.log('Attendance summary:', summary);
-
-    return {
-      records: attendanceRecords,
-      summary
-    };
-
-  } catch (error) {
-    console.error('Error in getAttendanceDetails:', error);
-    return {
-      summary: {
-        totalDays:  0,
-        presentDays: 0,
-        absentDays: 0,
-        holidays: 0,
-        fridays: 0,
-        saturdays: 0,
-        sundays: 0
-      }
-    };
-  }
-};
-
-// New function to get attendance details by month and year
-const getAttendanceDetailsByMonthYear = async (userId: Types.ObjectId, month: number, year: number) => {
-  try {
-    // Validate inputs
-    if (!userId || !month || !year) {
-      return {
-        summary: {
-          totalDays: 0,
-          presentDays: 0,
-          absentDays: 0,
-          holidays: 0,
-          fridays: 0,
-          saturdays: 0,
-          sundays: 0
-        }
-      };
-    }
-
-    const filter: any = {
-      user: userId
-    };
-
-    // Create date range for specific month and year
-    // JavaScript months are 0-indexed (0=Jan, 1=Feb, etc.)
-    const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0); // Last day of month
-    
-    // Validate dates
-    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-      console.log('Invalid dates created:', { startDate, endDate, month, year });
-      return {
-        summary: {
-          totalDays: 0,
-          presentDays: 0,
-          absentDays: 0,
-          holidays: 0,
-          fridays: 0,
-          saturdays: 0,
-          sundays: 0
-        }
-      };
-    }
-
-    console.log('Date range for attendance:', {
-      month,
-      year,
-      startDate: startDate.toISOString(),
-      endDate: endDate.toISOString()
-    });
-
-    filter.date = {
-      $gte: startDate,
-      $lte: endDate
-    };
-
-    const attendances = await Attendance.find(filter)
-      .populate('user', 'firstName lastName')
-      .sort({ date: 1 });
-
-    // Initialize counters
-    let totalDays = 0;
-    let presentDays = 0;
-    let absentDays = 0;
-    let dutyOffDays = 0;
-    let totalHours = 0;
-    let overtimeHours = 0;
-    let sundayWorkingDays = 0;
-    let sundayOvertimeHours = 0;
-
-    const days = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
-
-    // Process attendance records
-    const attendanceRecords = attendances.map((att, index) => {
-      if (!att.date) return;
-
-      totalDays++;
-      
-      const date = new Date(att.date);
-      const dayName = days[date.getDay()];
-      const isSunday = date.getDay() === 0;
-
-      let status = 'ABSENT';
-      let hours = 0;
-
-      if (att.isPaidLeave) {
-        status = 'DUTY OFF';
-        dutyOffDays++;
-      } else if (att.present) {
-        status = 'PRESENT';
-        hours = att.workingHours || 0;
-        totalHours += hours;
-        overtimeHours += att.overtimeHours || 0;
-        presentDays++;
-
-        // Track Sunday working separately
-        if (isSunday) {
-          sundayWorkingDays++;
-          sundayOvertimeHours += att.overtimeHours || 0;
-        }
-      } else {
-        absentDays++;
-      }
-
-      return {
-        sno: index + 1,
-        date: date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-        day: dayName,
-        status,
-        hours: hours.toFixed(2),
-        overtimeHours: (att.overtimeHours || 0).toFixed(2),
-        isSunday
-      };
-    });
-
-    const summary = {
-      totalDays,
-      presentDays,
-      absentDays,
-      dutyOffDays,
-      totalHours: totalHours.toFixed(2),
-      overtimeHours: overtimeHours.toFixed(2),
-      sundayWorkingDays,
-      sundayOvertimeHours: sundayOvertimeHours.toFixed(2)
-    };
-
-    console.log('Attendance summary:', summary);
-
-    return {
-      records: attendanceRecords,
-      summary
-    };
-
-  } catch (error) {
-    console.error('Error in getAttendanceDetailsByMonthYear:', error);
-    return {
-      summary: {
-        totalDays: 0,
-        presentDays: 0,
-        absentDays: 0,
-        holidays: 0,
-        fridays: 0,
-        saturdays: 0,
-        sundays: 0
-      }
-    };
-  }
-};
-
-// Get all payroll records with comprehensive data
-export const getPayrolls = asyncHandler(async (req: Request, res: Response) => {
-  const {
-    employee,
-    labourCard,
-    labourCardPersonalNo,
-    startDate,
-    endDate,
-    month,
-    year,
-    page = 1,
-    limit = 10
-  } = req.query;
-
-  const skip = (Number(page) - 1) * Number(limit);
-
-  interface PayrollFilter {
-    employee?: Types.ObjectId | string;
-    labourCard?: string;
-    labourCardPersonalNo?: string;
-    createdAt?: {
-      $gte?: Date;
-      $lte?: Date;
-    };
-  }
-
-  const filter: PayrollFilter = {};
-
-  if (employee) filter.employee = new Types.ObjectId(employee as string);
-  if (labourCard) filter.labourCard = labourCard as string;
-  if (labourCardPersonalNo) filter.labourCardPersonalNo = labourCardPersonalNo as string;
-
-  // Initialize createdAt filter if not already present
-  if (!filter.createdAt) filter.createdAt = {};
-
-  if (startDate && endDate) {
-    // Validate and parse the dates
-    const start = new Date(startDate as string);
-    const end = new Date(endDate as string);
-    
-    // Check if dates are valid
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      throw new ApiError(400, "Invalid date format in startDate or endDate");
-    }
-    
-    filter.createdAt = {
-      $gte: start,
-      $lte: end
-    };
-  } else if (year) {
-    const yearNum = parseInt(year as string);
-    if (isNaN(yearNum)) {
-      throw new ApiError(400, "Invalid year value");
-    }
-    
-    if (month) {
-      const monthNum = parseInt(month as string);
-      if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
-        throw new ApiError(400, "Invalid month value (1-12)");
-      }
-      
-      // Create date range for the specific month
-      // JavaScript months are 0-indexed (0=Jan, 1=Feb, etc.)
-      const startDateOfMonth = new Date(yearNum, monthNum - 1, 1);
-      const endDateOfMonth = new Date(yearNum, monthNum, 0); // 0th day of next month is last day of current month
-      
-      console.log('Filtering by month/year:', {
-        year: yearNum,
-        month: monthNum,
-        startDate: startDateOfMonth.toISOString(),
-        endDate: endDateOfMonth.toISOString()
-      });
-      
-      filter.createdAt = {
-        $gte: startDateOfMonth,
-        $lte: endDateOfMonth
-      };
-    } else {
-      // If only year is provided, get entire year
-      filter.createdAt = {
-        $gte: new Date(yearNum, 0, 1),
-        $lte: new Date(yearNum + 1, 0, 1)
-      };
-    }
-  }
-
-  console.log('Final payroll filter:', filter);
-
-  const total = await Payroll.countDocuments(filter);
-
-  const payrolls = await Payroll.find(filter)
-    .skip(skip)
-    .limit(Number(limit))
-    .sort({ createdAt: -1 }) // Sort by creation date
-    .populate<{ employee: IUser }>({
-      path: 'employee',
-      select: 'firstName lastName role emiratesId'
-    })
-    .populate<{ createdBy: IUser }>({
-      path: 'createdBy',
-      select: 'firstName lastName'
-    });
-
-  const enhancedPayrolls = await Promise.all(
-    payrolls.map(async (payroll) => {
-      if (!payroll.employee || typeof payroll.employee !== 'object') {
-        throw new Error('Employee data not properly populated');
-      }
-
-      const employeeExpense = await EmployeeExpense.findOne({
-        employee: payroll.employee._id
-      }).lean();
-
-      // Get attendance details - DON'T pass period since we're filtering by month/year
-      const attendanceDetails = await getAttendanceDetailsByMonthYear(
-        payroll.employee._id, 
-        getMonthNumber(payroll.period.split('-')[0]),
-        parseInt(payroll.period.split('-')[1])
-      );
-
-      const totalEarnings = (employeeExpense?.basicSalary || 0) +
-        payroll.allowance +
-        payroll.transport +
-        payroll.overtime +
-        payroll.medical +
-        payroll.bonus;
-
-      const totalDeductions = payroll.mess +
-        payroll.salaryAdvance +
-        payroll.loanDeduction +
-        payroll.fineAmount +
-        (payroll.visaDeduction || 0);
-
-      return {
-        _id: payroll._id,
-        name: `${payroll.employee.firstName} ${payroll.employee.lastName}`,
-        designation: payroll.employee.role,
-        emiratesId: payroll.employee.emiratesId || 'N/A',
-        labourCard: payroll.labourCard,
-        labourCardPersonalNo: payroll.labourCardPersonalNo,
-        period: payroll.period,
-        basicSalary: employeeExpense?.basicSalary || 0,
-        allowance: payroll.allowance,
-        transport: payroll.transport,
-        overtime: payroll.overtime,
-        medical: payroll.medical,
-        bonus: payroll.bonus,
-        totalEarnings,
-        mess: payroll.mess,
-        salaryAdvance: payroll.salaryAdvance,
-        loanDeduction: payroll.loanDeduction,
-        fineAmount: payroll.fineAmount,
-        visaDeduction: payroll.visaDeduction || 0,
-        totalDeductions,
-        net: payroll.net,
-        remark: payroll.remark,
-        // Include attendance summary with Sunday tracking
-        attendanceSummary: attendanceDetails.summary,
-        createdBy: payroll.createdBy
-          ? `${payroll.createdBy.firstName} ${payroll.createdBy.lastName}`
-          : 'System',
-        createdAt: payroll.createdAt
-      };
-    })
-  );
-
-  res.status(200).json(
-    new ApiResponse(
-      200,
-      {
-        payrolls: enhancedPayrolls,
-        pagination: {
-          total,
-          page: Number(page),
-          limit: Number(limit),
-          totalPages: Math.ceil(total / Number(limit)),
-          hasNextPage: Number(page) * Number(limit) < total,
-          hasPreviousPage: Number(page) > 1,
-        },
+      sundayBonus: Math.round(sundayBonus * 100) / 100,
+      totalEarnings: Math.round(totalEarnings * 100) / 100,
+      attendanceSummary: {
+        totalMonthDays,
+        totalSundays,
+        paidLeaveDays,
+        absentDays,
+        effectiveWorkingDays,
+        totalWorkingDays,
+        totalActualHours,
+        totalOvertimeHours,
+        sundayWorkingDays,
+        sundayOvertimeHours
       },
-      "Payrolls retrieved successfully"
-    )
-  );
+      rates: {
+        dailyRate: Math.round(dailyRate * 100) / 100,
+        hourlyRate: Math.round(hourlyRate * 100) / 100
+      }
+    };
+
+  } catch (error) {
+    console.error("Error calculating salary based on attendance:", error);
+    return {
+      baseSalaryAmount: 0,
+      overtimeAmount: 0,
+      sundayBonus: 0,
+      totalEarnings: 0,
+      attendanceSummary: {
+        totalMonthDays: 0,
+        totalSundays: 0,
+        paidLeaveDays: 0,
+        absentDays: 0,
+        effectiveWorkingDays: 0,
+        totalWorkingDays: 0,
+        totalActualHours: 0,
+        totalOvertimeHours: 0,
+        sundayWorkingDays: 0,
+        sundayOvertimeHours: 0
+      },
+      rates: {
+        dailyRate: 0,
+        hourlyRate: 0
+      }
+    };
+  }
+};
+
+// Enhanced employee summary with calculation details
+export const getEmployeeSummary = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  if (!id) throw new ApiError(400, "User ID is required");
+
+  const user = await User.findById(id).select("-password");
+  if (!user) throw new ApiError(404, "User not found");
+
+  // Get employee expense details
+  const employeeExpense = await EmployeeExpense.findOne({ employee: user._id });
+  const basicSalary = Number(employeeExpense?.basicSalary) || 0;
+  const allowance = Number(employeeExpense?.allowance) || 0;
+
+  // Get current period for calculation
+  const now = new Date();
+  const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const period = `${String(prevMonth.getMonth() + 1).padStart(2, '0')}-${prevMonth.getFullYear()}`;
+
+  // Calculate salary with new system
+  const salaryData = await calculateSalaryBasedOnAttendance(user._id, basicSalary, allowance, period);
+
+  const visaExpense = await VisaExpense.findOne({ employee: user._id })
+    .sort({ createdAt: -1 })
+    .select("labourCardPersonalNumber workPermitNumber passportNumber emirateIdNumber iBan total")
+    .lean();
+
+  const response = {
+    employee: {
+      _id: user._id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: user.role,
+      basicSalary,
+      allowance,
+      phoneNumbers: user.phoneNumbers,
+      accountNumber: user.accountNumber,
+      emiratesId: user.emiratesId,
+      passportNumber: user.passportNumber,
+      iBANNumber: user.iBANNumber,
+      address: user.address,
+    },
+    salaryCalculation: {
+      baseSalaryAmount: salaryData.baseSalaryAmount,
+      overtimeAmount: salaryData.overtimeAmount,
+      sundayBonus: salaryData.sundayBonus,
+      totalEarnings: salaryData.totalEarnings,
+      attendanceSummary: salaryData.attendanceSummary,
+      rates: salaryData.rates,
+      period,
+    },
+    overtime: {
+      previousMonthAmount: salaryData.overtimeAmount,
+      previousMonthHours: salaryData.attendanceSummary.totalOvertimeHours,
+      hourlyRate: salaryData.rates.hourlyRate,
+      daysInMonth: salaryData.attendanceSummary.totalMonthDays,
+      period,
+    },
+    visaDetails: visaExpense
+      ? {
+        labourCardPersonalNumber: visaExpense.labourCardPersonalNumber,
+        workPermitNumber: visaExpense.workPermitNumber,
+        passportNumber: visaExpense.passportNumber,
+        emirateIdNumber: visaExpense.emirateIdNumber,
+        iBan: visaExpense.iBan,
+        totalVisaExpenses: visaExpense.total,
+      }
+      : null,
+  };
+
+  res.status(200).json(new ApiResponse(200, response, "Employee summary retrieved successfully"));
 });
 
-// Create payroll record
+// Create payroll with new calculation system
 export const createPayroll = asyncHandler(async (req: Request, res: Response) => {
-  let {
-    employee,
-    labourCard,
-    labourCardPersonalNo,
-    allowance,
-    transport,
-    medical,
-    bonus,
-    specialOT,
-    mess,
-    salaryAdvance,
-    loanDeduction,
-    fineAmount,
-    visaDeduction,
-    remark
-  } = req.body;
+  let { employee, labourCard, labourCardPersonalNo, allowance, transport, medical, bonus, specialOT, mess, salaryAdvance, loanDeduction, fineAmount, visaDeduction, remark } = req.body;
 
-  console.log('====================================');
-  console.log('Creating payroll for previous month:', req.body);
-  console.log('====================================');
+  console.log('Creating payroll with new attendance-based calculation:', req.body);
 
   allowance = Number(allowance) || 0;
   transport = Number(transport) || 0;
@@ -661,12 +288,16 @@ export const createPayroll = asyncHandler(async (req: Request, res: Response) =>
   const employeeExpense = await EmployeeExpense.findOne({ employee });
   const basicSalary = Number(employeeExpense?.basicSalary) || 0;
 
-  const overtimeData = await calculatePreviousMonthOvertimeAmount(employee, basicSalary);
-  const overtime = overtimeData.overtimeAmount;
+  // Use new attendance-based calculation
+  const salaryData = await calculateSalaryBasedOnAttendance(employee, basicSalary, allowance, period);
 
-  const totalEarnings = basicSalary + allowance + transport + overtime + specialOT + medical + bonus;
+  // The base salary from attendance calculation replaces the fixed basic salary
+  const baseSalaryFromAttendance = salaryData.baseSalaryAmount;
+  const overtime = salaryData.overtimeAmount;
+
+  // Include Sunday bonus in total earnings
+  const totalEarnings = baseSalaryFromAttendance + allowance + transport + overtime + specialOT + medical + bonus + salaryData.sundayBonus;
   const totalDeductions = mess + salaryAdvance + loanDeduction + fineAmount + visaDeduction;
-
   const net = totalEarnings - totalDeductions;
 
   const payroll = await Payroll.create({
@@ -687,13 +318,199 @@ export const createPayroll = asyncHandler(async (req: Request, res: Response) =>
     visaDeduction,
     net,
     remark,
-    createdBy: req.user?.userId
+    createdBy: req.user?.userId,
+    calculationDetails: {
+      baseSalaryFromAttendance,
+      sundayBonus: salaryData.sundayBonus,
+      attendanceSummary: salaryData.attendanceSummary,
+      rates: salaryData.rates
+    }
   });
 
-  console.log(`Payroll created successfully for period ${period} with overtime: ${overtime}, special OT: ${specialOT}, visa deduction: ${visaDeduction}`);
+  console.log(`Payroll created successfully for period ${period}`);
+  console.log('Salary Calculation:', {
+    baseSalaryFromAttendance,
+    allowance,
+    transport,
+    overtime,
+    specialOT,
+    medical,
+    bonus,
+    sundayBonus: salaryData.sundayBonus,
+    totalEarnings,
+    totalDeductions,
+    net
+  });
 
   res.status(201).json(
-    new ApiResponse(201, payroll, "Payroll created successfully for previous month")
+    new ApiResponse(201, {
+      payroll,
+      calculationDetails: salaryData
+    }, "Payroll created successfully with attendance-based calculation")
+  );
+});
+
+// Get single payroll record with calculation details
+export const getPayroll = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const payroll = await Payroll.findById(id)
+    .populate<{ employee: IUser }>({ path: 'employee', select: 'firstName lastName role emiratesId' })
+    .populate<{ createdBy: IUser }>({ path: 'createdBy', select: 'firstName lastName' });
+
+  if (!payroll) {
+    throw new ApiError(404, "Payroll not found");
+  }
+
+  if (!payroll.employee || typeof payroll.employee !== 'object') {
+    throw new ApiError(500, "Employee data not properly populated");
+  }
+
+  const employeeExpense = await EmployeeExpense.findOne({ employee: payroll.employee._id }).lean();
+
+  // Use calculation details if available, otherwise calculate
+  let calculationDetails: any = payroll.calculationDetails;
+  if (!calculationDetails) {
+    const basicSalary = employeeExpense?.basicSalary || 0;
+    const allowance = payroll.allowance;
+    calculationDetails = await calculateSalaryBasedOnAttendance(payroll.employee._id, basicSalary, allowance, payroll.period);
+  }
+
+  const totalEarnings = calculationDetails.totalEarnings + payroll.transport + payroll.specialOT + payroll.medical + payroll.bonus;
+  const totalDeductions = payroll.mess + payroll.salaryAdvance + payroll.loanDeduction + payroll.fineAmount + payroll.visaDeduction;
+
+  const enhancedPayroll = {
+    ...payroll.toObject(),
+    name: `${payroll.employee.firstName} ${payroll.employee.lastName}`,
+    designation: payroll.employee.role,
+    emiratesId: payroll.employee.emiratesId || 'N/A',
+    basicSalary: calculationDetails.baseSalaryAmount,
+    totalEarnings,
+    totalDeductions,
+    calculationDetails,
+    createdByName: payroll.createdBy ? `${payroll.createdBy.firstName} ${payroll.createdBy.lastName}` : 'System'
+  };
+
+  res.status(200).json(
+    new ApiResponse(200, enhancedPayroll, "Payroll retrieved successfully")
+  );
+});
+
+// Get all payroll records
+export const getPayrolls = asyncHandler(async (req: Request, res: Response) => {
+  const { employee, labourCard, labourCardPersonalNo, startDate, endDate, month, year, page = 1, limit = 10 } = req.query;
+  const skip = (Number(page) - 1) * Number(limit);
+
+  interface PayrollFilter {
+    employee?: Types.ObjectId | string;
+    labourCard?: string;
+    labourCardPersonalNo?: string;
+    createdAt?: { $gte?: Date; $lte?: Date };
+  }
+
+  const filter: PayrollFilter = {};
+  if (employee) filter.employee = new Types.ObjectId(employee as string);
+  if (labourCard) filter.labourCard = labourCard as string;
+  if (labourCardPersonalNo) filter.labourCardPersonalNo = labourCardPersonalNo as string;
+
+  if (!filter.createdAt) filter.createdAt = {};
+  if (startDate && endDate) {
+    const start = new Date(startDate as string);
+    const end = new Date(endDate as string);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      throw new ApiError(400, "Invalid date format in startDate or endDate");
+    }
+    filter.createdAt = { $gte: start, $lte: end };
+  } else if (year) {
+    const yearNum = parseInt(year as string);
+    if (isNaN(yearNum)) throw new ApiError(400, "Invalid year value");
+
+    if (month) {
+      const monthNum = parseInt(month as string);
+      if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+        throw new ApiError(400, "Invalid month value (1-12)");
+      }
+      const startDateOfMonth = new Date(yearNum, monthNum - 1, 1);
+      const endDateOfMonth = new Date(yearNum, monthNum, 0);
+      filter.createdAt = { $gte: startDateOfMonth, $lte: endDateOfMonth };
+    } else {
+      filter.createdAt = { $gte: new Date(yearNum, 0, 1), $lte: new Date(yearNum + 1, 0, 1) };
+    }
+  }
+
+  const total = await Payroll.countDocuments(filter);
+  const payrolls = await Payroll.find(filter)
+    .skip(skip)
+    .limit(Number(limit))
+    .sort({ createdAt: -1 })
+    .populate<{ employee: IUser }>({ path: 'employee', select: 'firstName lastName role emiratesId' })
+    .populate<{ createdBy: IUser }>({ path: 'createdBy', select: 'firstName lastName' });
+
+  const enhancedPayrolls = await Promise.all(
+    payrolls.map(async (payroll) => {
+      if (!payroll.employee || typeof payroll.employee !== 'object') {
+        throw new Error('Employee data not properly populated');
+      }
+
+      const employeeExpense = await EmployeeExpense.findOne({ employee: payroll.employee._id }).lean();
+
+      // Use calculation details if available
+      let calculationDetails: any = payroll.calculationDetails;
+      if (!calculationDetails) {
+        const basicSalary = employeeExpense?.basicSalary || 0;
+        const allowance = payroll.allowance;
+        calculationDetails = await calculateSalaryBasedOnAttendance(payroll.employee._id, basicSalary, allowance, payroll.period);
+      }
+
+      const totalEarnings = calculationDetails.totalEarnings + payroll.transport + payroll.specialOT + payroll.medical + payroll.bonus;
+      const totalDeductions = payroll.mess + payroll.salaryAdvance + payroll.loanDeduction + payroll.fineAmount + payroll.visaDeduction;
+
+      return {
+        _id: payroll._id,
+        name: `${payroll.employee.firstName} ${payroll.employee.lastName}`,
+        designation: payroll.employee.role,
+        emiratesId: payroll.employee.emiratesId || 'N/A',
+        labourCard: payroll.labourCard,
+        labourCardPersonalNo: payroll.labourCardPersonalNo,
+        period: payroll.period,
+        basicSalary: calculationDetails.baseSalaryAmount,
+        allowance: payroll.allowance,
+        transport: payroll.transport,
+        overtime: payroll.overtime,
+        specialOT: payroll.specialOT || 0,
+        medical: payroll.medical,
+        bonus: payroll.bonus,
+        totalEarnings,
+        mess: payroll.mess,
+        salaryAdvance: payroll.salaryAdvance,
+        loanDeduction: payroll.loanDeduction,
+        fineAmount: payroll.fineAmount,
+        visaDeduction: payroll.visaDeduction || 0,
+        totalDeductions,
+        net: payroll.net,
+        remark: payroll.remark,
+        calculationDetails,
+        createdBy: payroll.createdBy ? `${payroll.createdBy.firstName} ${payroll.createdBy.lastName}` : 'System',
+        createdAt: payroll.createdAt
+      };
+    })
+  );
+
+  res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        payrolls: enhancedPayrolls,
+        pagination: {
+          total,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(total / Number(limit)),
+          hasNextPage: Number(page) * Number(limit) < total,
+          hasPreviousPage: Number(page) > 1,
+        },
+      },
+      "Payrolls retrieved successfully"
+    )
   );
 });
 
@@ -707,7 +524,7 @@ export const updatePayroll = asyncHandler(async (req: Request, res: Response) =>
     throw new ApiError(404, "Payroll not found");
   }
 
-  // Don'T allow period or overtime to be changed (overtime is auto-calculated)
+  // Don't allow period or overtime to be changed (overtime is auto-calculated)
   delete updateData.period;
   delete updateData.overtime;
 
@@ -715,13 +532,7 @@ export const updatePayroll = asyncHandler(async (req: Request, res: Response) =>
   if (updateData.employee) {
     const employeeId = updateData.employee;
     const period = payroll.period;
-
-    const existingPayroll = await Payroll.findOne({
-      _id: { $ne: id },
-      employee: employeeId,
-      period
-    });
-
+    const existingPayroll = await Payroll.findOne({ _id: { $ne: id }, employee: employeeId, period });
     if (existingPayroll) {
       throw new ApiError(400, "Payroll already exists for this employee and period");
     }
@@ -743,9 +554,8 @@ export const updatePayroll = asyncHandler(async (req: Request, res: Response) =>
   const employeeExpense = await EmployeeExpense.findOne({
     employee: updateData.employee || payroll.employee
   });
-
   const basicSalary = Number(employeeExpense?.basicSalary) || 0;
-  
+
   // Use updated values if provided, otherwise keep existing
   const allowance = updateData.allowance !== undefined ? updateData.allowance : payroll.allowance;
   const transport = updateData.transport !== undefined ? updateData.transport : payroll.transport;
@@ -757,29 +567,42 @@ export const updatePayroll = asyncHandler(async (req: Request, res: Response) =>
   const loanDeduction = updateData.loanDeduction !== undefined ? updateData.loanDeduction : payroll.loanDeduction;
   const fineAmount = updateData.fineAmount !== undefined ? updateData.fineAmount : payroll.fineAmount;
   const visaDeduction = updateData.visaDeduction !== undefined ? updateData.visaDeduction : (payroll.visaDeduction || 0);
-  
-  // Keep existing overtime (it's auto-calculated, shouldn't be changed manually)
-  const overtime = payroll.overtime;
 
-  // Recalculate net salary
-  const totalEarnings = basicSalary + allowance + transport + overtime + specialOT + medical + bonus;
+  // Recalculate salary with new calculation system
+  const salaryData = await calculateSalaryBasedOnAttendance(
+    updateData.employee || payroll.employee,
+    basicSalary,
+    allowance,
+    payroll.period
+  );
+
+  // Keep existing overtime (it's auto-calculated, shouldn't be changed manually)
+  const overtime = salaryData.overtimeAmount;
+
+  // Recalculate net salary with new system
+  const baseSalaryFromAttendance = salaryData.baseSalaryAmount;
+  const totalEarnings = baseSalaryFromAttendance + allowance + transport + overtime + specialOT + medical + bonus + salaryData.sundayBonus;
   const totalDeductions = mess + salaryAdvance + loanDeduction + fineAmount + visaDeduction;
   updateData.net = totalEarnings - totalDeductions;
 
+  // Update calculation details
+  updateData.calculationDetails = {
+    baseSalaryFromAttendance,
+    sundayBonus: salaryData.sundayBonus,
+    attendanceSummary: salaryData.attendanceSummary,
+    rates: salaryData.rates
+  };
+
   console.log('Update calculation:', {
-    basicSalary,
+    baseSalaryFromAttendance,
     allowance,
     transport,
     overtime,
     specialOT,
     medical,
     bonus,
+    sundayBonus: salaryData.sundayBonus,
     totalEarnings,
-    mess,
-    salaryAdvance,
-    loanDeduction,
-    fineAmount,
-    visaDeduction,
     totalDeductions,
     net: updateData.net
   });
@@ -788,14 +611,8 @@ export const updatePayroll = asyncHandler(async (req: Request, res: Response) =>
     new: true,
     runValidators: true
   })
-    .populate({
-      path: "employee",
-      select: "firstName lastName role emiratesId"
-    })
-    .populate({
-      path: "createdBy",
-      select: "firstName lastName"
-    });
+    .populate({ path: "employee", select: "firstName lastName role emiratesId" })
+    .populate({ path: "createdBy", select: "firstName lastName" });
 
   if (!updatedPayroll) {
     throw new ApiError(404, "Payroll not found after update");
@@ -809,13 +626,10 @@ export const updatePayroll = asyncHandler(async (req: Request, res: Response) =>
 // Delete payroll record
 export const deletePayroll = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-
   const payroll = await Payroll.findByIdAndDelete(id);
-
   if (!payroll) {
     throw new ApiError(404, "Payroll not found");
   }
-
   res.status(200).json(
     new ApiResponse(200, null, "Payroll deleted successfully")
   );
@@ -825,42 +639,19 @@ export const deletePayroll = asyncHandler(async (req: Request, res: Response) =>
 export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Response) => {
   const { month, year, search, employee, period, labourCard, startDate, endDate } = req.query;
 
-  const filter: Record<string, unknown> = {};
-
+  const filter: Record<string, any> = {};
   if (month && year) {
     const startOfMonth = new Date(Number(year), Number(month) - 1, 1);
     const endOfMonth = new Date(Number(year), Number(month), 0, 23, 59, 59, 999);
-    
-    console.log('Exporting by month/year:', {
-      month,
-      year,
-      startDate: startOfMonth.toISOString(),
-      endDate: endOfMonth.toISOString()
-    });
-    
-    filter.createdAt = {
-      $gte: startOfMonth,
-      $lte: endOfMonth
-    };
+    console.log('Exporting by month/year:', { month, year, startDate: startOfMonth.toISOString(), endDate: endOfMonth.toISOString() });
+    filter.createdAt = { $gte: startOfMonth, $lte: endOfMonth };
   } else if (year) {
     const startOfYear = new Date(Number(year), 0, 1);
     const endOfYear = new Date(Number(year), 11, 31, 23, 59, 59, 999);
-
-    console.log('Exporting by year:', {
-      year,
-      startDate: startOfYear.toISOString(),
-      endDate: endOfYear.toISOString()
-    });
-    
-    filter.createdAt = {
-      $gte: startOfYear,
-      $lte: endOfYear
-    };
+    console.log('Exporting by year:', { year, startDate: startOfYear.toISOString(), endDate: endOfYear.toISOString() });
+    filter.createdAt = { $gte: startOfYear, $lte: endOfYear };
   } else if (startDate && endDate) {
-    filter.createdAt = {
-      $gte: new Date(startDate as string),
-      $lte: new Date(endDate as string)
-    };
+    filter.createdAt = { $gte: new Date(startDate as string), $lte: new Date(endDate as string) };
   }
 
   if (period) filter.period = period as string;
@@ -879,27 +670,20 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     };
   }
 
-  const finalFilter = Object.keys(searchFilter).length > 0
-    ? { ...filter, ...searchFilter }
-    : filter;
+  const finalFilter = Object.keys(searchFilter).length > 0 ? { ...filter, ...searchFilter } : filter;
 
   const payrolls = await Payroll.find(finalFilter)
     .sort({ period: -1, createdAt: -1 })
-    .populate<{ employee: IUser }>({
-      path: 'employee',
-      select: 'firstName lastName role emiratesId'
-    });
+    .populate<{ employee: IUser }>({ path: 'employee', select: 'firstName lastName role emiratesId' });
 
   if (payrolls.length === 0) {
-    return res.status(404).json({
-      success: false,
-      message: "No payroll records found for specified criteria"
-    });
+    return res.status(404).json({ success: false, message: "No payroll records found for specified criteria" });
   }
 
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Payroll Report');
 
+  // Add headers
   worksheet.columns = [
     { header: 'S/NO', key: 'serialNo', width: 8 },
     { header: 'NAME', key: 'name', width: 25 },
@@ -908,35 +692,40 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     { header: 'LABOUR CARD', key: 'labourCard', width: 20 },
     { header: 'LABOUR CARD PERSONAL NO', key: 'labourCardPersonalNo', width: 25 },
     { header: 'PERIOD', key: 'period', width: 15 },
-    { header: 'BASIC SALARY', key: 'basicSalary', width: 15, style: { numFmt: '#,##0.00' } },
+    { header: 'BASE SALARY', key: 'baseSalary', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'ALLOWANCE', key: 'allowance', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'TRANSPORT', key: 'transport', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'OVERTIME', key: 'overtime', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'SPECIAL OVERTIME', key: 'specialOT', width: 15, style: { numFmt: '#,##0.00' } }, // NEW FIELD
-    { header: 'MEDICAL', key: 'medical', width: 15, style: { numFmt: '##0.00' } },
+    { header: 'SPECIAL OVERTIME', key: 'specialOT', width: 15, style: { numFmt: '#,##0.00' } },
+    { header: 'SUNDAY BONUS', key: 'sundayBonus', width: 15, style: { numFmt: '#,##0.00' } },
+    { header: 'MEDICAL', key: 'medical', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'BONUS', key: 'bonus', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'FOOD ALLOWANCE', key: 'mess', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'SALARY ADVANCE', key: 'salaryAdvance', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'LOAN DEDUCTION', key: 'loanDeduction', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'FINE AMOUNT', key: 'fineAmount', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'VISA DEDUCTION', key: 'visaDeduction', width: 15, style: { numFmt: '#,##0.00' } }, // NEW FIELD
+    { header: 'VISA DEDUCTION', key: 'visaDeduction', width: 15, style: { numFmt: '#,##0.00' } },
+    { header: 'TOTAL EARNINGS', key: 'totalEarnings', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'TOTAL DEDUCTIONS', key: 'totalDeductions', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'NET', key: 'net', width: 15, style: { numFmt: '#,##0.00' } },
+    { header: 'NET PAY', key: 'net', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'REMARK', key: 'remark', width: 30 }
   ];
 
+  // Add data rows
   for (let i = 0; i < payrolls.length; i++) {
     const payroll = payrolls[i];
-
     if (!payroll.employee || typeof payroll.employee !== 'object') {
       continue;
     }
 
-    const employeeExpense = await EmployeeExpense.findOne({
-      employee: payroll.employee._id
-    }).lean();
+    const calculationDetails: any = payroll.calculationDetails || await calculateSalaryBasedOnAttendance(
+      payroll.employee._id,
+      payroll.allowance,
+      payroll.allowance,
+      payroll.period
+    );
 
-    const basicSalary = employeeExpense?.basicSalary || 0;
+    const totalEarnings = calculationDetails.totalEarnings + payroll.transport + payroll.specialOT + payroll.medical + payroll.bonus;
     const totalDeductions = payroll.mess + payroll.salaryAdvance + payroll.loanDeduction + payroll.fineAmount + payroll.visaDeduction;
 
     worksheet.addRow({
@@ -947,18 +736,20 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
       labourCard: payroll.labourCard,
       labourCardPersonalNo: payroll.labourCardPersonalNo,
       period: payroll.period,
-      basicSalary: employeeExpense?.basicSalary || 0,
+      baseSalary: calculationDetails.baseSalaryAmount,
       allowance: payroll.allowance,
       transport: payroll.transport,
       overtime: payroll.overtime,
-      specialOT: payroll.specialOT || 0, // NEW FIELD
+      specialOT: payroll.specialOT || 0,
+      sundayBonus: calculationDetails.sundayBonus || 0,
       medical: payroll.medical,
       bonus: payroll.bonus,
       mess: payroll.mess,
       salaryAdvance: payroll.salaryAdvance,
       loanDeduction: payroll.loanDeduction,
       fineAmount: payroll.fineAmount,
-      visaDeduction: payroll.visaDeduction || 0, // NEW FIELD
+      visaDeduction: payroll.visaDeduction || 0,
+      totalEarnings: totalEarnings,
       totalDeductions: totalDeductions,
       net: payroll.net,
       remark: payroll.remark || ''
@@ -967,8 +758,7 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
 
   let filename = 'payroll_report';
   if (month && year) {
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     filename += `_${monthNames[Number(month) - 1]}_${year}`;
   } else if (year) {
     filename += `_${year}`;
@@ -989,72 +779,6 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   res.end();
 });
 
-// Get single payroll record
-export const getPayroll = asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
-
-  const payroll = await Payroll.findById(id)
-    .populate<{ employee: IUser }>({
-      path: 'employee',
-      select: 'firstName lastName role emiratesId'
-    })
-    .populate<{ createdBy: IUser }>({
-      path: 'createdBy',
-      select: 'firstName lastName'
-    });
-
-  if (!payroll) {
-    throw new ApiError(404, "Payroll not found");
-  }
-
-  if (!payroll.employee || typeof payroll.employee !== 'object') {
-    throw new ApiError(500, "Employee data not properly populated");
-  }
-
-  const employeeExpense = await EmployeeExpense.findOne({
-    employee: payroll.employee._id
-  }).lean();
-
-  // Get attendance details - DON'T pass period since we're filtering by month/year
-  const attendanceDetails = await getAttendanceDetailsByMonthYear(
-    payroll.employee._id, 
-    getMonthNumber(payroll.period.split('-')[0]),
-    parseInt(payroll.period.split('-')[1])
-  );
-
-  const totalEarnings = (employeeExpense?.basicSalary || 0) +
-    payroll.allowance +
-    payroll.transport +
-    payroll.overtime +
-    payroll.medical +
-    payroll.bonus;
-
-  const totalDeductions = payroll.mess +
-    payroll.salaryAdvance +
-    payroll.loanDeduction +
-    payroll.fineAmount +
-    payroll.visaDeduction;
-
-  const enhancedPayroll = {
-    ...payroll.toObject(),
-    name: `${payroll.employee.firstName} ${payroll.employee.lastName}`,
-    designation: payroll.employee.role,
-    emiratesId: payroll.employee.emiratesId || 'N/A',
-    basicSalary: employeeExpense?.basicSalary || 0,
-    totalEarnings,
-    totalDeductions,
-    // Include attendance summary with Sunday tracking
-    attendanceSummary: attendanceDetails.summary,
-    createdByName: payroll.createdBy
-      ? `${payroll.createdBy.firstName} ${payroll.createdBy.lastName}`
-      : 'System'
-  };
-
-  res.status(200).json(
-    new ApiResponse(200, enhancedPayroll, "Payroll retrieved successfully")
-  );
-});
-
 // Helper function to convert number to words
 const convertToWords = (num: number): string => {
   const ones = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE'];
@@ -1065,11 +789,9 @@ const convertToWords = (num: number): string => {
 
   const convertLessThanThousand = (n: number): string => {
     if (n === 0) return '';
-
     if (n < 10) return ones[n];
     if (n < 20) return teens[n - 10];
     if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 !== 0 ? ' ' + ones[n % 10] : '');
-
     return ones[Math.floor(n / 100)] + ' HUNDRED' + (n % 100 !== 0 ? ' ' + convertLessThanThousand(n % 100) : '');
   };
 
@@ -1077,7 +799,6 @@ const convertToWords = (num: number): string => {
   const decimalPart = Math.round((num - integerPart) * 100);
 
   let result = '';
-
   if (integerPart >= 1000) {
     result += convertLessThanThousand(Math.floor(integerPart / 1000)) + ' THOUSAND ';
     result += convertLessThanThousand(integerPart % 1000);
@@ -1092,18 +813,35 @@ const convertToWords = (num: number): string => {
   return result.trim() + ' AED';
 };
 
-// Generate HTML for payslip with professional header
+// Generate HTML for payslip
+// Update the generatePayslipHTML function to handle undefined calculationDetails:
+
 const generatePayslipHTML = (data: any): string => {
-  console.log(data.attendanceDetails.records[0]);
+  // FIX: Safe access to calculation details with proper fallbacks
+  const calculationDetails = data.calculationDetails || {};
+
+  // FIX: Safe access to rates with proper fallbacks
+  const rates = calculationDetails.rates || {};
+  const dailyRate = rates.dailyRate || 0;
+  const hourlyRate = rates.hourlyRate || 0;
+  const sundayBonus = calculationDetails.sundayBonus || 0;
+
+  // FIX: Safe access to attendance summary with proper fallbacks
+  const attendanceSummary = calculationDetails.attendanceSummary || data.attendanceDetails?.summary || {};
+
+  // FIX: Check if calculation details exist
+  const hasCalculationDetails = calculationDetails && calculationDetails.rates;
 
   const getStatusDisplay = (record: any) => {
-    if (record.status.toLowerCase() === 'day off') {
+    if (record.status?.toLowerCase() === 'day off') {
       return 'status-dayoff';
     }
     return '';
   };
 
-  const attendanceRows = data.attendanceDetails.records
+  // FIX: Safe access to attendance records
+  const attendanceRecords = data.attendanceDetails?.records || [];
+  const attendanceRows = attendanceRecords
     .map((record: any) => {
       const status = record.status?.toLowerCase();
       if (status === 'present' || status === 'absent') {
@@ -1112,16 +850,40 @@ const generatePayslipHTML = (data: any): string => {
 
       return `
       <tr${record.isSunday ? ' style="background-color: #fff3cd;"' : ''}>
-        <td>${record.sno}</td>
-        <td>${record.date}</td>
-        <td><strong>${record.day}</strong></td>
-        <td class="${getStatusDisplay(record)}">${record.status}</td>
-        <td>${status === 'day off' ? '0' : record.hours}</td>
-        <td>${status === 'day off' ? '0' : record.overtimeHours}</td>
+        <td>${record.sno || ''}</td>
+        <td>${record.date || ''}</td>
+        <td><strong>${record.day || ''}</strong></td>
+        <td class="${getStatusDisplay(record)}">${record.status || ''}</td>
+        <td>${status === 'day off' ? '0' : (record.hours || '0')}</td>
+        <td>${status === 'day off' ? '0' : (record.overtimeHours || '0')}</td>
       </tr>
     `;
     })
     .join('');
+
+  // FIX: Safe access to all numeric values
+  const basicSalary = data.basicSalary || 0;
+  const allowance = data.allowance || 0;
+  const transport = data.transport || 0;
+  const overtime = data.overtime || 0;
+  const specialOT = data.specialOT || 0;
+  const medical = data.medical || 0;
+  const bonus = data.bonus || 0;
+  const mess = data.mess || 0;
+  const salaryAdvance = data.salaryAdvance || 0;
+  const loanDeduction = data.loanDeduction || 0;
+  const fineAmount = data.fineAmount || 0;
+  const visaDeduction = data.visaDeduction || 0;
+  const totalEarnings = data.totalEarnings || 0;
+  const totalDeductions = data.totalDeductions || 0;
+  const net = data.net || 0;
+
+  // FIX: Safe access to attendance summary values
+  const presentDays = data.attendanceDetails?.summary?.presentDays || 0;
+  const totalHours = data.attendanceDetails?.summary?.totalHours || '0';
+  const overtimeHours = data.attendanceDetails?.summary?.overtimeHours || '0';
+  const sundayWorkingDays = data.attendanceDetails?.summary?.sundayWorkingDays || 0;
+  const sundayOvertimeHours = data.attendanceDetails?.summary?.sundayOvertimeHours || '0';
 
   return `
 <!DOCTYPE html>
@@ -1480,6 +1242,44 @@ const generatePayslipHTML = (data: any): string => {
             margin-bottom: 8px;
         }
 
+        .calculation-details {
+            background: #f0f8ff;
+            padding: 12px;
+            border-radius: 4px;
+            margin: 10px 0;
+            border: 1px solid #b8daff;
+            page-break-inside: avoid;
+        }
+
+        .calculation-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            font-size: 9pt;
+        }
+
+        .calculation-section {
+            padding: 8px;
+            background: white;
+            border-radius: 3px;
+            border: 1px solid #dee2e6;
+        }
+
+        .calculation-section strong {
+            color: #2c5aa0;
+            display: block;
+            margin-bottom: 5px;
+            font-size: 8pt;
+            text-transform: uppercase;
+        }
+
+        .calculation-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 3px;
+            font-size: 8pt;
+        }
+
         @media print {
             body {
                 background: white;
@@ -1516,7 +1316,7 @@ const generatePayslipHTML = (data: any): string => {
         </div>
         
         <div class="document-title">
-            SALARY SLIP FOR THE MONTH OF ${data.periodText}
+            SALARY SLIP FOR THE MONTH OF ${data.periodText || ''}
         </div>
         
         <div class="content">
@@ -1526,11 +1326,11 @@ const generatePayslipHTML = (data: any): string => {
                 <div class="info-grid">
                     <div class="info-item">
                         <span class="info-label">Employee Name</span>
-                        <span class="info-value">${data.employeeName}</span>
+                        <span class="info-value">${data.employeeName || ''}</span>
                     </div>
                     <div class="info-item">
                         <span class="info-label">Designation</span>
-                        <span class="info-value">${data.designation}</span>
+                        <span class="info-value">${data.designation || ''}</span>
                     </div>
                     <div class="info-item">
                         <span class="info-label">Account Number</span>
@@ -1538,11 +1338,11 @@ const generatePayslipHTML = (data: any): string => {
                     </div>
                     <div class="info-item">
                         <span class="info-label">IBAN Number</span>
-                        <span class="info-value">${data.ibanNumber}</span>
+                        <span class="info-value">${data.ibanNumber || ''}</span>
                     </div>
                     <div class="info-item">
                         <span class="info-label">Passport Number</span>
-                        <span class="info-value">${data.passportNumber}</span>
+                        <span class="info-value">${data.passportNumber || ''}</span>
                     </div>
                     <div class="info-item">
                         <span class="info-label">Passport Expiry</span>
@@ -1550,11 +1350,11 @@ const generatePayslipHTML = (data: any): string => {
                     </div>
                     <div class="info-item">
                         <span class="info-label">Labour Card Number</span>
-                        <span class="info-value">${data.labourCard}</span>
+                        <span class="info-value">${data.labourCard || ''}</span>
                     </div>
                     <div class="info-item">
                         <span class="info-label">Labour Card Personal Number</span>
-                        <span class="info-value">${data.labourCardPersonalNo}</span>
+                        <span class="info-value">${data.labourCardPersonalNo || ''}</span>
                     </div>
                     <div class="info-item">
                         <span class="info-label">Labour Card Expiry</span>
@@ -1562,7 +1362,7 @@ const generatePayslipHTML = (data: any): string => {
                     </div>
                     <div class="info-item">
                         <span class="info-label">Emirates ID</span>
-                        <span class="info-value">${data.emiratesId}</span>
+                        <span class="info-value">${data.emiratesId || 'N/A'}</span>
                     </div>
                     <div class="info-item">
                         <span class="info-label">Emirates ID Expiry</span>
@@ -1570,10 +1370,68 @@ const generatePayslipHTML = (data: any): string => {
                     </div>
                     <div class="info-item">
                         <span class="info-label">Working Days</span>
-                        <span class="info-value">${data.attendanceDetails.summary.presentDays} Days</span>
+                        <span class="info-value">${presentDays} Days</span>
                     </div>
                 </div>
             </div>
+
+            ${hasCalculationDetails ? `
+            <!-- Salary Calculation Details Section -->
+            <div class="section no-break">
+                <div class="section-title">Salary Calculation Details</div>
+                <div class="calculation-details">
+                    <div class="calculation-grid">
+                        <div class="calculation-section">
+                            <strong>Attendance Summary</strong>
+                            <div class="calculation-row">
+                                <span>Total Month Days:</span>
+                                <span>${attendanceSummary.totalMonthDays || 0}</span>
+                            </div>
+                            <div class="calculation-row">
+                                <span>Sundays:</span>
+                                <span>${attendanceSummary.totalSundays || 0}</span>
+                            </div>
+                            <div class="calculation-row">
+                                <span>Paid Leaves:</span>
+                                <span>${attendanceSummary.paidLeaveDays || 0}</span>
+                            </div>
+                            <div class="calculation-row">
+                                <span>Effective Days:</span>
+                                <span>${attendanceSummary.effectiveWorkingDays || 0}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="calculation-section">
+                            <strong>Work Details</strong>
+                            <div class="calculation-row">
+                                <span>Total Hours:</span>
+                                <span>${attendanceSummary.totalActualHours || 0}</span>
+                            </div>
+                            <div class="calculation-row">
+                                <span>Sunday Working:</span>
+                                <span>${attendanceSummary.sundayWorkingDays || 0} days</span>
+                            </div>
+                            <div class="calculation-row">
+                                <span>Overtime Hours:</span>
+                                <span>${attendanceSummary.totalOvertimeHours || 0}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="calculation-section">
+                            <strong>Rates</strong>
+                            <div class="calculation-row">
+                                <span>Daily Rate:</span>
+                                <span>AED ${dailyRate.toFixed(2)}</span>
+                            </div>
+                            <div class="calculation-row">
+                                <span>Hourly Rate:</span>
+                                <span>AED ${hourlyRate.toFixed(2)}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            ` : ''}
             
             <!-- Salary Details Section -->
             <div class="section no-break">
@@ -1590,43 +1448,51 @@ const generatePayslipHTML = (data: any): string => {
                     <tbody>
                         <tr>
                             <td>Basic Salary</td>
-                            <td class="amount">${data.basicSalary.toFixed(2)}</td>
+                            <td class="amount">${basicSalary.toFixed(2)}</td>
                             <td>Food Allowance</td>
-                            <td class="amount">${data.mess.toFixed(2)}</td>
+                            <td class="amount">${mess.toFixed(2)}</td>
                         </tr>
                         <tr>
                             <td>Allowance</td>
-                            <td class="amount">${data.allowance.toFixed(2)}</td>
+                            <td class="amount">${allowance.toFixed(2)}</td>
                             <td>Salary Advance</td>
-                            <td class="amount">${data.salaryAdvance.toFixed(2)}</td>
+                            <td class="amount">${salaryAdvance.toFixed(2)}</td>
                         </tr>
                         <tr>
                             <td>Transport</td>
-                            <td class="amount">${data.transport.toFixed(2)}</td>
+                            <td class="amount">${transport.toFixed(2)}</td>
                             <td>Loan Deduction</td>
-                            <td class="amount">${data.loanDeduction.toFixed(2)}</td>
+                            <td class="amount">${loanDeduction.toFixed(2)}</td>
                         </tr>
                         <tr>
                             <td>Overtime</td>
-                            <td class="amount">${data.overtime.toFixed(2)}</td>
+                            <td class="amount">${overtime.toFixed(2)}</td>
                             <td>Fine Amount</td>
-                            <td class="amount">${data.fineAmount.toFixed(2)}</td>
+                            <td class="amount">${fineAmount.toFixed(2)}</td>
                         </tr>
                         <tr>
                             <td>Special OT</td>
-                            <td class="amount">${data.specialOT.toFixed(2)}</td>
+                            <td class="amount">${specialOT.toFixed(2)}</td>
                             <td>Visa Deduction</td>
-                            <td class="amount">${data.visaDeduction.toFixed(2)}</td>
+                            <td class="amount">${visaDeduction.toFixed(2)}</td>
                         </tr>
+                        ${sundayBonus > 0 ? `
+                        <tr>
+                            <td>Sunday Bonus</td>
+                            <td class="amount">${sundayBonus.toFixed(2)}</td>
+                            <td></td>
+                            <td class="amount"></td>
+                        </tr>
+                        ` : ''}
                         <tr>
                             <td>Medical</td>
-                            <td class="amount">${data.medical.toFixed(2)}</td>
+                            <td class="amount">${medical.toFixed(2)}</td>
                             <td></td>
                             <td class="amount"></td>
                         </tr>
                         <tr>
                             <td>Bonus</td>
-                            <td class="amount">${data.bonus.toFixed(2)}</td>
+                            <td class="amount">${bonus.toFixed(2)}</td>
                             <td></td>
                             <td class="amount"></td>
                         </tr>
@@ -1636,21 +1502,21 @@ const generatePayslipHTML = (data: any): string => {
                 <div class="summary-section">
                     <div class="summary-row">
                         <span>Total Earnings</span>
-                        <span style="font-weight: 600;">${data.totalEarnings.toFixed(2)} AED</span>
+                        <span style="font-weight: 600;">${totalEarnings.toFixed(2)} AED</span>
                     </div>
                     <div class="summary-row">
                         <span>Total Deductions</span>
-                        <span style="font-weight: 600;">${data.totalDeductions.toFixed(2)} AED</span>
+                        <span style="font-weight: 600;">${totalDeductions.toFixed(2)} AED</span>
                     </div>
                     <div class="summary-row total">
                         <span>NET PAY</span>
-                        <span>${data.net.toFixed(2)} AED</span>
+                        <span>${net.toFixed(2)} AED</span>
                     </div>
                 </div>
                 
                 <div class="net-pay">
                     <div class="net-pay-label">AMOUNT IN WORDS</div>
-                    <div class="net-pay-amount">${data.netInWords}</div>
+                    <div class="net-pay-amount">${data.netInWords || 'ZERO AED'}</div>
                 </div>
             </div>
             
@@ -1661,26 +1527,26 @@ const generatePayslipHTML = (data: any): string => {
                     <div class="attendance-summary-grid">
                         <div class="summary-card">
                             <h4>Total Working Days</h4>
-                            <div class="summary-value">${data.attendanceDetails.summary.presentDays}</div>
+                            <div class="summary-value">${presentDays}</div>
                             <div class="summary-label">Days</div>
                         </div>
                         
                         <div class="summary-card">
                             <h4>Regular Hours</h4>
-                            <div class="summary-value">${data.attendanceDetails.summary.totalHours}</div>
+                            <div class="summary-value">${totalHours}</div>
                             <div class="summary-label">Hours</div>
                         </div>
                         
                         <div class="summary-card">
                             <h4>Overtime Hours</h4>
-                            <div class="summary-value">${data.attendanceDetails.summary.overtimeHours}</div>
+                            <div class="summary-value">${overtimeHours}</div>
                             <div class="summary-label">Hours</div>
                         </div>
                         
-                        ${data.attendanceDetails.summary.sundayWorkingDays > 0 ? `
+                        ${sundayWorkingDays > 0 ? `
                         <div class="sunday-card">
                             <h4>🌟 Sunday Working</h4>
-                            <div class="sunday-value">${data.attendanceDetails.summary.sundayWorkingDays}</div>
+                            <div class="sunday-value">${sundayWorkingDays}</div>
                             <div class="sunday-label">Days</div>
                         </div>
                         ` : `
@@ -1692,10 +1558,10 @@ const generatePayslipHTML = (data: any): string => {
                         `}
                     </div>
                     
-                    ${data.attendanceDetails.summary.sundayOvertimeHours > 0 ? `
+                    ${parseFloat(sundayOvertimeHours) > 0 ? `
                     <div style="margin-top: 8px; text-align: center;">
                         <div style="display: inline-block; background: #fff9e6; padding: 6px 12px; border-radius: 3px; border: 1px solid #ffc107;">
-                            <strong style="color: #856404; font-size: 8pt;">Sunday Overtime Hours: ${data.attendanceDetails.summary.sundayOvertimeHours} Hours</strong>
+                            <strong style="color: #856404; font-size: 8pt;">Sunday Overtime Hours: ${sundayOvertimeHours} Hours</strong>
                         </div>
                     </div>
                     ` : ''}
@@ -1750,7 +1616,7 @@ export const generatePayslipPDF = asyncHandler(async (req: Request, res: Respons
 
   const payroll = await Payroll.findById(id).populate<{ employee: IUser }>({
     path: 'employee',
-    select: 'firstName lastName role emiratesId passportNumber iBANNumber'
+    select: 'firstName lastName role emiratesId passportNumber iBANNumber accountNumber'
   });
 
   if (!payroll) {
@@ -1761,39 +1627,87 @@ export const generatePayslipPDF = asyncHandler(async (req: Request, res: Respons
     throw new ApiError(500, "Employee data not properly populated");
   }
 
-  const employeeExpense = await EmployeeExpense.findOne({
-    employee: payroll.employee._id
-  }).lean();
-
-  // Get visa expense data for additional employee information
-  const visaExpense = await VisaExpense.findOne({
-    employee: payroll.employee._id
-  }).lean();
+  const employeeExpense = await EmployeeExpense.findOne({ employee: payroll.employee._id }).lean();
+  const visaExpense = await VisaExpense.findOne({ employee: payroll.employee._id }).lean();
 
   const basicSalary = employeeExpense?.basicSalary || 0;
-  const totalEarnings = basicSalary + payroll.allowance + payroll.transport +
-    payroll.overtime + payroll.specialOT + payroll.medical + payroll.bonus;
-  const totalDeductions = payroll.mess + payroll.salaryAdvance +
-    payroll.loanDeduction + payroll.fineAmount + payroll.visaDeduction; // UPDATED
+  const allowance = payroll.allowance;
+
+  // Use calculation details if available, otherwise calculate
+  let calculationDetails: any = payroll.calculationDetails;
+  if (!calculationDetails) {
+    calculationDetails = await calculateSalaryBasedOnAttendance(payroll.employee._id, basicSalary, allowance, payroll.period);
+  }
+
+  const totalEarnings = calculationDetails.totalEarnings + payroll.transport + payroll.specialOT + payroll.medical + payroll.bonus;
+  const totalDeductions = payroll.mess + payroll.salaryAdvance + payroll.loanDeduction + payroll.fineAmount + payroll.visaDeduction;
+
+  // Get attendance details
+  const getAttendanceDetails = async (userId: Types.ObjectId, period: string) => {
+    const [monthStr, yearStr] = period.split('-');
+    const month = parseInt(monthStr);
+    const year = parseInt(yearStr);
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0);
+
+    const attendances = await Attendance.find({
+      user: userId,
+      date: { $gte: startDate, $lte: endDate },
+      present: true
+    });
+
+    let totalHours = 0;
+    let overtimeHours = 0;
+    let presentDays = 0;
+    let sundayWorkingDays = 0;
+    let sundayOvertimeHours = 0;
+
+    attendances.forEach(att => {
+      totalHours += att.workingHours || 0;
+      overtimeHours += att.overtimeHours || 0;
+      presentDays++;
+
+      const date = new Date(att.date);
+      if (date.getDay() === 0) {
+        sundayWorkingDays++;
+        sundayOvertimeHours += att.overtimeHours || 0;
+      }
+    });
+
+    return {
+      summary: {
+        presentDays,
+        totalHours: totalHours.toFixed(2),
+        overtimeHours: overtimeHours.toFixed(2),
+        sundayWorkingDays,
+        sundayOvertimeHours: sundayOvertimeHours.toFixed(2),
+        // Add the new fields for compatibility
+        totalMonthDays: calculationDetails?.attendanceSummary?.totalMonthDays || 0,
+        totalSundays: calculationDetails?.attendanceSummary?.totalSundays || 0,
+        paidLeaveDays: calculationDetails?.attendanceSummary?.paidLeaveDays || 0,
+        absentDays: calculationDetails?.attendanceSummary?.absentDays || 0,
+        effectiveWorkingDays: calculationDetails?.attendanceSummary?.effectiveWorkingDays || 0,
+        totalWorkingDays: calculationDetails?.attendanceSummary?.totalWorkingDays || 0,
+        totalActualHours: calculationDetails?.attendanceSummary?.totalActualHours || 0,
+        totalOvertimeHours: calculationDetails?.attendanceSummary?.totalOvertimeHours || 0
+      },
+      records: []
+    };
+  };
 
   const attendanceDetails = await getAttendanceDetails(payroll.employee._id, payroll.period);
 
   const [month, year] = payroll.period.split('-');
-  const monthNames = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
-    'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
+  const monthNames = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
   const periodText = `${monthNames[parseInt(month) - 1]} ${year}`;
 
-  // Format date function
   const formatDate = (date: Date | string | undefined): string => {
     if (!date) return 'N/A';
     const d = new Date(date);
-    return isNaN(d.getTime()) ? 'N/A' : d.toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric'
-    });
+    return isNaN(d.getTime()) ? 'N/A' : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
+  // FIX: Safe access to calculationDetails with fallbacks
   const payslipData = {
     employeeName: `${payroll.employee.firstName} ${payroll.employee.lastName}`.toUpperCase(),
     designation: payroll.employee.role.toUpperCase(),
@@ -1803,13 +1717,12 @@ export const generatePayslipPDF = asyncHandler(async (req: Request, res: Respons
     passportExpiry: formatDate(visaExpense?.passportExpireDate),
     ibanNumber: payroll.employee.iBANNumber || 'N/A',
     accountNumber: payroll.employee.accountNumber || 'N/A',
-    // bankName: 'Emirates NBD',
     labourCard: payroll.labourCard,
     labourCardPersonalNo: payroll.labourCardPersonalNo,
     labourCardExpiry: formatDate(visaExpense?.labourExpireDate),
     period: payroll.period,
     periodText,
-    basicSalary,
+    basicSalary: calculationDetails.baseSalaryAmount,
     allowance: payroll.allowance,
     transport: payroll.transport,
     overtime: payroll.overtime,
@@ -1820,13 +1733,34 @@ export const generatePayslipPDF = asyncHandler(async (req: Request, res: Respons
     salaryAdvance: payroll.salaryAdvance,
     loanDeduction: payroll.loanDeduction,
     fineAmount: payroll.fineAmount,
-    visaDeduction: payroll.visaDeduction || 0, // NEW FIELD
+    visaDeduction: payroll.visaDeduction || 0,
     totalEarnings,
     totalDeductions,
     net: payroll.net,
     netInWords: convertToWords(payroll.net),
     remark: payroll.remark,
-    attendanceDetails
+    attendanceDetails,
+    // FIX: Safe calculation details with proper fallbacks
+    calculationDetails: calculationDetails ? {
+      baseSalaryFromAttendance: calculationDetails.baseSalaryAmount || 0,
+      sundayBonus: calculationDetails.sundayBonus || 0,
+      attendanceSummary: {
+        totalMonthDays: calculationDetails.attendanceSummary?.totalMonthDays || 0,
+        totalSundays: calculationDetails.attendanceSummary?.totalSundays || 0,
+        paidLeaveDays: calculationDetails.attendanceSummary?.paidLeaveDays || 0,
+        absentDays: calculationDetails.attendanceSummary?.absentDays || 0,
+        effectiveWorkingDays: calculationDetails.attendanceSummary?.effectiveWorkingDays || 0,
+        totalWorkingDays: calculationDetails.attendanceSummary?.totalWorkingDays || 0,
+        totalActualHours: calculationDetails.attendanceSummary?.totalActualHours || 0,
+        totalOvertimeHours: calculationDetails.attendanceSummary?.totalOvertimeHours || 0,
+        sundayWorkingDays: calculationDetails.attendanceSummary?.sundayWorkingDays || 0,
+        sundayOvertimeHours: calculationDetails.attendanceSummary?.sundayOvertimeHours || 0
+      },
+      rates: {
+        dailyRate: calculationDetails.rates?.dailyRate || 0,
+        hourlyRate: calculationDetails.rates?.hourlyRate || 0
+      }
+    } : null
   };
 
   const html = generatePayslipHTML(payslipData);
@@ -1839,7 +1773,6 @@ export const generatePayslipPDF = asyncHandler(async (req: Request, res: Respons
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: 1200, height: 1600 });
-
     await page.setContent(html, {
       waitUntil: ['load', 'networkidle0', 'domcontentloaded'],
       timeout: 30000
@@ -1848,21 +1781,16 @@ export const generatePayslipPDF = asyncHandler(async (req: Request, res: Respons
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
-      margin: {
-        top: '0.3cm',
-        right: '0.3cm',
-        bottom: '0.3cm',
-        left: '0.3cm'
-      },
+      margin: { top: '0.3cm', right: '0.3cm', bottom: '0.3cm', left: '0.3cm' },
       displayHeaderFooter: false,
       preferCSSPageSize: true
     });
 
     const filename = `payslip_${payroll.employee.firstName}_${payroll.employee.lastName}_${payroll.period}.pdf`;
-
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(pdfBuffer);
+
   } catch (error) {
     console.error("PDF generation error:", error);
     throw new ApiError(500, "Failed to generate PDF");
@@ -1870,14 +1798,13 @@ export const generatePayslipPDF = asyncHandler(async (req: Request, res: Respons
     await browser.close();
   }
 });
-
 // Get payslip data (preview without PDF generation)
 export const getPayslipData = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
 
   const payroll = await Payroll.findById(id).populate<{ employee: IUser }>({
     path: 'employee',
-    select: 'firstName lastName role emiratesId passportNumber iBANNumber'
+    select: 'firstName lastName role emiratesId passportNumber iBANNumber accountNumber'
   });
 
   if (!payroll) {
@@ -1888,21 +1815,21 @@ export const getPayslipData = asyncHandler(async (req: Request, res: Response) =
     throw new ApiError(500, "Employee data not properly populated");
   }
 
-  const employeeExpense = await EmployeeExpense.findOne({
-    employee: payroll.employee._id
-  }).lean();
-
+  const employeeExpense = await EmployeeExpense.findOne({ employee: payroll.employee._id }).lean();
   const basicSalary = employeeExpense?.basicSalary || 0;
-  const totalEarnings = basicSalary + payroll.allowance + payroll.transport +
-    payroll.overtime + payroll.specialOT + payroll.medical + payroll.bonus;
-  const totalDeductions = payroll.mess + payroll.salaryAdvance +
-    payroll.loanDeduction + payroll.fineAmount + payroll.visaDeduction; // UPDATED
+  const allowance = payroll.allowance;
 
-  const attendanceDetails = await getAttendanceDetails(payroll.employee._id, payroll.period);
+  // Use calculation details if available, otherwise calculate
+  let calculationDetails: any = payroll.calculationDetails;
+  if (!calculationDetails) {
+    calculationDetails = await calculateSalaryBasedOnAttendance(payroll.employee._id, basicSalary, allowance, payroll.period);
+  }
+
+  const totalEarnings = calculationDetails.totalEarnings + payroll.transport + payroll.specialOT + payroll.medical + payroll.bonus;
+  const totalDeductions = payroll.mess + payroll.salaryAdvance + payroll.loanDeduction + payroll.fineAmount + payroll.visaDeduction;
 
   const [month, year] = payroll.period.split('-');
-  const monthNames = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
-    'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
+  const monthNames = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
   const periodText = `${monthNames[parseInt(month) - 1]} ${year}`;
 
   const payslipData = {
@@ -1911,11 +1838,12 @@ export const getPayslipData = asyncHandler(async (req: Request, res: Response) =
     emiratesId: payroll.employee.emiratesId || 'N/A',
     passportNumber: payroll.employee.passportNumber || 'N/A',
     ibanNumber: payroll.employee.iBANNumber || 'N/A',
+    accountNumber: payroll.employee.accountNumber || 'N/A',
     labourCard: payroll.labourCard,
     labourCardPersonalNo: payroll.labourCardPersonalNo,
     period: payroll.period,
     periodText,
-    basicSalary,
+    basicSalary: calculationDetails.baseSalaryAmount,
     allowance: payroll.allowance,
     transport: payroll.transport,
     overtime: payroll.overtime,
@@ -1926,13 +1854,13 @@ export const getPayslipData = asyncHandler(async (req: Request, res: Response) =
     salaryAdvance: payroll.salaryAdvance,
     loanDeduction: payroll.loanDeduction,
     fineAmount: payroll.fineAmount,
-    visaDeduction: payroll.visaDeduction || 0, // NEW FIELD
+    visaDeduction: payroll.visaDeduction || 0,
     totalEarnings,
     totalDeductions,
     net: payroll.net,
     netInWords: convertToWords(payroll.net),
     remark: payroll.remark,
-    attendanceDetails
+    calculationDetails
   };
 
   res.status(200).json(
