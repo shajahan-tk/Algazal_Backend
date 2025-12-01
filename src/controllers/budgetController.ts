@@ -1,3 +1,5 @@
+// controllers/budgetController.ts
+
 import { Request, Response } from "express";
 import { asyncHandler } from "../utils/asyncHandler";
 import { ApiResponse } from "../utils/apiHandlerHelpers";
@@ -75,9 +77,20 @@ export const updateMonthlyBudgets = asyncHandler(async (req: Request, res: Respo
         throw new ApiError(400, "Valid monthly budgets array is required");
     }
 
-    const budget: any = await Budget.findOne({ project: projectId });
+    // --- APPLICATION-LEVEL VALIDATION FOR DUPLICATES ---
+    // This ensures that a single project cannot have duplicate month-year entries in a single request.
+    const seenMonthYears = new Set<string>();
+    for (const budget of monthlyBudgets) {
+        const key = `${budget.month}-${budget.year}`;
+        if (seenMonthYears.has(key)) {
+            throw new ApiError(400, `Duplicate month-year combination found in request: Month ${budget.month}, Year ${budget.year}`);
+        }
+        seenMonthYears.add(key);
+    }
+
+    const budgetDoc: any = await Budget.findOne({ project: projectId });
     const quotation = await Quotation.findOne({ project: projectId });
-    if (!budget) {
+    if (!budgetDoc) {
         throw new ApiError(404, "Budget not found for this project");
     }
 
@@ -87,7 +100,7 @@ export const updateMonthlyBudgets = asyncHandler(async (req: Request, res: Respo
         throw new ApiError(400, `Total allocation (${totalAllocation}) exceeds the quotation amount (${quotation?.netAmount})`);
     }
 
-    // Process each monthly budget
+    // Process each monthly budget from the request
     const updatedMonthlyBudgets: IMonthlyBudget[] = [];
 
     for (const newMonthBudget of monthlyBudgets) {
@@ -100,46 +113,23 @@ export const updateMonthlyBudgets = asyncHandler(async (req: Request, res: Respo
             throw new ApiError(400, `Invalid year: ${newMonthBudget.year}. Must be between 2000 and 2100.`);
         }
 
-        // Check if this month-year already exists in the budget
-        const existingMonthIndex = budget.monthlyBudgets.findIndex(
-            (month: any) => month.month === newMonthBudget.month && month.year === newMonthBudget.year
-        );
-
-        if (existingMonthIndex >= 0) {
-            // Update existing month budget
-            updatedMonthlyBudgets.push({
-                month: newMonthBudget.month,
-                year: newMonthBudget.year,
-                allocatedAmount: newMonthBudget.allocatedAmount,
-            });
-        } else {
-            // Add new month budget
-            updatedMonthlyBudgets.push({
-                month: newMonthBudget.month,
-                year: newMonthBudget.year,
-                allocatedAmount: newMonthBudget.allocatedAmount,
-            });
-        }
+        // Add the validated month budget to our new array
+        updatedMonthlyBudgets.push({
+            month: newMonthBudget.month,
+            year: newMonthBudget.year,
+            allocatedAmount: newMonthBudget.allocatedAmount,
+        });
     }
 
-    // Keep any existing month budgets that weren't in the update
-    for (const existingMonth of budget.monthlyBudgets) {
-        const isInUpdate = monthlyBudgets.some(
-            month => month.month === existingMonth.month && month.year === existingMonth.year
-        );
-
-        if (!isInUpdate) {
-            updatedMonthlyBudgets.push(existingMonth.toObject());
-        }
-    }
-
-    // Update budget with new monthly budgets
-    budget.monthlyBudgets = updatedMonthlyBudgets;
-    await budget.save();
+    // --- CORE FIX ---
+    // Replace the entire monthlyBudgets array with the new one from the request.
+    // This ensures that any months removed in the UI are also removed from the database.
+    budgetDoc.monthlyBudgets = updatedMonthlyBudgets;
+    await budgetDoc.save();
 
     return res
         .status(200)
-        .json(new ApiResponse(200, budget, "Monthly budgets updated successfully"));
+        .json(new ApiResponse(200, budgetDoc, "Monthly budgets updated successfully"));
 });
 
 // Delete a monthly budget allocation

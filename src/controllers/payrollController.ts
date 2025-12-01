@@ -36,16 +36,16 @@ export const calculateSalaryBasedOnAttendance = async (
       date: { $gte: startDate, $lte: endDate }
     });
 
-    // Calculate working days and hours
-    let totalWorkingDays = 0;
-    let totalActualHours = 0;
-    let totalOvertimeHours = 0;
-    let sundayWorkingDays = 0;
-    let sundayOvertimeHours = 0;
+    // Initialize counters
+    let totalRegularHours = 0; // Regular hours (Mon-Sat, excluding Sundays)
+    let totalOvertimeHours = 0; // Overtime hours (Mon-Sat)
+    let sundayWorkingDays = 0; // Sundays worked (for bonus)
+    let sundayOvertimeHours = 0; // Overtime on Sundays
     let paidLeaveDays = 0;
     let absentDays = 0;
+    let regularWorkingDays = 0; // Non-Sunday working days
 
-    // Count Sundays in the month (automatically paid leaves)
+    // Count Sundays in the month
     let totalSundays = 0;
     let currentDate = new Date(startDate);
     while (currentDate <= endDate) {
@@ -65,85 +65,89 @@ export const calculateSalaryBasedOnAttendance = async (
       } else if (!att.present) {
         absentDays++;
       } else if (att.present) {
-        // Present day calculation
-        const dailyHours = att.workingHours || 0;
+        const regularHours = att.workingHours || 0;
         const overtime = att.overtimeHours || 0;
 
-        totalActualHours += dailyHours;
-        totalOvertimeHours += overtime;
-
         if (isSunday) {
+          // SUNDAY: Count for bonus only, NOT for base salary
           sundayWorkingDays++;
           sundayOvertimeHours += overtime;
+          // Regular hours on Sunday are NOT included in base salary
+        } else {
+          // REGULAR DAY (Mon-Sat): Count for base salary
+          totalRegularHours += regularHours;
+          totalOvertimeHours += overtime;
+          regularWorkingDays++;
         }
-
-        // Count as working day (including Sundays when worked)
-        totalWorkingDays++;
       }
     });
 
-    // Calculate effective working days (excluding Sundays and paid leaves from total month days)
-    const totalMonthDays = daysInMonth;
-    const effectiveWorkingDays = totalMonthDays - totalSundays - paidLeaveDays;
-
-    // Calculate daily rate (basic salary + allowance)
+    // CORRECTED CALCULATION:
+    // Daily Rate for base salary: (Basic + Allowance) ÷ ALL days in month (including Sundays)
     const totalMonthlySalary = basicSalary + allowance;
-    const dailyRate = effectiveWorkingDays > 0 ? totalMonthlySalary / effectiveWorkingDays : 0;
-    const hourlyRate = dailyRate / 10; // 10 hours per day standard
+    const dailyRate = daysInMonth > 0 ? totalMonthlySalary / daysInMonth : 0;
+
+    // Overtime Hourly Rate: Basic salary ÷ ALL days ÷ 10 hours per day
+    const overtimeHourlyRate = daysInMonth > 0 ? basicSalary / daysInMonth / 10 : 0;
 
     console.log('Salary Calculation Details:', {
-      totalMonthDays,
+      totalMonthDays: daysInMonth,
       totalSundays,
       paidLeaveDays,
       absentDays,
-      effectiveWorkingDays,
-      totalWorkingDays,
-      totalActualHours,
-      totalOvertimeHours,
+      regularWorkingDays,
       sundayWorkingDays,
+      totalRegularHours,
+      totalOvertimeHours,
       sundayOvertimeHours,
       dailyRate: dailyRate.toFixed(2),
-      hourlyRate: hourlyRate.toFixed(2)
+      overtimeHourlyRate: overtimeHourlyRate.toFixed(2),
+      totalMonthlySalary: totalMonthlySalary.toFixed(2)
     });
 
-    // Calculate base salary based on actual hours worked
+    // Calculate BASE SALARY (regular days only, no Sundays, no overtime)
     let baseSalaryAmount = 0;
 
-    if (totalActualHours > 0) {
-      // Convert actual hours to equivalent days
-      const equivalentDays = totalActualHours / 10;
+    if (totalRegularHours > 0) {
+      // Convert regular hours to equivalent days
+      const equivalentDays = totalRegularHours / 10;
       baseSalaryAmount = equivalentDays * dailyRate;
     }
 
-    // Calculate overtime amount
-    const overtimeAmount = totalOvertimeHours * hourlyRate;
+    // Calculate REGULAR OVERTIME (Mon-Sat only)
+    const regularOvertimeAmount = totalOvertimeHours * overtimeHourlyRate;
 
-    // Sunday bonus: Full daily rate for each Sunday worked (regardless of hours)
+    // Calculate SUNDAY BONUS: Full daily rate for each Sunday worked
     const sundayBonus = sundayWorkingDays * dailyRate;
 
-    // Total earnings
-    const totalEarnings = baseSalaryAmount + overtimeAmount + sundayBonus;
+    // Calculate SUNDAY OVERTIME (if any, same rate as regular overtime)
+    const sundayOvertimeAmount = sundayOvertimeHours * overtimeHourlyRate;
+
+    // Total overtime = Regular overtime + Sunday overtime
+    const totalOvertimeAmount = regularOvertimeAmount + sundayOvertimeAmount;
+
+    // Total earnings = Base salary + All overtime + Sunday bonus
+    const totalEarnings = baseSalaryAmount + totalOvertimeAmount + sundayBonus;
 
     return {
       baseSalaryAmount: Math.round(baseSalaryAmount * 100) / 100,
-      overtimeAmount: Math.round(overtimeAmount * 100) / 100,
+      overtimeAmount: Math.round(totalOvertimeAmount * 100) / 100,
       sundayBonus: Math.round(sundayBonus * 100) / 100,
       totalEarnings: Math.round(totalEarnings * 100) / 100,
       attendanceSummary: {
-        totalMonthDays,
+        totalMonthDays: daysInMonth,
         totalSundays,
         paidLeaveDays,
         absentDays,
-        effectiveWorkingDays,
-        totalWorkingDays,
-        totalActualHours,
-        totalOvertimeHours,
+        regularWorkingDays, // ✅ FIX: Now included
         sundayWorkingDays,
+        totalRegularHours, // ✅ FIX: Now included
+        totalOvertimeHours,
         sundayOvertimeHours
       },
       rates: {
         dailyRate: Math.round(dailyRate * 100) / 100,
-        hourlyRate: Math.round(hourlyRate * 100) / 100
+        overtimeHourlyRate: Math.round(overtimeHourlyRate * 100) / 100
       }
     };
 
@@ -159,20 +163,20 @@ export const calculateSalaryBasedOnAttendance = async (
         totalSundays: 0,
         paidLeaveDays: 0,
         absentDays: 0,
-        effectiveWorkingDays: 0,
-        totalWorkingDays: 0,
-        totalActualHours: 0,
-        totalOvertimeHours: 0,
+        regularWorkingDays: 0,
         sundayWorkingDays: 0,
+        totalRegularHours: 0,
+        totalOvertimeHours: 0,
         sundayOvertimeHours: 0
       },
       rates: {
         dailyRate: 0,
-        hourlyRate: 0
+        overtimeHourlyRate: 0
       }
     };
   }
 };
+
 
 // Enhanced employee summary with calculation details
 export const getEmployeeSummary = asyncHandler(async (req: Request, res: Response) => {
@@ -228,8 +232,8 @@ export const getEmployeeSummary = asyncHandler(async (req: Request, res: Respons
     },
     overtime: {
       previousMonthAmount: salaryData.overtimeAmount,
-      previousMonthHours: salaryData.attendanceSummary.totalOvertimeHours,
-      hourlyRate: salaryData.rates.hourlyRate,
+      previousMonthHours: salaryData.attendanceSummary.totalOvertimeHours + salaryData.attendanceSummary.sundayOvertimeHours,
+      hourlyRate: salaryData.rates.overtimeHourlyRate,
       daysInMonth: salaryData.attendanceSummary.totalMonthDays,
       period,
     },
@@ -250,11 +254,12 @@ export const getEmployeeSummary = asyncHandler(async (req: Request, res: Respons
 
 // Create payroll with new calculation system
 export const createPayroll = asyncHandler(async (req: Request, res: Response) => {
-  let { employee, labourCard, labourCardPersonalNo, allowance, transport, medical, bonus, specialOT, mess, salaryAdvance, loanDeduction, fineAmount, visaDeduction, remark } = req.body;
+  // Get all required fields from request body
+  let { employee, labourCard, labourCardPersonalNo, transport, medical, bonus, specialOT, mess, salaryAdvance, loanDeduction, fineAmount, visaDeduction, remark } = req.body;
 
   console.log('Creating payroll with new attendance-based calculation:', req.body);
 
-  allowance = Number(allowance) || 0;
+  // Convert all numeric fields to numbers
   transport = Number(transport) || 0;
   medical = Number(medical) || 0;
   bonus = Number(bonus) || 0;
@@ -285,18 +290,20 @@ export const createPayroll = asyncHandler(async (req: Request, res: Response) =>
     throw new ApiError(400, `Payroll already exists for this employee for period ${period}`);
   }
 
+  // Fetch basicSalary and allowance from EmployeeExpense for calculation
   const employeeExpense = await EmployeeExpense.findOne({ employee });
   const basicSalary = Number(employeeExpense?.basicSalary) || 0;
+  const allowance = Number(employeeExpense?.allowance) || 0;
 
   // Use new attendance-based calculation
   const salaryData = await calculateSalaryBasedOnAttendance(employee, basicSalary, allowance, period);
 
-  // The base salary from attendance calculation replaces the fixed basic salary
+  // The base salary from attendance calculation includes basic + allowance (NO OVERTIME, NO SUNDAYS)
   const baseSalaryFromAttendance = salaryData.baseSalaryAmount;
   const overtime = salaryData.overtimeAmount;
 
-  // Include Sunday bonus in total earnings
-  const totalEarnings = baseSalaryFromAttendance + allowance + transport + overtime + specialOT + medical + bonus + salaryData.sundayBonus;
+  // Calculate total earnings: Base salary + overtime + Sunday bonus + other allowances
+  const totalEarnings = baseSalaryFromAttendance + transport + overtime + specialOT + medical + bonus + salaryData.sundayBonus;
   const totalDeductions = mess + salaryAdvance + loanDeduction + fineAmount + visaDeduction;
   const net = totalEarnings - totalDeductions;
 
@@ -305,7 +312,6 @@ export const createPayroll = asyncHandler(async (req: Request, res: Response) =>
     labourCard,
     labourCardPersonalNo,
     period,
-    allowance,
     transport,
     overtime,
     specialOT,
@@ -329,17 +335,23 @@ export const createPayroll = asyncHandler(async (req: Request, res: Response) =>
 
   console.log(`Payroll created successfully for period ${period}`);
   console.log('Salary Calculation:', {
-    baseSalaryFromAttendance,
+    basicSalary,
     allowance,
-    transport,
+    totalMonthlySalary: basicSalary + allowance,
+    baseSalaryFromAttendance,
     overtime,
+    sundayBonus: salaryData.sundayBonus,
+    transport,
     specialOT,
     medical,
     bonus,
-    sundayBonus: salaryData.sundayBonus,
     totalEarnings,
     totalDeductions,
-    net
+    net,
+    calculationRates: {
+      dailyRate: salaryData.rates.dailyRate,
+      overtimeHourlyRate: salaryData.rates.overtimeHourlyRate
+    }
   });
 
   res.status(201).json(
@@ -371,7 +383,7 @@ export const getPayroll = asyncHandler(async (req: Request, res: Response) => {
   let calculationDetails: any = payroll.calculationDetails;
   if (!calculationDetails) {
     const basicSalary = employeeExpense?.basicSalary || 0;
-    const allowance = payroll.allowance;
+    const allowance = employeeExpense?.allowance || 0;
     calculationDetails = await calculateSalaryBasedOnAttendance(payroll.employee._id, basicSalary, allowance, payroll.period);
   }
 
@@ -457,7 +469,7 @@ export const getPayrolls = asyncHandler(async (req: Request, res: Response) => {
       let calculationDetails: any = payroll.calculationDetails;
       if (!calculationDetails) {
         const basicSalary = employeeExpense?.basicSalary || 0;
-        const allowance = payroll.allowance;
+        const allowance = employeeExpense?.allowance || 0;
         calculationDetails = await calculateSalaryBasedOnAttendance(payroll.employee._id, basicSalary, allowance, payroll.period);
       }
 
@@ -473,7 +485,6 @@ export const getPayrolls = asyncHandler(async (req: Request, res: Response) => {
         labourCardPersonalNo: payroll.labourCardPersonalNo,
         period: payroll.period,
         basicSalary: calculationDetails.baseSalaryAmount,
-        allowance: payroll.allowance,
         transport: payroll.transport,
         overtime: payroll.overtime,
         specialOT: payroll.specialOT || 0,
@@ -539,7 +550,6 @@ export const updatePayroll = asyncHandler(async (req: Request, res: Response) =>
   }
 
   // Convert all numeric fields to numbers
-  if (updateData.allowance !== undefined) updateData.allowance = Number(updateData.allowance) || 0;
   if (updateData.transport !== undefined) updateData.transport = Number(updateData.transport) || 0;
   if (updateData.specialOT !== undefined) updateData.specialOT = Number(updateData.specialOT) || 0;
   if (updateData.medical !== undefined) updateData.medical = Number(updateData.medical) || 0;
@@ -550,14 +560,14 @@ export const updatePayroll = asyncHandler(async (req: Request, res: Response) =>
   if (updateData.fineAmount !== undefined) updateData.fineAmount = Number(updateData.fineAmount) || 0;
   if (updateData.visaDeduction !== undefined) updateData.visaDeduction = Number(updateData.visaDeduction) || 0;
 
-  // Fetch employee expense to get basic salary
+  // Fetch employee expense to get basicSalary and allowance for recalculation
   const employeeExpense = await EmployeeExpense.findOne({
     employee: updateData.employee || payroll.employee
   });
   const basicSalary = Number(employeeExpense?.basicSalary) || 0;
+  const allowance = Number(employeeExpense?.allowance) || 0;
 
   // Use updated values if provided, otherwise keep existing
-  const allowance = updateData.allowance !== undefined ? updateData.allowance : payroll.allowance;
   const transport = updateData.transport !== undefined ? updateData.transport : payroll.transport;
   const specialOT = updateData.specialOT !== undefined ? updateData.specialOT : (payroll.specialOT || 0);
   const medical = updateData.medical !== undefined ? updateData.medical : payroll.medical;
@@ -581,7 +591,7 @@ export const updatePayroll = asyncHandler(async (req: Request, res: Response) =>
 
   // Recalculate net salary with new system
   const baseSalaryFromAttendance = salaryData.baseSalaryAmount;
-  const totalEarnings = baseSalaryFromAttendance + allowance + transport + overtime + specialOT + medical + bonus + salaryData.sundayBonus;
+  const totalEarnings = baseSalaryFromAttendance + transport + overtime + specialOT + medical + bonus + salaryData.sundayBonus;
   const totalDeductions = mess + salaryAdvance + loanDeduction + fineAmount + visaDeduction;
   updateData.net = totalEarnings - totalDeductions;
 
@@ -594,17 +604,23 @@ export const updatePayroll = asyncHandler(async (req: Request, res: Response) =>
   };
 
   console.log('Update calculation:', {
-    baseSalaryFromAttendance,
+    basicSalary,
     allowance,
-    transport,
+    totalMonthlySalary: basicSalary + allowance,
+    baseSalaryFromAttendance,
     overtime,
+    sundayBonus: salaryData.sundayBonus,
+    transport,
     specialOT,
     medical,
     bonus,
-    sundayBonus: salaryData.sundayBonus,
     totalEarnings,
     totalDeductions,
-    net: updateData.net
+    net: updateData.net,
+    calculationRates: {
+      dailyRate: salaryData.rates.dailyRate,
+      overtimeHourlyRate: salaryData.rates.overtimeHourlyRate
+    }
   });
 
   const updatedPayroll = await Payroll.findByIdAndUpdate(id, updateData, {
@@ -634,7 +650,171 @@ export const deletePayroll = asyncHandler(async (req: Request, res: Response) =>
     new ApiResponse(200, null, "Payroll deleted successfully")
   );
 });
+// Get payslip data (preview without PDF generation)
+export const getPayslipData = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
 
+  const payroll = await Payroll.findById(id).populate<{ employee: IUser }>({
+    path: 'employee',
+    select: 'firstName lastName role emiratesId passportNumber iBANNumber accountNumber'
+  });
+
+  if (!payroll) {
+    throw new ApiError(404, "Payroll record not found");
+  }
+
+  if (!payroll.employee || typeof payroll.employee !== 'object') {
+    throw new ApiError(500, "Employee data not properly populated");
+  }
+
+  const employeeExpense = await EmployeeExpense.findOne({ employee: payroll.employee._id }).lean();
+  const basicSalary = employeeExpense?.basicSalary || 0;
+  const allowance = employeeExpense?.allowance || 0;
+
+  // ✅ FIX: Always recalculate to ensure fresh data
+  const calculationDetails = await calculateSalaryBasedOnAttendance(
+    payroll.employee._id,
+    basicSalary,
+    allowance,
+    payroll.period
+  );
+
+  // Get attendance details
+  const getAttendanceDetails = async (userId: Types.ObjectId, period: string) => {
+    const [monthStr, yearStr] = period.split('-');
+    const month = parseInt(monthStr);
+    const year = parseInt(yearStr);
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0);
+
+    const attendances = await Attendance.find({
+      user: userId,
+      date: { $gte: startDate, $lte: endDate }
+    }).sort({ date: 1 });
+
+    let totalHours = 0;
+    let overtimeHours = 0;
+    let presentDays = 0;
+    let sundayWorkingDays = 0;
+    let sundayOvertimeHours = 0;
+    let regularWorkingDays = 0;
+    let totalRegularHours = 0;
+
+    const records: any[] = [];
+    let sno = 1;
+
+    attendances.forEach(att => {
+      const date = new Date(att.date);
+      const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
+      const isSunday = date.getDay() === 0;
+      const formattedDate = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
+      let status = 'Present';
+      if (att.isPaidLeave) {
+        status = 'Paid Leave';
+      } else if (!att.present) {
+        status = 'Absent';
+      }
+
+      if (att.present && !att.isPaidLeave) {
+        const regularHours = att.workingHours || 0;
+        const overtime = att.overtimeHours || 0;
+
+        if (isSunday) {
+          sundayWorkingDays++;
+          sundayOvertimeHours += overtime;
+        } else {
+          regularWorkingDays++;
+          totalRegularHours += regularHours;
+          overtimeHours += overtime;
+          presentDays++;
+        }
+        totalHours += regularHours;
+      }
+
+      records.push({
+        sno: sno++,
+        date: formattedDate,
+        day: dayName,
+        status: status,
+        hours: (att.present && !isSunday) ? (att.workingHours || 0).toFixed(2) : '0',
+        overtimeHours: (att.present) ? (att.overtimeHours || 0).toFixed(2) : '0',
+        isSunday: isSunday
+      });
+    });
+
+    return {
+      summary: {
+        presentDays,
+        regularWorkingDays,
+        sundayWorkingDays,
+        totalHours: totalHours.toFixed(2),
+        totalRegularHours: totalRegularHours.toFixed(2),
+        overtimeHours: overtimeHours.toFixed(2),
+        sundayOvertimeHours: sundayOvertimeHours.toFixed(2),
+        totalMonthDays: calculationDetails?.attendanceSummary?.totalMonthDays || 0,
+        totalSundays: calculationDetails?.attendanceSummary?.totalSundays || 0,
+        paidLeaveDays: calculationDetails?.attendanceSummary?.paidLeaveDays || 0,
+        absentDays: calculationDetails?.attendanceSummary?.absentDays || 0
+      },
+      records
+    };
+  };
+
+  const attendanceDetails = await getAttendanceDetails(payroll.employee._id, payroll.period);
+
+  const [month, year] = payroll.period.split('-');
+  const monthNames = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
+  const periodText = `${monthNames[parseInt(month) - 1]} ${year}`;
+
+  // ✅ FIX: Use calculationDetails properly
+  const totalEarnings = calculationDetails.totalEarnings + payroll.transport + payroll.specialOT + payroll.medical + payroll.bonus;
+  const totalDeductions = payroll.mess + payroll.salaryAdvance + payroll.loanDeduction + payroll.fineAmount + (payroll.visaDeduction || 0);
+
+  const payslipData = {
+    employeeName: `${payroll.employee.firstName} ${payroll.employee.lastName}`,
+    designation: payroll.employee.role,
+    emiratesId: payroll.employee.emiratesId || 'N/A',
+    passportNumber: payroll.employee.passportNumber || 'N/A',
+    ibanNumber: payroll.employee.iBANNumber || 'N/A',
+    accountNumber: payroll.employee.accountNumber || 'N/A',
+    labourCard: payroll.labourCard,
+    labourCardPersonalNo: payroll.labourCardPersonalNo,
+    period: payroll.period,
+    periodText,
+    // ✅ FIX: Use baseSalaryAmount from calculationDetails
+    basicSalary: calculationDetails.baseSalaryAmount,
+    regularHours: calculationDetails.attendanceSummary.totalRegularHours,
+    transport: payroll.transport,
+    overtime: payroll.overtime,
+    specialOT: payroll.specialOT || 0,
+    medical: payroll.medical,
+    bonus: payroll.bonus,
+    mess: payroll.mess,
+    salaryAdvance: payroll.salaryAdvance,
+    loanDeduction: payroll.loanDeduction,
+    fineAmount: payroll.fineAmount,
+    visaDeduction: payroll.visaDeduction || 0,
+    totalEarnings,
+    totalDeductions,
+    net: payroll.net,
+    netInWords: convertToWords(payroll.net),
+    remark: payroll.remark,
+    attendanceDetails,
+    calculationDetails: {
+      baseSalaryFromAttendance: calculationDetails.baseSalaryAmount,
+      sundayBonus: calculationDetails.sundayBonus,
+      attendanceSummary: calculationDetails.attendanceSummary,
+      rates: calculationDetails.rates
+    }
+  };
+
+  console.log('Fixed Payslip Data:', payslipData);
+
+  res.status(200).json(
+    new ApiResponse(200, payslipData, "Payslip data retrieved successfully")
+  );
+});
 // Export payrolls to Excel
 export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Response) => {
   const { month, year, search, employee, period, labourCard, startDate, endDate } = req.query;
@@ -683,7 +863,7 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Payroll Report');
 
-  // Add headers
+  // Add headers (No allowance column)
   worksheet.columns = [
     { header: 'S/NO', key: 'serialNo', width: 8 },
     { header: 'NAME', key: 'name', width: 25 },
@@ -693,7 +873,6 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     { header: 'LABOUR CARD PERSONAL NO', key: 'labourCardPersonalNo', width: 25 },
     { header: 'PERIOD', key: 'period', width: 15 },
     { header: 'BASE SALARY', key: 'baseSalary', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'ALLOWANCE', key: 'allowance', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'TRANSPORT', key: 'transport', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'OVERTIME', key: 'overtime', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'SPECIAL OVERTIME', key: 'specialOT', width: 15, style: { numFmt: '#,##0.00' } },
@@ -718,10 +897,11 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
       continue;
     }
 
+    const employeeExpense = await EmployeeExpense.findOne({ employee: payroll.employee._id }).lean();
     const calculationDetails: any = payroll.calculationDetails || await calculateSalaryBasedOnAttendance(
       payroll.employee._id,
-      payroll.allowance,
-      payroll.allowance,
+      employeeExpense?.basicSalary || 0,
+      employeeExpense?.allowance || 0,
       payroll.period
     );
 
@@ -737,7 +917,6 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
       labourCardPersonalNo: payroll.labourCardPersonalNo,
       period: payroll.period,
       baseSalary: calculationDetails.baseSalaryAmount,
-      allowance: payroll.allowance,
       transport: payroll.transport,
       overtime: payroll.overtime,
       specialOT: payroll.specialOT || 0,
@@ -778,59 +957,219 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   await workbook.xlsx.write(res);
   res.end();
 });
+// Generate payslip PDF
+export const generatePayslipPDF = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
 
-// Helper function to convert number to words
-const convertToWords = (num: number): string => {
-  const ones = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE'];
-  const tens = ['', '', 'TWENTY', 'THIRTY', 'FORTY', 'FIFTY', 'SIXTY', 'SEVENTY', 'EIGHTY', 'NINETY'];
-  const teens = ['TEN', 'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN', 'SEVENTEEN', 'EIGHTEEN', 'NINETEEN'];
+  const payroll = await Payroll.findById(id).populate<{ employee: IUser }>({
+    path: 'employee',
+    select: 'firstName lastName role emiratesId passportNumber iBANNumber accountNumber'
+  });
 
-  if (num === 0) return 'ZERO';
+  if (!payroll) {
+    throw new ApiError(404, "Payroll record not found");
+  }
 
-  const convertLessThanThousand = (n: number): string => {
-    if (n === 0) return '';
-    if (n < 10) return ones[n];
-    if (n < 20) return teens[n - 10];
-    if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 !== 0 ? ' ' + ones[n % 10] : '');
-    return ones[Math.floor(n / 100)] + ' HUNDRED' + (n % 100 !== 0 ? ' ' + convertLessThanThousand(n % 100) : '');
+  if (!payroll.employee || typeof payroll.employee !== 'object') {
+    throw new ApiError(500, "Employee data not properly populated");
+  }
+
+  const employeeExpense = await EmployeeExpense.findOne({ employee: payroll.employee._id }).lean();
+  const basicSalary = employeeExpense?.basicSalary || 0;
+  const allowance = employeeExpense?.allowance || 0;
+
+  // ✅ FIX: Always recalculate to ensure fresh data (same as getPayslipData)
+  const calculationDetails = await calculateSalaryBasedOnAttendance(
+    payroll.employee._id,
+    basicSalary,
+    allowance,
+    payroll.period
+  );
+
+  // Get attendance details
+  const getAttendanceDetails = async (userId: Types.ObjectId, period: string) => {
+    const [monthStr, yearStr] = period.split('-');
+    const month = parseInt(monthStr);
+    const year = parseInt(yearStr);
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0);
+
+    const attendances = await Attendance.find({
+      user: userId,
+      date: { $gte: startDate, $lte: endDate }
+    }).sort({ date: 1 });
+
+    let totalHours = 0;
+    let overtimeHours = 0;
+    let presentDays = 0;
+    let sundayWorkingDays = 0;
+    let sundayOvertimeHours = 0;
+    let regularWorkingDays = 0;
+    let totalRegularHours = 0;
+
+    const records: any[] = [];
+    let sno = 1;
+
+    attendances.forEach(att => {
+      const date = new Date(att.date);
+      const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
+      const isSunday = date.getDay() === 0;
+      const formattedDate = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
+      let status = 'Present';
+      if (att.isPaidLeave) {
+        status = 'Paid Leave';
+      } else if (!att.present) {
+        status = 'Absent';
+      }
+
+      if (att.present && !att.isPaidLeave) {
+        const regularHours = att.workingHours || 0;
+        const overtime = att.overtimeHours || 0;
+
+        if (isSunday) {
+          sundayWorkingDays++;
+          sundayOvertimeHours += overtime;
+        } else {
+          regularWorkingDays++;
+          totalRegularHours += regularHours;
+          overtimeHours += overtime;
+          presentDays++;
+        }
+        totalHours += regularHours;
+      }
+
+      records.push({
+        sno: sno++,
+        date: formattedDate,
+        day: dayName,
+        status: status,
+        hours: (att.present && !isSunday) ? (att.workingHours || 0).toFixed(2) : '0',
+        overtimeHours: (att.present) ? (att.overtimeHours || 0).toFixed(2) : '0',
+        isSunday: isSunday
+      });
+    });
+
+    return {
+      summary: {
+        presentDays,
+        regularWorkingDays,
+        sundayWorkingDays,
+        totalHours: totalHours.toFixed(2),
+        totalRegularHours: totalRegularHours.toFixed(2),
+        overtimeHours: overtimeHours.toFixed(2),
+        sundayOvertimeHours: sundayOvertimeHours.toFixed(2),
+        totalMonthDays: calculationDetails?.attendanceSummary?.totalMonthDays || 0,
+        totalSundays: calculationDetails?.attendanceSummary?.totalSundays || 0,
+        paidLeaveDays: calculationDetails?.attendanceSummary?.paidLeaveDays || 0,
+        absentDays: calculationDetails?.attendanceSummary?.absentDays || 0
+      },
+      records
+    };
   };
 
-  const integerPart = Math.floor(num);
-  const decimalPart = Math.round((num - integerPart) * 100);
+  const attendanceDetails = await getAttendanceDetails(payroll.employee._id, payroll.period);
 
-  let result = '';
-  if (integerPart >= 1000) {
-    result += convertLessThanThousand(Math.floor(integerPart / 1000)) + ' THOUSAND ';
-    result += convertLessThanThousand(integerPart % 1000);
-  } else {
-    result += convertLessThanThousand(integerPart);
+  const [month, year] = payroll.period.split('-');
+  const monthNames = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
+  const periodText = `${monthNames[parseInt(month) - 1]} ${year}`;
+
+  // ✅ FIX: Use calculationDetails properly
+  const totalEarnings = calculationDetails.totalEarnings + payroll.transport + payroll.specialOT + payroll.medical + payroll.bonus;
+  const totalDeductions = payroll.mess + payroll.salaryAdvance + payroll.loanDeduction + payroll.fineAmount + (payroll.visaDeduction || 0);
+
+  const payslipData = {
+    employeeName: `${payroll.employee.firstName} ${payroll.employee.lastName}`,
+    designation: payroll.employee.role,
+    emiratesId: payroll.employee.emiratesId || 'N/A',
+    passportNumber: payroll.employee.passportNumber || 'N/A',
+    ibanNumber: payroll.employee.iBANNumber || 'N/A',
+    accountNumber: payroll.employee.accountNumber || 'N/A',
+    labourCard: payroll.labourCard,
+    labourCardPersonalNo: payroll.labourCardPersonalNo,
+    period: payroll.period,
+    periodText,
+    // ✅ FIX: Use baseSalaryAmount from calculationDetails
+    basicSalary: calculationDetails.baseSalaryAmount,
+    // ✅ FIX: Use correct property name (was typo: reqularHours)
+    regularHours: calculationDetails.attendanceSummary.totalRegularHours,
+    transport: payroll.transport,
+    overtime: payroll.overtime,
+    specialOT: payroll.specialOT || 0,
+    medical: payroll.medical,
+    bonus: payroll.bonus,
+    mess: payroll.mess,
+    salaryAdvance: payroll.salaryAdvance,
+    loanDeduction: payroll.loanDeduction,
+    fineAmount: payroll.fineAmount,
+    visaDeduction: payroll.visaDeduction || 0,
+    totalEarnings,
+    totalDeductions,
+    net: payroll.net,
+    netInWords: convertToWords(payroll.net),
+    remark: payroll.remark,
+    attendanceDetails,
+    calculationDetails: {
+      baseSalaryFromAttendance: calculationDetails.baseSalaryAmount,
+      sundayBonus: calculationDetails.sundayBonus,
+      attendanceSummary: calculationDetails.attendanceSummary,
+      rates: calculationDetails.rates
+    }
+  };
+
+  console.log('Fixed PDF Payslip Data:', payslipData);
+
+  const html = generatePayslipHTML(payslipData);
+
+  const browser = await puppeteer.launch({
+    headless: "shell",
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--font-render-hinting=none']
+  });
+
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1200, height: 1600 });
+    await page.setContent(html, {
+      waitUntil: ['load', 'networkidle0', 'domcontentloaded'],
+      timeout: 30000
+    });
+
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '0.3cm', right: '0.3cm', bottom: '0.3cm', left: '0.3cm' },
+      displayHeaderFooter: false,
+      preferCSSPageSize: true
+    });
+
+    const filename = `payslip_${payroll.employee.firstName}_${payroll.employee.lastName}_${payroll.period}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(pdfBuffer);
+
+  } catch (error) {
+    console.error("PDF generation error:", error);
+    throw new ApiError(500, "Failed to generate PDF");
+  } finally {
+    await browser.close();
   }
-
-  if (decimalPart > 0) {
-    result += ' AND ' + convertLessThanThousand(decimalPart) + ' FILS';
-  }
-
-  return result.trim() + ' AED';
-};
-
+});
 // Generate HTML for payslip
-// Update the generatePayslipHTML function to handle undefined calculationDetails:
-
 const generatePayslipHTML = (data: any): string => {
   // FIX: Safe access to calculation details with proper fallbacks
   const calculationDetails = data.calculationDetails || {};
-
+  console.log(data);
   // FIX: Safe access to rates with proper fallbacks
   const rates = calculationDetails.rates || {};
-  const dailyRate = rates.dailyRate || 0;
-  const hourlyRate = rates.hourlyRate || 0;
-  const sundayBonus = calculationDetails.sundayBonus || 0;
+  const dailyRate = Number(rates.dailyRate) || 0;
+  const overtimeHourlyRate = Number(rates.overtimeHourlyRate) || 0;
+  const sundayBonus = Number(calculationDetails.sundayBonus) || 0;
 
   // FIX: Safe access to attendance summary with proper fallbacks
   const attendanceSummary = calculationDetails.attendanceSummary || data.attendanceDetails?.summary || {};
 
-  // FIX: Check if calculation details exist
-  const hasCalculationDetails = calculationDetails && calculationDetails.rates;
+  // FIX: Always show calculation details section
+  const hasCalculationDetails = true;
 
   const getStatusDisplay = (record: any) => {
     if (record.status?.toLowerCase() === 'day off') {
@@ -839,50 +1178,47 @@ const generatePayslipHTML = (data: any): string => {
     return '';
   };
 
-  // FIX: Safe access to attendance records
+  // FIX: Use all attendance records, not just filtered ones
   const attendanceRecords = data.attendanceDetails?.records || [];
+
+  // Generate table rows for all attendance records
   const attendanceRows = attendanceRecords
     .map((record: any) => {
       const status = record.status?.toLowerCase();
-      if (status === 'present' || status === 'absent') {
-        return '';
-      }
-
       return `
       <tr${record.isSunday ? ' style="background-color: #fff3cd;"' : ''}>
         <td>${record.sno || ''}</td>
         <td>${record.date || ''}</td>
         <td><strong>${record.day || ''}</strong></td>
         <td class="${getStatusDisplay(record)}">${record.status || ''}</td>
-        <td>${status === 'day off' ? '0' : (record.hours || '0')}</td>
-        <td>${status === 'day off' ? '0' : (record.overtimeHours || '0')}</td>
+        <td>${record.hours || '0'}</td>
+        <td>${record.overtimeHours || '0'}</td>
       </tr>
     `;
     })
     .join('');
 
   // FIX: Safe access to all numeric values
-  const basicSalary = data.basicSalary || 0;
-  const allowance = data.allowance || 0;
-  const transport = data.transport || 0;
-  const overtime = data.overtime || 0;
-  const specialOT = data.specialOT || 0;
-  const medical = data.medical || 0;
-  const bonus = data.bonus || 0;
-  const mess = data.mess || 0;
-  const salaryAdvance = data.salaryAdvance || 0;
-  const loanDeduction = data.loanDeduction || 0;
-  const fineAmount = data.fineAmount || 0;
-  const visaDeduction = data.visaDeduction || 0;
-  const totalEarnings = data.totalEarnings || 0;
-  const totalDeductions = data.totalDeductions || 0;
-  const net = data.net || 0;
+  const basicSalary = Number(data.basicSalary) || 0;
+  const transport = Number(data.transport) || 0;
+  const overtime = Number(data.overtime) || 0;
+  const specialOT = Number(data.specialOT) || 0;
+  const medical = Number(data.medical) || 0;
+  const bonus = Number(data.bonus) || 0;
+  const mess = Number(data.mess) || 0;
+  const salaryAdvance = Number(data.salaryAdvance) || 0;
+  const loanDeduction = Number(data.loanDeduction) || 0;
+  const fineAmount = Number(data.fineAmount) || 0;
+  const visaDeduction = Number(data.visaDeduction) || 0;
+  const totalEarnings = Number(data.totalEarnings) || 0;
+  const totalDeductions = Number(data.totalDeductions) || 0;
+  const net = Number(data.net) || 0;
 
   // FIX: Safe access to attendance summary values
-  const presentDays = data.attendanceDetails?.summary?.presentDays || 0;
-  const totalHours = data.attendanceDetails?.summary?.totalHours || '0';
-  const overtimeHours = data.attendanceDetails?.summary?.overtimeHours || '0';
-  const sundayWorkingDays = data.attendanceDetails?.summary?.sundayWorkingDays || 0;
+  const regularWorkingDays = Number(data.attendanceDetails?.summary?.regularWorkingDays) || 0;
+  const sundayWorkingDays = Number(data.attendanceDetails?.summary?.sundayWorkingDays) || 0;
+  const totalRegularHours = data.attendanceDetails?.summary?.totalRegularHours || '0';
+  const overtimeHours = data.attendanceDetails?.summary?.totalOvertimeHours || '0';
   const sundayOvertimeHours = data.attendanceDetails?.summary?.sundayOvertimeHours || '0';
 
   return `
@@ -1203,17 +1539,6 @@ const generatePayslipHTML = (data: any): string => {
             text-align: center;
         }
         
-        .footer {
-            background: #f8f9fa;
-            padding: 10px 15px;
-            text-align: center;
-            font-size: 8pt;
-            color: #666;
-            border-top: 1px solid #e9ecef;
-            margin-top: 15px;
-            page-break-inside: avoid;
-        }
-
         .status-dayoff {
             color: #6c757d;
             font-weight: 600;
@@ -1369,13 +1694,12 @@ const generatePayslipHTML = (data: any): string => {
                         <span class="info-value">${data.emiratesIdExpiry || 'N/A'}</span>
                     </div>
                     <div class="info-item">
-                        <span class="info-label">Working Days</span>
-                        <span class="info-value">${presentDays} Days</span>
+                        <span class="info-label">Regular Working Days</span>
+                        <span class="info-value">${regularWorkingDays} Days</span>
                     </div>
                 </div>
             </div>
 
-            ${hasCalculationDetails ? `
             <!-- Salary Calculation Details Section -->
             <div class="section no-break">
                 <div class="section-title">Salary Calculation Details</div>
@@ -1388,32 +1712,32 @@ const generatePayslipHTML = (data: any): string => {
                                 <span>${attendanceSummary.totalMonthDays || 0}</span>
                             </div>
                             <div class="calculation-row">
-                                <span>Sundays:</span>
+                                <span>Sundays in Month:</span>
                                 <span>${attendanceSummary.totalSundays || 0}</span>
                             </div>
                             <div class="calculation-row">
-                                <span>Paid Leaves:</span>
-                                <span>${attendanceSummary.paidLeaveDays || 0}</span>
+                                <span>Regular Working Days:</span>
+                                <span>${attendanceSummary.regularWorkingDays || 0}</span>
                             </div>
                             <div class="calculation-row">
-                                <span>Effective Days:</span>
-                                <span>${attendanceSummary.effectiveWorkingDays || 0}</span>
+                                <span>Sunday Working Days:</span>
+                                <span>${attendanceSummary.sundayWorkingDays || 0}</span>
                             </div>
                         </div>
                         
                         <div class="calculation-section">
-                            <strong>Work Details</strong>
+                            <strong>Work Hours</strong>
                             <div class="calculation-row">
-                                <span>Total Hours:</span>
-                                <span>${attendanceSummary.totalActualHours || 0}</span>
-                            </div>
-                            <div class="calculation-row">
-                                <span>Sunday Working:</span>
-                                <span>${attendanceSummary.sundayWorkingDays || 0} days</span>
+                                <span>Regular Hours:</span>
+                                <span>${attendanceSummary.totalRegularHours || 0}</span>
                             </div>
                             <div class="calculation-row">
                                 <span>Overtime Hours:</span>
                                 <span>${attendanceSummary.totalOvertimeHours || 0}</span>
+                            </div>
+                            <div class="calculation-row">
+                                <span>Sunday Overtime:</span>
+                                <span>${attendanceSummary.sundayOvertimeHours || 0}</span>
                             </div>
                         </div>
                         
@@ -1424,14 +1748,13 @@ const generatePayslipHTML = (data: any): string => {
                                 <span>AED ${dailyRate.toFixed(2)}</span>
                             </div>
                             <div class="calculation-row">
-                                <span>Hourly Rate:</span>
-                                <span>AED ${hourlyRate.toFixed(2)}</span>
+                                <span>Overtime Rate:</span>
+                                <span>AED ${overtimeHourlyRate.toFixed(2)}/hour</span>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
-            ` : ''}
             
             <!-- Salary Details Section -->
             <div class="section no-break">
@@ -1447,43 +1770,44 @@ const generatePayslipHTML = (data: any): string => {
                     </thead>
                     <tbody>
                         <tr>
-                            <td>Basic Salary</td>
+                            <td>Base Salary</td>
                             <td class="amount">${basicSalary.toFixed(2)}</td>
                             <td>Food Allowance</td>
                             <td class="amount">${mess.toFixed(2)}</td>
                         </tr>
                         <tr>
-                            <td>Allowance</td>
-                            <td class="amount">${allowance.toFixed(2)}</td>
+                            <td>Transport</td>
+                            <td class="amount">${transport.toFixed(2)}</td>
                             <td>Salary Advance</td>
                             <td class="amount">${salaryAdvance.toFixed(2)}</td>
                         </tr>
                         <tr>
-                            <td>Transport</td>
-                            <td class="amount">${transport.toFixed(2)}</td>
+                            <td>Overtime</td>
+                            <td class="amount">${overtime.toFixed(2)}</td>
                             <td>Loan Deduction</td>
                             <td class="amount">${loanDeduction.toFixed(2)}</td>
                         </tr>
                         <tr>
-                            <td>Overtime</td>
-                            <td class="amount">${overtime.toFixed(2)}</td>
-                            <td>Fine Amount</td>
-                            <td class="amount">${fineAmount.toFixed(2)}</td>
-                        </tr>
-                        <tr>
                             <td>Special OT</td>
                             <td class="amount">${specialOT.toFixed(2)}</td>
-                            <td>Visa Deduction</td>
-                            <td class="amount">${visaDeduction.toFixed(2)}</td>
+                            <td>Fine Amount</td>
+                            <td class="amount">${fineAmount.toFixed(2)}</td>
                         </tr>
                         ${sundayBonus > 0 ? `
                         <tr>
                             <td>Sunday Bonus</td>
                             <td class="amount">${sundayBonus.toFixed(2)}</td>
+                            <td>Visa Deduction</td>
+                            <td class="amount">${visaDeduction.toFixed(2)}</td>
+                        </tr>
+                        ` : `
+                        <tr>
                             <td></td>
                             <td class="amount"></td>
+                            <td>Visa Deduction</td>
+                            <td class="amount">${visaDeduction.toFixed(2)}</td>
                         </tr>
-                        ` : ''}
+                        `}
                         <tr>
                             <td>Medical</td>
                             <td class="amount">${medical.toFixed(2)}</td>
@@ -1522,32 +1846,32 @@ const generatePayslipHTML = (data: any): string => {
             
             <!-- Attendance Summary Section -->
             <div class="section no-break">
-                <div class="section-title">Attendance Summary</div>
+                <div class="section-title">Attendance Records</div>
                 <div class="attendance-summary">
                     <div class="attendance-summary-grid">
                         <div class="summary-card">
-                            <h4>Total Working Days</h4>
-                            <div class="summary-value">${presentDays}</div>
-                            <div class="summary-label">Days</div>
+                            <h4>Regular Working Days</h4>
+                            <div class="summary-value">${regularWorkingDays}</div>
+                            <div class="summary-label">Days (Mon-Sat)</div>
                         </div>
                         
                         <div class="summary-card">
                             <h4>Regular Hours</h4>
-                            <div class="summary-value">${totalHours}</div>
-                            <div class="summary-label">Hours</div>
+                            <div class="summary-value">${totalRegularHours}</div>
+                            <div class="summary-label">Hours (Mon-Sat)</div>
                         </div>
                         
                         <div class="summary-card">
                             <h4>Overtime Hours</h4>
                             <div class="summary-value">${overtimeHours}</div>
-                            <div class="summary-label">Hours</div>
+                            <div class="summary-label">Hours (Mon-Sat)</div>
                         </div>
                         
                         ${sundayWorkingDays > 0 ? `
                         <div class="sunday-card">
                             <h4>🌟 Sunday Working</h4>
                             <div class="sunday-value">${sundayWorkingDays}</div>
-                            <div class="sunday-label">Days</div>
+                            <div class="sunday-label">Days (Extra Bonus)</div>
                         </div>
                         ` : `
                         <div class="summary-card" style="opacity: 0.6;">
@@ -1592,17 +1916,6 @@ const generatePayslipHTML = (data: any): string => {
                 </div>
             </div>
             ` : ''}
-
-            <div class="tagline">We work U Relax</div>
-        </div>
-        
-        <div class="footer">
-            <p><strong>Note:</strong> This is a computer-generated payslip and does not require a signature.</p>
-            <p style="margin-top: 3px;"><em>Sunday working days are highlighted in yellow in the attendance table.</em></p>
-            <p style="margin-top: 5px;"><strong>AL GHAZAL AL ABYAD TECHNICAL SERVICES</strong></p>
-            <p>Office No:04, R09-France Cluster, International City-Dubai | P.O.Box:262760, Dubai-U.A.E</p>
-            <p>Tel: 044102555 | <a href="http://www.alghazalgroup.com/">www.alghazalgroup.com</a></p>
-            <p style="margin-top: 6px;">Generated on ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
         </div>
     </div>
 </body>
@@ -1610,260 +1923,43 @@ const generatePayslipHTML = (data: any): string => {
   `;
 };
 
-// Generate payslip PDF
-export const generatePayslipPDF = asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+// Helper function to convert number to words
+const convertToWords = (num: number): string => {
+  const ones = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE'];
+  const tens = ['', '', 'TWENTY', 'THIRTY', 'FORTY', 'FIFTY', 'SIXTY', 'SEVENTY', 'EIGHTY', 'NINETY'];
+  const teens = ['TEN', 'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN', 'SEVENTEEN', 'EIGHTEEN', 'NINETEEN'];
 
-  const payroll = await Payroll.findById(id).populate<{ employee: IUser }>({
-    path: 'employee',
-    select: 'firstName lastName role emiratesId passportNumber iBANNumber accountNumber'
-  });
+  if (num === 0) return 'ZERO';
 
-  if (!payroll) {
-    throw new ApiError(404, "Payroll record not found");
-  }
-
-  if (!payroll.employee || typeof payroll.employee !== 'object') {
-    throw new ApiError(500, "Employee data not properly populated");
-  }
-
-  const employeeExpense = await EmployeeExpense.findOne({ employee: payroll.employee._id }).lean();
-  const visaExpense = await VisaExpense.findOne({ employee: payroll.employee._id }).lean();
-
-  const basicSalary = employeeExpense?.basicSalary || 0;
-  const allowance = payroll.allowance;
-
-  // Use calculation details if available, otherwise calculate
-  let calculationDetails: any = payroll.calculationDetails;
-  if (!calculationDetails) {
-    calculationDetails = await calculateSalaryBasedOnAttendance(payroll.employee._id, basicSalary, allowance, payroll.period);
-  }
-
-  const totalEarnings = calculationDetails.totalEarnings + payroll.transport + payroll.specialOT + payroll.medical + payroll.bonus;
-  const totalDeductions = payroll.mess + payroll.salaryAdvance + payroll.loanDeduction + payroll.fineAmount + payroll.visaDeduction;
-
-  // Get attendance details
-  const getAttendanceDetails = async (userId: Types.ObjectId, period: string) => {
-    const [monthStr, yearStr] = period.split('-');
-    const month = parseInt(monthStr);
-    const year = parseInt(yearStr);
-    const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0);
-
-    const attendances = await Attendance.find({
-      user: userId,
-      date: { $gte: startDate, $lte: endDate },
-      present: true
-    });
-
-    let totalHours = 0;
-    let overtimeHours = 0;
-    let presentDays = 0;
-    let sundayWorkingDays = 0;
-    let sundayOvertimeHours = 0;
-
-    attendances.forEach(att => {
-      totalHours += att.workingHours || 0;
-      overtimeHours += att.overtimeHours || 0;
-      presentDays++;
-
-      const date = new Date(att.date);
-      if (date.getDay() === 0) {
-        sundayWorkingDays++;
-        sundayOvertimeHours += att.overtimeHours || 0;
-      }
-    });
-
-    return {
-      summary: {
-        presentDays,
-        totalHours: totalHours.toFixed(2),
-        overtimeHours: overtimeHours.toFixed(2),
-        sundayWorkingDays,
-        sundayOvertimeHours: sundayOvertimeHours.toFixed(2),
-        // Add the new fields for compatibility
-        totalMonthDays: calculationDetails?.attendanceSummary?.totalMonthDays || 0,
-        totalSundays: calculationDetails?.attendanceSummary?.totalSundays || 0,
-        paidLeaveDays: calculationDetails?.attendanceSummary?.paidLeaveDays || 0,
-        absentDays: calculationDetails?.attendanceSummary?.absentDays || 0,
-        effectiveWorkingDays: calculationDetails?.attendanceSummary?.effectiveWorkingDays || 0,
-        totalWorkingDays: calculationDetails?.attendanceSummary?.totalWorkingDays || 0,
-        totalActualHours: calculationDetails?.attendanceSummary?.totalActualHours || 0,
-        totalOvertimeHours: calculationDetails?.attendanceSummary?.totalOvertimeHours || 0
-      },
-      records: []
-    };
+  const convertLessThanThousand = (n: number): string => {
+    if (n === 0) return '';
+    if (n < 10) return ones[n];
+    if (n < 20) return teens[n - 10];
+    if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 !== 0 ? ' ' + ones[n % 10] : '');
+    return ones[Math.floor(n / 100)] + ' HUNDRED' + (n % 100 !== 0 ? ' ' + convertLessThanThousand(n % 100) : '');
   };
 
-  const attendanceDetails = await getAttendanceDetails(payroll.employee._id, payroll.period);
+  const integerPart = Math.floor(num);
+  const decimalPart = Math.round((num - integerPart) * 100);
 
-  const [month, year] = payroll.period.split('-');
-  const monthNames = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
-  const periodText = `${monthNames[parseInt(month) - 1]} ${year}`;
-
-  const formatDate = (date: Date | string | undefined): string => {
-    if (!date) return 'N/A';
-    const d = new Date(date);
-    return isNaN(d.getTime()) ? 'N/A' : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-  };
-
-  // FIX: Safe access to calculationDetails with fallbacks
-  const payslipData = {
-    employeeName: `${payroll.employee.firstName} ${payroll.employee.lastName}`.toUpperCase(),
-    designation: payroll.employee.role.toUpperCase(),
-    emiratesId: payroll.employee.emiratesId || 'N/A',
-    emiratesIdExpiry: formatDate(visaExpense?.emirateIdExpireDate),
-    passportNumber: payroll.employee.passportNumber || 'N/A',
-    passportExpiry: formatDate(visaExpense?.passportExpireDate),
-    ibanNumber: payroll.employee.iBANNumber || 'N/A',
-    accountNumber: payroll.employee.accountNumber || 'N/A',
-    labourCard: payroll.labourCard,
-    labourCardPersonalNo: payroll.labourCardPersonalNo,
-    labourCardExpiry: formatDate(visaExpense?.labourExpireDate),
-    period: payroll.period,
-    periodText,
-    basicSalary: calculationDetails.baseSalaryAmount,
-    allowance: payroll.allowance,
-    transport: payroll.transport,
-    overtime: payroll.overtime,
-    specialOT: payroll.specialOT || 0,
-    medical: payroll.medical,
-    bonus: payroll.bonus,
-    mess: payroll.mess,
-    salaryAdvance: payroll.salaryAdvance,
-    loanDeduction: payroll.loanDeduction,
-    fineAmount: payroll.fineAmount,
-    visaDeduction: payroll.visaDeduction || 0,
-    totalEarnings,
-    totalDeductions,
-    net: payroll.net,
-    netInWords: convertToWords(payroll.net),
-    remark: payroll.remark,
-    attendanceDetails,
-    // FIX: Safe calculation details with proper fallbacks
-    calculationDetails: calculationDetails ? {
-      baseSalaryFromAttendance: calculationDetails.baseSalaryAmount || 0,
-      sundayBonus: calculationDetails.sundayBonus || 0,
-      attendanceSummary: {
-        totalMonthDays: calculationDetails.attendanceSummary?.totalMonthDays || 0,
-        totalSundays: calculationDetails.attendanceSummary?.totalSundays || 0,
-        paidLeaveDays: calculationDetails.attendanceSummary?.paidLeaveDays || 0,
-        absentDays: calculationDetails.attendanceSummary?.absentDays || 0,
-        effectiveWorkingDays: calculationDetails.attendanceSummary?.effectiveWorkingDays || 0,
-        totalWorkingDays: calculationDetails.attendanceSummary?.totalWorkingDays || 0,
-        totalActualHours: calculationDetails.attendanceSummary?.totalActualHours || 0,
-        totalOvertimeHours: calculationDetails.attendanceSummary?.totalOvertimeHours || 0,
-        sundayWorkingDays: calculationDetails.attendanceSummary?.sundayWorkingDays || 0,
-        sundayOvertimeHours: calculationDetails.attendanceSummary?.sundayOvertimeHours || 0
-      },
-      rates: {
-        dailyRate: calculationDetails.rates?.dailyRate || 0,
-        hourlyRate: calculationDetails.rates?.hourlyRate || 0
-      }
-    } : null
-  };
-
-  const html = generatePayslipHTML(payslipData);
-
-  const browser = await puppeteer.launch({
-    headless: "shell",
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--font-render-hinting=none']
-  });
-
-  try {
-    const page = await browser.newPage();
-    await page.setViewport({ width: 1200, height: 1600 });
-    await page.setContent(html, {
-      waitUntil: ['load', 'networkidle0', 'domcontentloaded'],
-      timeout: 30000
-    });
-
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '0.3cm', right: '0.3cm', bottom: '0.3cm', left: '0.3cm' },
-      displayHeaderFooter: false,
-      preferCSSPageSize: true
-    });
-
-    const filename = `payslip_${payroll.employee.firstName}_${payroll.employee.lastName}_${payroll.period}.pdf`;
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.send(pdfBuffer);
-
-  } catch (error) {
-    console.error("PDF generation error:", error);
-    throw new ApiError(500, "Failed to generate PDF");
-  } finally {
-    await browser.close();
-  }
-});
-// Get payslip data (preview without PDF generation)
-export const getPayslipData = asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
-
-  const payroll = await Payroll.findById(id).populate<{ employee: IUser }>({
-    path: 'employee',
-    select: 'firstName lastName role emiratesId passportNumber iBANNumber accountNumber'
-  });
-
-  if (!payroll) {
-    throw new ApiError(404, "Payroll record not found");
+  let result = '';
+  if (integerPart >= 1000) {
+    result += convertLessThanThousand(Math.floor(integerPart / 1000)) + ' THOUSAND ';
+    result += convertLessThanThousand(integerPart % 1000);
+  } else {
+    result += convertLessThanThousand(integerPart);
   }
 
-  if (!payroll.employee || typeof payroll.employee !== 'object') {
-    throw new ApiError(500, "Employee data not properly populated");
+  if (decimalPart > 0) {
+    result += ' AND ' + convertLessThanThousand(decimalPart) + ' FILS';
   }
 
-  const employeeExpense = await EmployeeExpense.findOne({ employee: payroll.employee._id }).lean();
-  const basicSalary = employeeExpense?.basicSalary || 0;
-  const allowance = payroll.allowance;
+  return result.trim() + ' AED';
+};
 
-  // Use calculation details if available, otherwise calculate
-  let calculationDetails: any = payroll.calculationDetails;
-  if (!calculationDetails) {
-    calculationDetails = await calculateSalaryBasedOnAttendance(payroll.employee._id, basicSalary, allowance, payroll.period);
-  }
-
-  const totalEarnings = calculationDetails.totalEarnings + payroll.transport + payroll.specialOT + payroll.medical + payroll.bonus;
-  const totalDeductions = payroll.mess + payroll.salaryAdvance + payroll.loanDeduction + payroll.fineAmount + payroll.visaDeduction;
-
-  const [month, year] = payroll.period.split('-');
-  const monthNames = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
-  const periodText = `${monthNames[parseInt(month) - 1]} ${year}`;
-
-  const payslipData = {
-    employeeName: `${payroll.employee.firstName} ${payroll.employee.lastName}`,
-    designation: payroll.employee.role,
-    emiratesId: payroll.employee.emiratesId || 'N/A',
-    passportNumber: payroll.employee.passportNumber || 'N/A',
-    ibanNumber: payroll.employee.iBANNumber || 'N/A',
-    accountNumber: payroll.employee.accountNumber || 'N/A',
-    labourCard: payroll.labourCard,
-    labourCardPersonalNo: payroll.labourCardPersonalNo,
-    period: payroll.period,
-    periodText,
-    basicSalary: calculationDetails.baseSalaryAmount,
-    allowance: payroll.allowance,
-    transport: payroll.transport,
-    overtime: payroll.overtime,
-    specialOT: payroll.specialOT || 0,
-    medical: payroll.medical,
-    bonus: payroll.bonus,
-    mess: payroll.mess,
-    salaryAdvance: payroll.salaryAdvance,
-    loanDeduction: payroll.loanDeduction,
-    fineAmount: payroll.fineAmount,
-    visaDeduction: payroll.visaDeduction || 0,
-    totalEarnings,
-    totalDeductions,
-    net: payroll.net,
-    netInWords: convertToWords(payroll.net),
-    remark: payroll.remark,
-    calculationDetails
-  };
-
-  res.status(200).json(
-    new ApiResponse(200, payslipData, "Payslip data retrieved successfully")
-  );
-});
+// Helper function to format dates
+const formatDate = (date: Date | string | undefined): string => {
+  if (!date) return 'N/A';
+  const d = new Date(date);
+  return isNaN(d.getTime()) ? 'N/A' : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+};

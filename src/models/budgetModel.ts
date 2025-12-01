@@ -1,3 +1,5 @@
+// models/budgetModel.ts
+
 import { Document, Schema, model, Types } from "mongoose";
 import { IProject } from "./projectModel";
 import { IQuotation } from "./quotationModel";
@@ -25,8 +27,11 @@ const monthlyBudgetSchema = new Schema<IMonthlyBudget>({
     allocatedAmount: { type: Number, required: true, min: 0 },
 });
 
-// Compound index to ensure uniqueness of month-year combination for a budget
-monthlyBudgetSchema.index({ month: 1, year: 1 }, { unique: true });
+// IMPORTANT: The unique index on the sub-document schema has been REMOVED.
+// It was causing a global uniqueness constraint, meaning no two projects
+// could have a budget for the same month/year (e.g., Nov 2025).
+// Uniqueness for a single project's budget is now handled in the controller.
+// monthlyBudgetSchema.index({ month: 1, year: 1 }, { unique: true }); // <-- THIS LINE WAS REMOVED
 
 const budgetSchema = new Schema<IBudget>(
     {
@@ -34,7 +39,7 @@ const budgetSchema = new Schema<IBudget>(
             type: Schema.Types.ObjectId,
             ref: "Project",
             required: true,
-            unique: true,
+            unique: true, // This is correct: one budget per project
         },
         quotation: {
             type: Schema.Types.ObjectId,
@@ -61,14 +66,12 @@ const budgetSchema = new Schema<IBudget>(
     { timestamps: true }
 );
 
-// Pre-save hook to calculate total allocated
+// Pre-save hook to calculate total allocated amount automatically
 budgetSchema.pre<IBudget>("save", function (next) {
-    // Calculate total allocated from monthly budgets
     this.totalAllocated = this.monthlyBudgets.reduce(
         (sum, month) => sum + month.allocatedAmount,
         0
     );
-
     next();
 });
 
