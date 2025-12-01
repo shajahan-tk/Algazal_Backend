@@ -957,6 +957,13 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   await workbook.xlsx.write(res);
   res.end();
 });
+
+const formatHours = (value: any) => {
+  const num = Number(value);
+  if (isNaN(num)) return '0';
+  return num.toFixed(2).replace(/\.00$/, ''); // remove .00 when whole number
+};
+
 // Generate payslip PDF
 export const generatePayslipPDF = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
@@ -1191,8 +1198,9 @@ const generatePayslipHTML = (data: any): string => {
         <td>${record.date || ''}</td>
         <td><strong>${record.day || ''}</strong></td>
         <td class="${getStatusDisplay(record)}">${record.status || ''}</td>
-        <td>${record.hours || '0'}</td>
-        <td>${record.overtimeHours || '0'}</td>
+       <td>${formatHours(record.hours)}</td>
+<td>${formatHours(record.overtimeHours)}</td>
+
       </tr>
     `;
     })
@@ -1729,15 +1737,18 @@ const generatePayslipHTML = (data: any): string => {
                             <strong>Work Hours</strong>
                             <div class="calculation-row">
                                 <span>Regular Hours:</span>
-                                <span>${attendanceSummary.totalRegularHours || 0}</span>
+                              <span>${formatHours(attendanceSummary.totalRegularHours)}</span>
+
                             </div>
                             <div class="calculation-row">
                                 <span>Overtime Hours:</span>
-                                <span>${attendanceSummary.totalOvertimeHours || 0}</span>
+                                <span>${formatHours(attendanceSummary.totalOvertimeHours)}</span>
+
+                                
                             </div>
                             <div class="calculation-row">
                                 <span>Sunday Overtime:</span>
-                                <span>${attendanceSummary.sundayOvertimeHours || 0}</span>
+                                <span>${formatHours(attendanceSummary.sundayOvertimeHours)}</span>
                             </div>
                         </div>
                         
@@ -1857,13 +1868,15 @@ const generatePayslipHTML = (data: any): string => {
                         
                         <div class="summary-card">
                             <h4>Regular Hours</h4>
-                            <div class="summary-value">${totalRegularHours}</div>
+                           <div class="summary-value">${formatHours(totalRegularHours)}</div>
+
                             <div class="summary-label">Hours (Mon-Sat)</div>
                         </div>
                         
                         <div class="summary-card">
                             <h4>Overtime Hours</h4>
-                            <div class="summary-value">${overtimeHours}</div>
+                            <div class="summary-value">${formatHours(overtimeHours)}</div>
+
                             <div class="summary-label">Hours (Mon-Sat)</div>
                         </div>
                         
@@ -1885,7 +1898,8 @@ const generatePayslipHTML = (data: any): string => {
                     ${parseFloat(sundayOvertimeHours) > 0 ? `
                     <div style="margin-top: 8px; text-align: center;">
                         <div style="display: inline-block; background: #fff9e6; padding: 6px 12px; border-radius: 3px; border: 1px solid #ffc107;">
-                            <strong style="color: #856404; font-size: 8pt;">Sunday Overtime Hours: ${sundayOvertimeHours} Hours</strong>
+                          <strong style="color: #856404; font-size: 8pt;">Sunday Overtime Hours: ${formatHours(sundayOvertimeHours)} Hours</strong>
+
                         </div>
                     </div>
                     ` : ''}
