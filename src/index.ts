@@ -33,6 +33,8 @@ import bankDetailsRouter from "./routes/bankDetailsRoutes";
 import dashboardRoutes from "./routes/dashboardAnalyticsRoutes";
 import utilsRouter from "./routes/utilsRoutes";
 import restrictionRouter from "./routes/restrictionRoutes";
+
+
 import budgetRouter from "./routes/budgetRoutes";
 import { connectDb } from "./config/db";
 import { seedSuperAdmin } from "./utils/seeder";
@@ -106,7 +108,7 @@ app.use("/api/employee-summary", employeeSummaryRouter);
 app.use("/api/attendance-management", attendanceManagementRouter);
 app.use("/api/budget", budgetRouter);
 app.use("/api/utils", utilsRouter);
-
+app.use("/api/dashboard-analytics", dashboardRoutes);
 app.use(errorHandler as ErrorRequestHandler);
 
 app.use((req: Request, res: Response, next: NextFunction) => {
@@ -114,7 +116,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 connectDb().then(() => {
-  app.listen(4001, () => {
+  app.listen(4002, () => {
     console.log(`Server is running on port ${process.env.PORT}`);
   });
 });
