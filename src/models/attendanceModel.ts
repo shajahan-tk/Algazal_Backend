@@ -1,4 +1,3 @@
-
 import { Document, Schema, model, Types } from "mongoose";
 
 export interface IAttendance extends Document {
@@ -106,8 +105,9 @@ attendanceSchema.pre<IAttendance>("save", function (next) {
     this.overtimeHours = 0;
     this.projects = [];
     this.project = undefined;
+    this.present = false; // Important: Paid leave should be marked as absent
   } else {
-    // If projects array exists and has items, calculate total working hours
+    // Calculate total working hours from projects array
     if (this.projects && this.projects.length > 0) {
       const totalProjectHours = this.projects.reduce(
         (sum, p) => sum + (p.workingHours || 0),
@@ -115,17 +115,22 @@ attendanceSchema.pre<IAttendance>("save", function (next) {
       );
       this.workingHours = totalProjectHours;
 
-      // Sync the deprecated 'project' field with the first project for backward compat if needed
-      // or leave it. Let's set it to the first project if available.
-      this.project = this.projects[0].project;
+      // Set project field to first project for backward compatibility
+      this.project = this.projects[0]?.project;
     }
 
-    // Calculate overtime based on total working hours
-    if (this.isModified("workingHours") || this.isModified("projects")) {
-      const basicHours = 10;
-      this.overtimeHours = Math.max(0, this.workingHours - basicHours);
+    // Calculate overtime properly
+    const basicHours = 10; // 10 hours is the threshold for overtime
+    const dailyHours = this.workingHours || 0;
+
+    // Only calculate overtime if present and has working hours
+    if (this.present && dailyHours > 0) {
+      this.overtimeHours = Math.max(0, dailyHours - basicHours);
+    } else {
+      this.overtimeHours = 0;
     }
   }
+
   next();
 });
 

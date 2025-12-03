@@ -1,4 +1,3 @@
-// controllers/attendanceManagementController.js
 import { asyncHandler } from "../utils/asyncHandler";
 import { ApiResponse } from "../utils/apiHandlerHelpers";
 import { ApiError } from "../utils/apiHandlerHelpers";
@@ -28,22 +27,31 @@ function parseTimeToDecimal(timeValue: string | number): number {
       if (minutes >= 60) {
         throw new ApiError(400, "Minutes must be less than 60");
       }
-      return Math.round((hours + (minutes / 60)) * 100) / 100;
+      const decimal = hours + (minutes / 60);
+      return Math.round(decimal * 100) / 100; // Round to 2 decimal places
     }
 
     // Handle "HH.MM" format (e.g., "13.45" means 13:45)
     if (trimmed.includes('.')) {
-      const [hours, minutes] = trimmed.split('.').map(Number);
-      if (isNaN(hours) || isNaN(minutes)) {
-        throw new ApiError(400, "Invalid time format. Use HH:MM or HH.MM format");
+      const parts = trimmed.split('.');
+      if (parts.length > 2) {
+        throw new ApiError(400, "Invalid time format. Use HH:MM or decimal format");
       }
+
+      const hours = parseInt(parts[0]) || 0;
+      const minutes = parts[1] ? parseInt(parts[1]) : 0;
+
+      // Check if minutes part is actually minutes (less than 60)
       if (minutes >= 60) {
-        throw new ApiError(400, "Minutes must be less than 60");
+        // Treat as decimal hours (e.g., "13.75" means 13.75 hours)
+        return Math.round(parseFloat(trimmed) * 100) / 100;
       }
-      return Math.round((hours + (minutes / 60)) * 100) / 100;
+
+      const decimal = hours + (minutes / 60);
+      return Math.round(decimal * 100) / 100; // Round to 2 decimal places
     }
 
-    // Handle pure decimal string (e.g., "13.5" means 13.5 hours)
+    // Handle pure decimal string
     const parsed = parseFloat(trimmed);
     if (isNaN(parsed)) {
       throw new ApiError(400, "Invalid time format");

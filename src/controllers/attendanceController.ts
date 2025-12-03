@@ -651,11 +651,26 @@ export const getUserMonthlyAttendanceByType = asyncHandler(
       .populate("projects.project", "projectName")
       .populate("project", "projectName");
 
-    // Calculate totals
+    // Calculate simple totals
+    let totalWorkingDays = 0;
+    let totalNormalHours = 0;
+    let totalOvertimeHours = 0;
+    let totalHours = 0;
+
+    attendance.forEach((a) => {
+      if (a.present) {
+        totalWorkingDays++;
+        totalHours += a.workingHours;
+        totalOvertimeHours += a.overtimeHours;
+        totalNormalHours += Math.max(0, a.workingHours - a.overtimeHours);
+      }
+    });
+
     const totals = {
-      presentDays: attendance.filter((a) => a.present).length,
-      totalWorkingHours: attendance.reduce((sum, a) => sum + a.workingHours, 0),
-      totalOvertimeHours: attendance.reduce((sum, a) => sum + a.overtimeHours, 0),
+      workingDays: totalWorkingDays,
+      normalHours: parseFloat(totalNormalHours.toFixed(2)),
+      overtimeHours: parseFloat(totalOvertimeHours.toFixed(2)),
+      totalHours: parseFloat(totalHours.toFixed(2))
     };
 
     res.status(200).json(
