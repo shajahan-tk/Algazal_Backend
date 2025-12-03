@@ -1,7 +1,8 @@
 // src/routes/dashboardAnalyticsRoutes.ts
+
 import express from "express";
-import { authenticate, authorize } from "../middlewares/authMiddleware";
 import {
+  getDashboardSummary,
   getOverviewStats,
   getAttendanceData,
   getFinancialSummary,
@@ -9,47 +10,55 @@ import {
   getHRAlerts,
   getTopClients,
   getPayrollData,
-  getInvoiceReports,
   getProjectProfitAnalytics,
   getEstimationAnalytics,
-  getDashboardSummary
+
 } from "../controllers/dashboard/dashboardAnalyticsController";
+import { authenticate, authorize } from "../middlewares/authMiddleware";
+import { getMonthlyReport, getYearlyReport } from "../controllers/dashboard/exportController";
 
 const router = express.Router();
 
+// Apply authentication middleware to all routes
 router.use(authenticate);
 
-// Overview statistics
-router.get("/overview", authorize(["admin", "super_admin", "finance", "engineer"]), getOverviewStats);
+// Overview routes
+router.get("/summary", getDashboardSummary); // Combined endpoint for faster loading
+router.get("/overview-stats", getOverviewStats);
+router.get("/attendance-data", getAttendanceData);
+router.get("/financial-summary", getFinancialSummary);
+router.get("/project-status", getProjectStatus);
+router.get("/hr-alerts", getHRAlerts);
+router.get("/top-clients", getTopClients);
 
-// Attendance data
-router.get("/attendance", authorize(["admin", "super_admin", "finance", "engineer"]), getAttendanceData);
+// Profit analytics
+router.get(
+  "/profit-analytics",
+  authorize(["admin", "super_admin", "finance"]),
+  getProjectProfitAnalytics
+);
 
-// Financial summary
-router.get("/financial-summary", authorize(["admin", "super_admin", "finance"]), getFinancialSummary);
-
-// Project status
-router.get("/project-status", authorize(["admin", "super_admin", "finance", "engineer"]), getProjectStatus);
-
-// HR alerts
-router.get("/hr-alerts", authorize(["admin", "super_admin", "hr"]), getHRAlerts);
-
-// Top clients
-router.get("/top-clients", authorize(["admin", "super_admin", "sales"]), getTopClients);
-
-// Payroll data
-router.get("/payroll", authorize(["admin", "super_admin", "finance", "hr"]), getPayrollData);
-
-// Invoice reports
-router.get("/invoices", authorize(["admin", "super_admin", "finance"]), getInvoiceReports);
-
-// Project profit analytics
-router.get("/profit-analytics", authorize(["admin", "super_admin", "finance"]), getProjectProfitAnalytics);
+// Payroll analytics
+router.get(
+  "/payroll",
+  authorize(["admin", "super_admin", "finance", "accountant"]),
+  getPayrollData
+);
 
 // Estimation analytics
-router.get("/estimation-analytics", authorize(["admin", "super_admin", "sales", "engineer"]), getEstimationAnalytics);
+router.get("/estimation-analytics", getEstimationAnalytics);
 
-// Dashboard summary (combined endpoint for faster loading)
-router.get("/summary", authorize(["admin", "super_admin", "finance", "engineer"]), getDashboardSummary);
+// NEW: Report downloads
+router.get(
+  "/monthly-report",
+  authorize(["admin", "super_admin", "finance"]),
+  getMonthlyReport
+);
+
+router.get(
+  "/yearly-report",
+  authorize(["admin", "super_admin", "finance"]),
+  getYearlyReport
+);
 
 export default router;

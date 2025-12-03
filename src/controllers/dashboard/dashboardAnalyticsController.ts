@@ -281,7 +281,7 @@ export const getFinancialSummary = asyncHandler(async (req: Request, res: Respon
         ]);
 
         // Merge data
-        const result = [];
+        const result: any = [];
         const allDates = new Set([
             ...quotationsData.map(q => q._id),
             ...expensesData.map(e => e._id)
@@ -372,7 +372,7 @@ export const getHRAlerts = asyncHandler(async (req: Request, res: Response) => {
             ]
         }).populate('employee', 'firstName lastName');
 
-        const alerts = [];
+        const alerts: any = [];
 
         // Add user document expiries
         usersWithExpiringDocs.forEach(user => {
@@ -402,7 +402,7 @@ export const getHRAlerts = asyncHandler(async (req: Request, res: Response) => {
         });
 
         // Add visa expense expiries
-        visaExpenses.forEach(visa => {
+        visaExpenses.forEach((visa: any) => {
             if (visa.passportExpireDate) {
                 const daysLeft = dayjs(visa.passportExpireDate).diff(today, 'day');
                 alerts.push({
@@ -441,7 +441,7 @@ export const getHRAlerts = asyncHandler(async (req: Request, res: Response) => {
         });
 
         // Sort by days left (ascending)
-        alerts.sort((a, b) => a.daysLeft - b.daysLeft);
+        alerts.sort((a: any, b: any) => a.daysLeft - b.daysLeft);
 
         return res.status(200).json(
             new ApiResponse(200, alerts.slice(0, 10), "HR alerts fetched successfully")
@@ -459,14 +459,9 @@ export const getTopClients = asyncHandler(async (req: Request, res: Response) =>
             {
                 $group: {
                     _id: "$client",
-                    projectCount: { $count: {} }
+                    projectCount: { $count: {} },
+                    projectIds: { $push: "$_id" }
                 }
-            },
-            {
-                $sort: { projectCount: -1 }
-            },
-            {
-                $limit: 10
             },
             {
                 $lookup: {
@@ -478,14 +473,70 @@ export const getTopClients = asyncHandler(async (req: Request, res: Response) =>
             },
             {
                 $unwind: "$client"
+            },
+            {
+                $lookup: {
+                    from: "quotations",
+                    localField: "projectIds",
+                    foreignField: "project",
+                    as: "quotations"
+                }
+            },
+            {
+                $addFields: {
+                    // Sum all quotation netAmounts for this client
+                    totalValue: {
+                        $sum: "$quotations.netAmount"
+                    },
+                    // Sum only approved quotations
+                    approvedValue: {
+                        $sum: {
+                            $map: {
+                                input: "$quotations",
+                                as: "quot",
+                                in: {
+                                    $cond: [
+                                        { $eq: ["$$quot.isApproved", true] },
+                                        "$$quot.netAmount",
+                                        0
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    // Count of quotations
+                    quotationCount: { $size: "$quotations" }
+                }
+            },
+            {
+                $sort: { totalValue: -1 }
+            },
+            {
+                $limit: 10
+            },
+            {
+                $project: {
+                    _id: 1,
+                    clientName: "$client.clientName",
+                    projectCount: 1,
+                    totalValue: 1,
+                    approvedValue: 1,
+                    quotationCount: 1,
+                    pendingValue: {
+                        $subtract: ["$totalValue", "$approvedValue"]
+                    }
+                }
             }
         ]);
 
         const result = topClients.map(client => ({
             id: client._id.toString(),
-            name: client.client.clientName,
+            name: client.clientName,
             projects: client.projectCount,
-            value: client.projectCount * 100000, // This should be actual project value in real implementation
+            value: client.totalValue || 0,
+            approvedValue: client.approvedValue || 0,
+            pendingValue: client.pendingValue || 0,
+            quotations: client.quotationCount || 0,
             status: 'Active'
         }));
 
@@ -1356,14 +1407,9 @@ async function getTopClientsData() {
         {
             $group: {
                 _id: "$client",
-                projectCount: { $count: {} }
+                projectCount: { $count: {} },
+                projectIds: { $push: "$_id" }
             }
-        },
-        {
-            $sort: { projectCount: -1 }
-        },
-        {
-            $limit: 10
         },
         {
             $lookup: {
@@ -1375,6 +1421,42 @@ async function getTopClientsData() {
         },
         {
             $unwind: "$client"
+        },
+        {
+            $lookup: {
+                from: "quotations",
+                localField: "projectIds",
+                foreignField: "project",
+                as: "quotations"
+            }
+        },
+        {
+            $addFields: {
+                totalValue: {
+                    $sum: "$quotations.netAmount"
+                },
+                approvedValue: {
+                    $sum: {
+                        $map: {
+                            input: "$quotations",
+                            as: "quot",
+                            in: {
+                                $cond: [
+                                    { $eq: ["$$quot.isApproved", true] },
+                                    "$$quot.netAmount",
+                                    0
+                                ]
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            $sort: { totalValue: -1 }
+        },
+        {
+            $limit: 10
         }
     ]);
 
@@ -1382,7 +1464,8 @@ async function getTopClientsData() {
         id: client._id.toString(),
         name: client.client.clientName,
         projects: client.projectCount,
-        value: client.projectCount * 100000
+        value: client.totalValue || 0,
+        approvedValue: client.approvedValue || 0
     }));
 }
 
@@ -1554,3 +1637,4 @@ async function calculateProfitForRange(startDate: Date, endDate: Date) {
         profitMargin: revenue > 0 ? (profit / revenue) * 100 : 0
     };
 }
+

@@ -16,8 +16,10 @@ export interface IUser extends Document {
   accountNumber?: string;
   emiratesId?: string;
   emiratesIdDocument?: string;
+  emiratesIdExpiry?: Date; // NEW FIELD
   passportNumber?: string;
   passportDocument?: string;
+  passportExpiry?: Date; // NEW FIELD
   iBANNumber?: string;
   createdBy?: Types.ObjectId;
   createdAt?: Date;
@@ -83,7 +85,7 @@ const userSchema = new Schema<IUser>(
         "helper",
         "cleaner",
         "worker"
-    ],
+      ],
       default: "worker",
     },
     salary: {
@@ -123,12 +125,20 @@ const userSchema = new Schema<IUser>(
     emiratesIdDocument: {
       type: String,
     },
+    emiratesIdExpiry: {
+      type: Date,
+      required: false,
+    },
     passportNumber: {
       type: String,
       trim: true,
     },
     passportDocument: {
       type: String,
+    },
+    passportExpiry: {
+      type: Date,
+      required: false,
     },
     iBANNumber: {
       type: String,
@@ -165,5 +175,7 @@ userSchema.index({ email: 1 }, { unique: true });
 userSchema.index({ role: 1 });
 userSchema.index({ isActive: 1 });
 userSchema.index({ firstName: "text", lastName: "text", email: "text" });
+userSchema.index({ emiratesIdExpiry: 1 }); // Index for expiry queries
+userSchema.index({ passportExpiry: 1 }); // Index for expiry queries
 
 export const User = model<IUser>("User", userSchema);

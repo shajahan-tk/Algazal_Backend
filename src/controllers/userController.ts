@@ -44,7 +44,9 @@ export const createUser = asyncHandler(async (req: Request, res: Response) => {
     salary,
     accountNumber,
     emiratesId,
+    emiratesIdExpiry, // NEW
     passportNumber,
+    passportExpiry, // NEW
     iBANNumber,
     address,
   } = req.body;
@@ -117,7 +119,9 @@ export const createUser = asyncHandler(async (req: Request, res: Response) => {
   }
   if (accountNumber) userData.accountNumber = accountNumber;
   if (emiratesId) userData.emiratesId = emiratesId;
+  if (emiratesIdExpiry) userData.emiratesIdExpiry = new Date(emiratesIdExpiry); // NEW
   if (passportNumber) userData.passportNumber = passportNumber;
+  if (passportExpiry) userData.passportExpiry = new Date(passportExpiry); // NEW
   if (iBANNumber) userData.iBANNumber = iBANNumber;
   if (address) userData.address = address;
   if (profileImageUrl) userData.profileImage = profileImageUrl;
@@ -185,7 +189,7 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
 export const getCurrentUser = asyncHandler(async (req: Request, res: Response) => {
   // Get the authenticated user's ID from the request
   const userId = req.user?.userId;
-  
+
   if (!userId) {
     throw new ApiError(401, "Not authenticated");
   }
@@ -269,6 +273,15 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
       console.error("Error parsing phone numbers:", e);
       throw new ApiError(400, "Invalid phone numbers format");
     }
+  }
+
+  // Handle expiry date updates - NEW
+  if (updateData.emiratesIdExpiry) {
+    updateData.emiratesIdExpiry = new Date(updateData.emiratesIdExpiry);
+  }
+
+  if (updateData.passportExpiry) {
+    updateData.passportExpiry = new Date(updateData.passportExpiry);
   }
 
   // Process file uploads
@@ -435,8 +448,8 @@ export const getActiveDrivers = asyncHandler(
 );
 export const getActiveWorkers = asyncHandler(
   async (req: Request, res: Response) => {
-    const workers = await User.find({ 
-      role: { 
+    const workers = await User.find({
+      role: {
         $in: [
           "worker",
           "plumber",
@@ -456,8 +469,8 @@ export const getActiveWorkers = asyncHandler(
           "electrical_supervisor",
           "supervisor"
         ]
-      }, 
-      isActive: true 
+      },
+      isActive: true
     }).select("-v -password");
 
     res
@@ -469,14 +482,13 @@ export const getActiveWorkers = asyncHandler(
 );
 
 export const exportUsersToCSV = asyncHandler(async (req: Request, res: Response) => {
-  // Get all users without pagination
   const users = await User.find({}, { password: 0 }).sort({ createdAt: -1 });
 
   if (!users || users.length === 0) {
     throw new ApiError(404, "No users found");
   }
 
-  // Define CSV headers
+  // Define CSV headers - UPDATED
   const headers = [
     "ID",
     "First Name",
@@ -488,12 +500,14 @@ export const exportUsersToCSV = asyncHandler(async (req: Request, res: Response)
     "Status",
     "Account Number",
     "Emirates ID",
+    "Emirates ID Expiry", // NEW
     "Passport Number",
+    "Passport Expiry", // NEW
     "Address",
     "Created At",
   ];
 
-  // Map user data to CSV rows
+  // Map user data to CSV rows - UPDATED
   const rows = users.map(user => [
     user._id,
     user.firstName,
@@ -505,7 +519,9 @@ export const exportUsersToCSV = asyncHandler(async (req: Request, res: Response)
     user.isActive ? "Active" : "Inactive",
     user.accountNumber || "N/A",
     user.emiratesId || "N/A",
+    user.emiratesIdExpiry ? new Date(user.emiratesIdExpiry).toISOString().split('T')[0] : "N/A", // NEW
     user.passportNumber || "N/A",
+    user.passportExpiry ? new Date(user.passportExpiry).toISOString().split('T')[0] : "N/A", // NEW
     user.address || "N/A",
     user.createdAt?.toISOString() || "N/A",
   ]);
@@ -514,7 +530,6 @@ export const exportUsersToCSV = asyncHandler(async (req: Request, res: Response)
   let csv = headers.join(",") + "\n";
   rows.forEach(row => {
     csv += row.map(field => {
-      // Escape fields that contain commas
       if (typeof field === "string" && field.includes(",")) {
         return `"${field}"`;
       }
@@ -522,10 +537,8 @@ export const exportUsersToCSV = asyncHandler(async (req: Request, res: Response)
     }).join(",") + "\n";
   });
 
-  // Set response headers for file download
   res.setHeader("Content-Type", "text/csv");
   res.setHeader("Content-Disposition", "attachment; filename=users_export.csv");
-  
-  // Send the CSV file
+
   res.status(200).send(csv);
 });
