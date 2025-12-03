@@ -1087,7 +1087,7 @@ strong {
             </tr>
             <tr>
               <td>Valid Until:</td>
-              <td>${formatDate(quotation.validUntil)} (${getDaysRemaining(quotation.validUntil)})</td>
+              <td>${formatDate(quotation.validUntil)} <br> (${getDaysRemaining(quotation.validUntil)})</td>
             </tr>
           </table>
         </div>
