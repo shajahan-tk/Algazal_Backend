@@ -47,7 +47,7 @@ export const sendQuotationEmail = asyncHandler(
     if (cc && Array.isArray(cc) && cc.length > 0) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       const invalidEmails = cc.filter((email: string) => !emailRegex.test(email));
-      
+
       if (invalidEmails.length > 0) {
         throw new ApiError(400, `Invalid CC email addresses: ${invalidEmails.join(', ')}`);
       }
@@ -97,7 +97,7 @@ const generateQuotationPdfBuffer = async (
   project: IProject
 ) => {
   const site = `${project.location} ${project.building} ${project.apartmentNumber}`;
-  
+
   const subtotal = quotation.items.reduce((sum: number, item: any) => sum + item.totalPrice, 0);
   const vatAmount = subtotal * (quotation.vatPercentage / 100);
   const netAmount = subtotal + vatAmount;
@@ -109,7 +109,7 @@ const generateQuotationPdfBuffer = async (
       year: "numeric",
     }) : "";
   };
-  
+
   const getDaysRemaining = (validUntil: Date) => {
     if (!validUntil) return "N/A";
     const today = new Date();
@@ -696,7 +696,7 @@ const generateQuotationPdfBuffer = async (
               </tr>
               <tr>
                 <td>Valid Until:</td>
-                <td>${formatDate(quotation.validUntil)} (${getDaysRemaining(quotation.validUntil)})</td>
+                <td>${formatDate(quotation.validUntil)} <br> (${getDaysRemaining(quotation.validUntil)})</td>
               </tr>
             </table>
           </div>
@@ -754,21 +754,20 @@ const generateQuotationPdfBuffer = async (
       </div>
 
       <!-- IMAGES SECTION -->
-      ${
-        quotation.images && quotation.images.length > 0 ? `
+      ${quotation.images && quotation.images.length > 0 ? `
         <div class="images-section">
           <div class="section-title">QUOTATION IMAGES</div>
           <div class="images-grid">
             ${(() => {
-              let html = '';
-              for (let i = 0; i < quotation.images.length; i += 3) {
-                const rowImages = quotation.images.slice(i, i + 3);
-                html += '<div class="images-row">';
-                
-                for (let j = 0; j < 3; j++) {
-                  if (j < rowImages.length) {
-                    const image = rowImages[j];
-                    html += `
+        let html = '';
+        for (let i = 0; i < quotation.images.length; i += 3) {
+          const rowImages = quotation.images.slice(i, i + 3);
+          html += '<div class="images-row">';
+
+          for (let j = 0; j < 3; j++) {
+            if (j < rowImages.length) {
+              const image = rowImages[j];
+              html += `
                       <div class="image-item">
                         <div class="image-container">
                           <img src="${image.imageUrl}" alt="${image.title}" />
@@ -776,23 +775,23 @@ const generateQuotationPdfBuffer = async (
                         <div class="image-title">${image.title}</div>
                       </div>
                     `;
-                  } else {
-                    html += `
+            } else {
+              html += `
                       <div class="image-item" style="visibility: hidden;">
                         <div class="image-container"></div>
                         <div class="image-title"></div>
                       </div>
                     `;
-                  }
-                }
-                html += '</div>';
-              }
-              return html;
-            })()}
+            }
+          }
+          html += '</div>';
+        }
+        return html;
+      })()}
           </div>
         </div>
         ` : ''
-      }
+    }
 
       ${quotation.termsAndConditions && quotation.termsAndConditions.length > 0 ? `
       <div class="terms-prepared-section no-break">
@@ -886,7 +885,7 @@ const createQuotationEmailTemplate = (
   project: IProject
 ): string => {
   const site = `${project.location} ${project.building} ${project.apartmentNumber}`;
-  
+
   const subtotal = quotation.items.reduce((sum: number, item: any) => sum + item.totalPrice, 0);
   const vatAmount = subtotal * (quotation.vatPercentage / 100);
   const netAmount = subtotal + vatAmount;
@@ -1114,7 +1113,7 @@ export const sendWorkCompletionEmail = asyncHandler(
     }
 
     const client = project.client as IClient;
-    
+
     // Check if client has email
     if (!client.email) {
       throw new ApiError(400, "Client email not found");
@@ -1124,7 +1123,7 @@ export const sendWorkCompletionEmail = asyncHandler(
     if (cc && Array.isArray(cc) && cc.length > 0) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       const invalidEmails = cc.filter((email: string) => !emailRegex.test(email));
-      
+
       if (invalidEmails.length > 0) {
         throw new ApiError(400, `Invalid CC email addresses: ${invalidEmails.join(', ')}`);
       }
@@ -1528,7 +1527,7 @@ const generateWorkCompletionPdfBuffer = async (
                     <table class="info-table">
                         <tr>
                             <td class="label">Reference</td>
-                            <td>: <span class="highlight">${`QTN${project.projectNumber.slice(3,40)}`}</span></td>
+                            <td>: <span class="highlight">${`QTN${project.projectNumber.slice(3, 40)}`}</span></td>
                         </tr>
                         <tr>
                             <td class="label">FM CONTRACTOR</td>
@@ -1583,7 +1582,7 @@ const generateWorkCompletionPdfBuffer = async (
                         <tr class="value-row">
                             <td>${engineer?.firstName} ${engineer?.lastName || ""}</td>
                             <td>
-                                ${engineer?.signatureImage ? `<img src="${engineer.signatureImage}" class="signature-img" />` : '<div class="empty-signature">Signature</div>'}
+                                ${engineer?.signatureImage ? `<img src="${engineer.signatureImage}" class="signature-img" />` : '<div class="empty-signature"></div>'}
                             </td>
                             <td><span class="green-text">${formatDate(project.handoverDate)}</span></td>
                         </tr>
@@ -1603,7 +1602,7 @@ const generateWorkCompletionPdfBuffer = async (
                         <tr class="value-row">
                             <td>${client.clientName}</td>
                             <td>
-                                <div class="empty-signature">Client Signature</div>
+                                <div class="empty-signature"></div>
                             </td>
                             <td>${formatDate(project.acceptanceDate)}</td>
                         </tr>
@@ -1623,7 +1622,7 @@ const generateWorkCompletionPdfBuffer = async (
                         <tr class="value-row">
                             <td>${preparedBy?.firstName || ""} ${preparedBy?.lastName || ""}</td>
                             <td>
-                                ${preparedBy?.signatureImage ? `<img src="${preparedBy.signatureImage}" class="signature-img" />` : '<div class="empty-signature">Signature</div>'}
+                                ${preparedBy?.signatureImage ? `<img src="${preparedBy.signatureImage}" class="signature-img" />` : '<div class="empty-signature"></div>'}
                             </td>
                             <td><span class="green-text">${formatDate(project.handoverDate)}</span></td>
                         </tr>
@@ -1631,21 +1630,20 @@ const generateWorkCompletionPdfBuffer = async (
                 </div>
 
                 <!-- IMAGES SECTION -->
-                ${
-                  workCompletion?.images && workCompletion.images.length > 0 ? `
+                ${workCompletion?.images && workCompletion.images.length > 0 ? `
                   <div class="images-section">
                     <div class="section-title">Site Pictures</div>
                     <div class="images-grid">
                       ${(() => {
-                        let html = '';
-                        for (let i = 0; i < workCompletion.images.length; i += 3) {
-                          const rowImages = workCompletion.images.slice(i, i + 3);
-                          html += '<div class="images-row">';
-                          
-                          for (let j = 0; j < 3; j++) {
-                            if (j < rowImages.length) {
-                              const image = rowImages[j];
-                              html += `
+        let html = '';
+        for (let i = 0; i < workCompletion.images.length; i += 3) {
+          const rowImages = workCompletion.images.slice(i, i + 3);
+          html += '<div class="images-row">';
+
+          for (let j = 0; j < 3; j++) {
+            if (j < rowImages.length) {
+              const image = rowImages[j];
+              html += `
                                 <div class="image-item">
                                   <div class="image-container">
                                     <img src="${image.imageUrl}" alt="${image.title || "Site picture"}" />
@@ -1653,19 +1651,19 @@ const generateWorkCompletionPdfBuffer = async (
                                   <div class="image-title">${image.title || "Site Image"}</div>
                                 </div>
                               `;
-                            } else {
-                              html += `
+            } else {
+              html += `
                                 <div class="image-item" style="visibility: hidden;">
                                   <div class="image-container"></div>
                                   <div class="image-title"></div>
                                 </div>
                               `;
-                            }
-                          }
-                          html += '</div>';
-                        }
-                        return html;
-                      })()}
+            }
+          }
+          html += '</div>';
+        }
+        return html;
+      })()}
                     </div>
                   </div>
                   ` : `
@@ -1674,7 +1672,7 @@ const generateWorkCompletionPdfBuffer = async (
                     <p style="text-align: center; font-size: 10pt; color: #666; padding: 20px;">No site pictures available</p>
                   </div>
                   `
-                }
+    }
             </div>
 
             <div class="tagline">We work U Relax</div>

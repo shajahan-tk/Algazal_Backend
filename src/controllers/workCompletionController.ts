@@ -980,7 +980,7 @@ export const generateCompletionCertificatePdf = asyncHandler(
                         <tr class="value-row">
                             <td>${preparedBy?.firstName || ""} ${preparedBy?.lastName || ""}</td>
                             <td>
-                                ${preparedBy?.signatureImage ? `<img src="${preparedBy.signatureImage}" class="signature-img" />` : '<div class="empty-signature">Signature</div>'}
+                                ${preparedBy?.signatureImage ? `<img src="${preparedBy.signatureImage}" class="signature-img" />` : '<div class="empty-signature"></div>'}
                             </td>
                             <td><span class="green-text">${formatDate(project.handoverDate)}</span></td>
                         </tr>
@@ -999,7 +999,7 @@ export const generateCompletionCertificatePdf = asyncHandler(
                         <tr class="value-row">
                             <td>${engineer?.firstName} ${engineer?.lastName || ""}</td>
                             <td>
-                                ${engineer?.signatureImage ? `<img src="${engineer.signatureImage}" class="signature-img" />` : '<div class="empty-signature">Signature</div>'}
+                                ${engineer?.signatureImage ? `<img src="${engineer.signatureImage}" class="signature-img" />` : '<div class="empty-signature"></div>'}
                             </td>
                             <td><span class="green-text">${formatDate(project.handoverDate)}</span></td>
                         </tr>
@@ -1018,7 +1018,7 @@ export const generateCompletionCertificatePdf = asyncHandler(
                         <tr class="value-row">
                             <td>${client.clientName}</td>
                             <td>
-                                <div class="empty-signature">Client Signature</div>
+                                <div class="empty-signature"></div>
                             </td>
                             <td>${formatDate(project.acceptanceDate)}</td>
                         </tr>
