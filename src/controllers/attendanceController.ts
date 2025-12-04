@@ -611,25 +611,16 @@ export const getNormalMonthlyAttendance = asyncHandler(
 const calculateAttendanceSummary = (attendances: any[], startDate: Date, endDate: Date) => {
   const daysInMonth = endDate.getDate();
 
-  // Count Sundays in the month
-  let totalSundays = 0;
-  let currentDate = new Date(startDate);
-  while (currentDate <= endDate) {
-    if (currentDate.getDay() === 0) {
-      totalSundays++;
-    }
-    currentDate.setDate(currentDate.getDate() + 1);
-  }
-
   // Initialize counters
-  let regularWorkedDays = 0; // Mon-Sat with ANY hours
-  let sundayWorkingDays = 0; // Sundays with ANY hours
+  let monSatNormalHours = 0;    // Monday-Saturday normal hours (without OT)
+  let monSatOvertimeHours = 0;  // Monday-Saturday overtime hours
+  let sundayNormalHours = 0;    // Sunday normal hours (without OT)
+  let sundayOvertimeHours = 0;  // Sunday overtime hours
+
+  let regularWorkedDays = 0;    // Monday-Saturday worked days
+  let sundayWorkingDays = 0;    // Sunday worked days
   let paidLeaveDays = 0;
   let absentDays = 0;
-  let totalRegularHours = 0; // Mon-Sat actual hours
-  let totalOvertimeHours = 0; // Mon-Sat overtime
-  let sundayNormalHours = 0; // Sunday normal hours (without OT)
-  let sundayOvertimeHours = 0; // Sunday overtime
 
   // Process each attendance record
   attendances.forEach(att => {
@@ -637,7 +628,7 @@ const calculateAttendanceSummary = (attendances: any[], startDate: Date, endDate
     const isSunday = date.getDay() === 0;
 
     if (att.isPaidLeave) {
-      // PAID LEAVE: Not counted as worked day, NO bonus
+      // PAID LEAVE: Not counted as worked day
       paidLeaveDays++;
     } else if (!att.present) {
       // ABSENT: Not paid
@@ -648,51 +639,53 @@ const calculateAttendanceSummary = (attendances: any[], startDate: Date, endDate
       const normalHours = totalHours - overtime; // Normal hours = Total - OT
 
       if (isSunday) {
-        // SUNDAY: Any hours = full day bonus
+        // SUNDAY: Any hours counts as Sunday work
         if (totalHours > 0) {
           sundayWorkingDays++;
-          sundayNormalHours += normalHours; // Normal hours only
-          sundayOvertimeHours += overtime; // OT hours only
+          sundayNormalHours += normalHours;
+          sundayOvertimeHours += overtime;
         }
       } else {
-        // MON-SAT: Any hours = full day pay
+        // MONDAY-SATURDAY
         if (totalHours > 0) {
           regularWorkedDays++;
-          totalRegularHours += totalHours;
-          totalOvertimeHours += overtime;
+          monSatNormalHours += normalHours;
+          monSatOvertimeHours += overtime;
         }
       }
     }
   });
 
-  // Calculate Sunday total hours
+  // Calculate totals
+  const monSatTotalHours = monSatNormalHours + monSatOvertimeHours;
   const sundayTotalHours = sundayNormalHours + sundayOvertimeHours;
-
-  // Calculate total hours for display INCLUDING SUNDAY HOURS
-  const totalHours = totalRegularHours + sundayTotalHours;
-  const normalHours = totalRegularHours; // Hours without overtime (Mon-Sat only)
+  const totalHours = monSatTotalHours + sundayTotalHours;
 
   return {
-    workingDays: regularWorkedDays, // Mon-Sat worked days
-    normalHours: parseFloat(normalHours.toFixed(2)),
-    overtimeHours: parseFloat(totalOvertimeHours.toFixed(2)),
+    // The five required metrics
+    monSatNormalHours: parseFloat(monSatNormalHours.toFixed(2)),
+    monSatOvertimeHours: parseFloat(monSatOvertimeHours.toFixed(2)),
+    sundayNormalHours: parseFloat(sundayNormalHours.toFixed(2)),
+    sundayOvertimeHours: parseFloat(sundayOvertimeHours.toFixed(2)),
     totalHours: parseFloat(totalHours.toFixed(2)),
 
-    // Extended details
-    totalMonthDays: daysInMonth,
-    totalSundays,
+    // Additional details for UI
+    workingDays: regularWorkedDays,
+    sundayWorkingDays,
     paidLeaveDays,
     absentDays,
+    totalMonthDays: daysInMonth,
+
+    // Also keep legacy fields for compatibility
+    normalHours: parseFloat(monSatNormalHours.toFixed(2)),
+    overtimeHours: parseFloat(monSatOvertimeHours.toFixed(2)),
     regularWorkedDays,
-    sundayWorkingDays,
-    totalRegularHours: parseFloat(totalRegularHours.toFixed(2)),
-    totalOvertimeHours: parseFloat(totalOvertimeHours.toFixed(2)),
-    sundayNormalHours: parseFloat(sundayNormalHours.toFixed(2)), // Sunday normal hours
-    sundayOvertimeHours: parseFloat(sundayOvertimeHours.toFixed(2)), // Sunday OT hours
-    sundayTotalHours: parseFloat(sundayTotalHours.toFixed(2)) // Total Sunday hours
+
+    sundayTotalHours: parseFloat(sundayTotalHours.toFixed(2)),
+    totalRegularHours: parseFloat(monSatNormalHours.toFixed(2)),
+    totalOvertimeHours: parseFloat(monSatOvertimeHours.toFixed(2))
   };
 };
-
 // Get user's monthly attendance by type (FIXED)
 export const getUserMonthlyAttendanceByType = asyncHandler(
   async (req: Request, res: Response) => {
