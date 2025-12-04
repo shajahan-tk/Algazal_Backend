@@ -25,16 +25,17 @@ export interface IPayroll extends Document {
   remark?: string;
   createdBy: Types.ObjectId;
 
-  // NEW: Calculation details
+  // Calculation details
   calculationDetails?: {
     baseSalaryFromAttendance: number;
     sundayBonus: number;
+    absentDeduction: number; // NEW FIELD
     attendanceSummary: {
       totalMonthDays: number;
       totalSundays: number;
       paidLeaveDays: number;
       absentDays: number;
-      effectiveWorkingDays: number;
+      regularWorkedDays: number;
       totalWorkingDays: number;
       totalActualHours: number;
       totalOvertimeHours: number;
@@ -43,7 +44,41 @@ export interface IPayroll extends Document {
     };
     rates: {
       dailyRate: number;
-      hourlyRate: number;
+      overtimeHourlyRate: number; // Changed from hourlyRate to overtimeHourlyRate
+    };
+    calculationBreakdown: {
+      baseSalary: {
+        basic: number;
+        allowance: number;
+        total: number;
+        note: string;
+      };
+      sundayBonus: {
+        days: number;
+        dailyRate: number;
+        amount: number;
+        rule: string;
+      };
+      regularOvertime: {
+        hours: number;
+        rate: number;
+        amount: number;
+      };
+      sundayOvertime: {
+        hours: number;
+        rate: number;
+        amount: number;
+      };
+      absentDeduction: {
+        days: number;
+        dailyRate: number;
+        amount: number;
+        rule: string;
+      };
+      paidLeave: {
+        days: number;
+        note: string;
+      };
     };
   };
 
@@ -77,16 +112,17 @@ const payrollSchema = new Schema(
     remark: { type: String, trim: true },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
 
-    // NEW: Calculation details
+    // Calculation details
     calculationDetails: {
       baseSalaryFromAttendance: { type: Number, default: 0 },
       sundayBonus: { type: Number, default: 0 },
+      absentDeduction: { type: Number, default: 0 }, // NEW FIELD
       attendanceSummary: {
         totalMonthDays: { type: Number, default: 0 },
         totalSundays: { type: Number, default: 0 },
         paidLeaveDays: { type: Number, default: 0 },
         absentDays: { type: Number, default: 0 },
-        effectiveWorkingDays: { type: Number, default: 0 },
+        regularWorkedDays: { type: Number, default: 0 },
         totalWorkingDays: { type: Number, default: 0 },
         totalActualHours: { type: Number, default: 0 },
         totalOvertimeHours: { type: Number, default: 0 },
@@ -95,7 +131,41 @@ const payrollSchema = new Schema(
       },
       rates: {
         dailyRate: { type: Number, default: 0 },
-        hourlyRate: { type: Number, default: 0 }
+        overtimeHourlyRate: { type: Number, default: 0 } // Changed from hourlyRate
+      },
+      calculationBreakdown: {
+        baseSalary: {
+          basic: { type: Number, default: 0 },
+          allowance: { type: Number, default: 0 },
+          total: { type: Number, default: 0 },
+          note: { type: String, default: "Full monthly salary (basic + allowance)" }
+        },
+        sundayBonus: {
+          days: { type: Number, default: 0 },
+          dailyRate: { type: Number, default: 0 },
+          amount: { type: Number, default: 0 },
+          rule: { type: String, default: "Any hours worked on Sunday = Full day bonus" }
+        },
+        regularOvertime: {
+          hours: { type: Number, default: 0 },
+          rate: { type: Number, default: 0 },
+          amount: { type: Number, default: 0 }
+        },
+        sundayOvertime: {
+          hours: { type: Number, default: 0 },
+          rate: { type: Number, default: 0 },
+          amount: { type: Number, default: 0 }
+        },
+        absentDeduction: {
+          days: { type: Number, default: 0 },
+          dailyRate: { type: Number, default: 0 },
+          amount: { type: Number, default: 0 },
+          rule: { type: String, default: "Absent days deducted from base salary" }
+        },
+        paidLeave: {
+          days: { type: Number, default: 0 },
+          note: { type: String, default: "No pay, no bonus, no deduction from base salary" }
+        }
       }
     }
   },
