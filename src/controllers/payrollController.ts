@@ -1287,8 +1287,6 @@ export const generatePayslipPDF = asyncHandler(async (req: Request, res: Respons
     await browser.close();
   }
 });
-
-// Helper function to generate HTML for payslip
 const generatePayslipHTML = (data: any): string => {
   const calculationDetails = data.calculationDetails || {};
   const rates = calculationDetails.rates || {};
@@ -1685,7 +1683,7 @@ const generatePayslipHTML = (data: any): string => {
 
         .calculation-summary {
             background: #f0f8ff;
-            padding: 6px;
+            padding: 8px;
             border-radius: 3px;
             margin: 6px 0;
             border: 1px solid #b8daff;
@@ -1696,10 +1694,24 @@ const generatePayslipHTML = (data: any): string => {
             justify-content: space-between;
             margin-bottom: 2px;
             font-size: 8pt;
+            padding: 3px 2px;
+            border-bottom: 1px dotted #d1e7ff;
+        }
+        
+        .calculation-row:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
         }
         
         .calculation-row strong {
             color: #2c5aa0;
+            min-width: 140px;
+        }
+        
+        .calculation-row span {
+            color: #333;
+            text-align: right;
+            flex-grow: 1;
         }
 
         @media print {
@@ -1807,6 +1819,18 @@ const generatePayslipHTML = (data: any): string => {
                         <span>${formatHours(totalOvertimeHours)} hours × ${overtimeHourlyRate.toFixed(2)} = AED ${overtime.toFixed(2)}</span>
                     </div>
                     ` : ''}
+                    ${paidLeaveDays > 0 ? `
+                    <div class="calculation-row">
+                        <strong>Paid Leave:</strong>
+                        <span style="color: #0c5460;">${paidLeaveDays} days × ${dailyRate.toFixed(2)} = AED ${(paidLeaveDays * dailyRate).toFixed(2)}</span>
+                    </div>
+                    ` : ''}
+                    ${totalMonthDays > 0 ? `
+                    <div class="calculation-row">
+                        <strong>Attendance Summary:</strong>
+                        <span>Worked: ${regularWorkedDays} days + Paid Leave: ${paidLeaveDays} days + Absent: ${absentDays} days + Sunday: ${sundayWorkingDays} days = ${totalMonthDays} total days</span>
+                    </div>
+                    ` : ''}
                 </div>
             </div>
             
@@ -1885,7 +1909,14 @@ const generatePayslipHTML = (data: any): string => {
                 </table>
                 
                 <div class="compact-summary">
-                    
+                    <div class="compact-summary-row">
+                        <span>Total Earnings</span>
+                        <span style="font-weight: 600;">${totalEarnings.toFixed(2)} AED</span>
+                    </div>
+                    <div class="compact-summary-row">
+                        <span>Total Deductions</span>
+                        <span style="font-weight: 600;">${totalDeductions.toFixed(2)} AED</span>
+                    </div>
                     <div class="compact-summary-row total">
                         <span>NET PAY</span>
                         <span style="color: #2c5aa0;">${net.toFixed(2)} AED</span>
