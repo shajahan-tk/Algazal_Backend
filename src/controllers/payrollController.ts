@@ -1121,7 +1121,6 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   await workbook.xlsx.write(res);
   res.end();
 });
-
 // Generate payslip PDF
 export const generatePayslipPDF = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
@@ -1142,6 +1141,9 @@ export const generatePayslipPDF = asyncHandler(async (req: Request, res: Respons
   const employeeExpense = await EmployeeExpense.findOne({ employee: payroll.employee._id }).lean();
   const basicSalary = employeeExpense?.basicSalary || 0;
   const allowance = employeeExpense?.allowance || 0;
+
+  // Get visa expense data for additional employee information
+  const visaExpense = await VisaExpense.findOne({ employee: payroll.employee._id }).lean();
 
   // ✅ Always recalculate to ensure fresh data
   const calculationDetails = await calculateSalaryBasedOnAttendance(
@@ -1164,6 +1166,14 @@ export const generatePayslipPDF = asyncHandler(async (req: Request, res: Respons
       date: { $gte: startDate, $lte: endDate }
     }).sort({ date: 1 });
 
+    let totalHours = 0;
+    let overtimeHours = 0;
+    let presentDays = 0;
+    let sundayWorkingDays = 0;
+    let sundayOvertimeHours = 0;
+    let regularWorkingDays = 0;
+    let totalRegularHours = 0;
+
     const records: any[] = [];
     let sno = 1;
 
@@ -1178,8 +1188,22 @@ export const generatePayslipPDF = asyncHandler(async (req: Request, res: Respons
         status = 'Paid Leave';
       } else if (!att.present) {
         status = 'Absent';
-      } else if (isSunday) {
-        status = 'Sunday';
+      }
+
+      if (att.present && !att.isPaidLeave) {
+        const regularHours = att.workingHours || 0;
+        const overtime = att.overtimeHours || 0;
+
+        if (isSunday) {
+          sundayWorkingDays++;
+          sundayOvertimeHours += overtime;
+        } else {
+          regularWorkingDays++;
+          totalRegularHours += regularHours;
+          overtimeHours += overtime;
+          presentDays++;
+        }
+        totalHours += regularHours;
       }
 
       records.push({
@@ -1187,13 +1211,26 @@ export const generatePayslipPDF = asyncHandler(async (req: Request, res: Respons
         date: formattedDate,
         day: dayName,
         status: status,
-        hours: (att.workingHours || 0).toFixed(2),
-        overtimeHours: (att.overtimeHours || 0).toFixed(2),
+        hours: (att.present && !isSunday) ? (att.workingHours || 0).toFixed(2) : '0',
+        overtimeHours: (att.present) ? (att.overtimeHours || 0).toFixed(2) : '0',
         isSunday: isSunday
       });
     });
 
     return {
+      summary: {
+        presentDays,
+        regularWorkingDays,
+        sundayWorkingDays,
+        totalHours: totalHours.toFixed(2),
+        totalRegularHours: totalRegularHours.toFixed(2),
+        overtimeHours: overtimeHours.toFixed(2),
+        sundayOvertimeHours: sundayOvertimeHours.toFixed(2),
+        totalMonthDays: calculationDetails?.attendanceSummary?.totalMonthDays || 0,
+        totalSundays: calculationDetails?.attendanceSummary?.totalSundays || 0,
+        paidLeaveDays: calculationDetails?.attendanceSummary?.paidLeaveDays || 0,
+        absentDays: calculationDetails?.attendanceSummary?.absentDays || 0
+      },
       records
     };
   };
@@ -1204,33 +1241,34 @@ export const generatePayslipPDF = asyncHandler(async (req: Request, res: Respons
   const monthNames = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
   const periodText = `${monthNames[parseInt(month) - 1]} ${year}`;
 
+  // Format date function
+  const formatDate = (date: Date | string | undefined): string => {
+    if (!date) return 'N/A';
+    const d = new Date(date);
+    return isNaN(d.getTime()) ? 'N/A' : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+
   // ✅ Use calculationDetails properly
-  const absentDeduction = calculationDetails.absentDeduction || 0;
-  const sundayBonus = calculationDetails.sundayBonus || 0;
-  const totalOvertimeHours = (calculationDetails.attendanceSummary?.totalOvertimeHours || 0) +
-    (calculationDetails.attendanceSummary?.sundayOvertimeHours || 0);
   const totalEarnings = calculationDetails.totalEarnings + payroll.transport + payroll.specialOT + payroll.medical + payroll.bonus;
   const totalDeductions = payroll.mess + payroll.salaryAdvance + payroll.loanDeduction + payroll.fineAmount + (payroll.visaDeduction || 0);
 
   const payslipData = {
-    employeeName: `${payroll.employee.firstName} ${payroll.employee.lastName}`,
-    designation: payroll.employee.role,
+    employeeName: `${payroll.employee.firstName} ${payroll.employee.lastName}`.toUpperCase(),
+    designation: payroll.employee.role.toUpperCase(),
     emiratesId: payroll.employee.emiratesId || 'N/A',
+    emiratesIdExpiry: formatDate(visaExpense?.emirateIdExpireDate),
     passportNumber: payroll.employee.passportNumber || 'N/A',
+    passportExpiry: formatDate(visaExpense?.passportExpireDate),
     ibanNumber: payroll.employee.iBANNumber || 'N/A',
     accountNumber: payroll.employee.accountNumber || 'N/A',
     labourCard: payroll.labourCard,
     labourCardPersonalNo: payroll.labourCardPersonalNo,
+    labourCardExpiry: formatDate(visaExpense?.labourExpireDate),
     period: payroll.period,
     periodText,
-    // ✅ Salary components
-    basicSalary: basicSalary,
-    allowance: allowance,
-    totalMonthlySalary: basicSalary + allowance,
-    sundayBonus: sundayBonus,
-    absentDeduction: absentDeduction,
+    // ✅ Use baseSalaryAmount from calculationDetails
+    basicSalary: calculationDetails.baseSalaryAmount,
     regularHours: calculationDetails.attendanceSummary.totalRegularHours,
-    totalOvertimeHours: totalOvertimeHours,
     transport: payroll.transport,
     overtime: payroll.overtime,
     specialOT: payroll.specialOT || 0,
@@ -1247,10 +1285,15 @@ export const generatePayslipPDF = asyncHandler(async (req: Request, res: Respons
     netInWords: convertToWords(payroll.net),
     remark: payroll.remark,
     attendanceDetails,
-    calculationDetails: calculationDetails
+    calculationDetails: {
+      baseSalaryFromAttendance: calculationDetails.baseSalaryAmount,
+      sundayBonus: calculationDetails.sundayBonus,
+      attendanceSummary: calculationDetails.attendanceSummary,
+      rates: calculationDetails.rates
+    }
   };
 
-  console.log('COMPACT PDF Payslip Data:', payslipData);
+  console.log('Complete PDF Payslip Data:', payslipData);
 
   const html = generatePayslipHTML(payslipData);
 
@@ -1270,7 +1313,7 @@ export const generatePayslipPDF = asyncHandler(async (req: Request, res: Respons
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
-      margin: { top: '0.2cm', right: '0.2cm', bottom: '0.2cm', left: '0.2cm' },
+      margin: { top: '0.3cm', right: '0.3cm', bottom: '0.3cm', left: '0.3cm' },
       displayHeaderFooter: false,
       preferCSSPageSize: true
     });
@@ -1287,39 +1330,34 @@ export const generatePayslipPDF = asyncHandler(async (req: Request, res: Respons
     await browser.close();
   }
 });
+
+// Generate HTML for payslip
 const generatePayslipHTML = (data: any): string => {
   const calculationDetails = data.calculationDetails || {};
   const rates = calculationDetails.rates || {};
   const dailyRate = Number(rates.dailyRate) || 0;
   const overtimeHourlyRate = Number(rates.overtimeHourlyRate) || 0;
-  const sundayBonus = Number(data.sundayBonus) || 0;
-  const absentDeduction = Number(data.absentDeduction) || 0;
+  const sundayBonus = Number(calculationDetails.sundayBonus) || 0;
 
-  const attendanceSummary = calculationDetails.attendanceSummary || {};
-  const calculationBreakdown = calculationDetails.calculationBreakdown || {};
+  const attendanceSummary = calculationDetails.attendanceSummary || data.attendanceDetails?.summary || {};
 
-  // Get attendance data
+  const getStatusDisplay = (record: any) => {
+    if (record.status?.toLowerCase() === 'day off') {
+      return 'status-dayoff';
+    }
+    return '';
+  };
+
   const attendanceRecords = data.attendanceDetails?.records || [];
 
-  // Only show first 15-20 records to save space, or all if less than 20
-  const maxRecords = Math.min(attendanceRecords.length, 50);
-  const displayedRecords = attendanceRecords.slice(0, maxRecords);
-
-  const attendanceRows = displayedRecords
+  const attendanceRows = attendanceRecords
     .map((record: any) => {
-      const statusClass = record.status === 'Absent' ? 'status-absent' :
-        record.status === 'Paid Leave' ? 'status-paid-leave' :
-          record.status === 'Sunday' ? 'status-sunday' : '';
-      const rowStyle = record.status === 'Absent' ? 'style="background-color: #f8d7da;"' :
-        record.status === 'Paid Leave' ? 'style="background-color: #d1ecf1;"' :
-          record.status === 'Sunday' ? 'style="background-color: #fff9e6;"' : '';
-
       return `
-      <tr ${rowStyle}>
+      <tr${record.isSunday ? ' style="background-color: #fff3cd;"' : ''}>
         <td>${record.sno || ''}</td>
         <td>${record.date || ''}</td>
-        <td>${record.day || ''}</td>
-        <td class="${statusClass}">${record.status || ''}</td>
+        <td><strong>${record.day || ''}</strong></td>
+        <td class="${getStatusDisplay(record)}">${record.status || ''}</td>
         <td>${formatHours(record.hours)}</td>
         <td>${formatHours(record.overtimeHours)}</td>
       </tr>
@@ -1327,12 +1365,7 @@ const generatePayslipHTML = (data: any): string => {
     })
     .join('');
 
-  // Add note if more records exist
-  const moreRecordsNote = attendanceRecords.length > maxRecords ?
-    `<tr><td colspan="6" style="text-align: center; font-style: italic; color: #666;">... and ${attendanceRecords.length - maxRecords} more days</td></tr>` : '';
-
   const basicSalary = Number(data.basicSalary) || 0;
-  const allowance = Number(data.allowance) || 0;
   const transport = Number(data.transport) || 0;
   const overtime = Number(data.overtime) || 0;
   const specialOT = Number(data.specialOT) || 0;
@@ -1346,16 +1379,12 @@ const generatePayslipHTML = (data: any): string => {
   const totalEarnings = Number(data.totalEarnings) || 0;
   const totalDeductions = Number(data.totalDeductions) || 0;
   const net = Number(data.net) || 0;
-  const totalOvertimeHours = Number(data.totalOvertimeHours) || 0;
 
-  // Use data from calculationDetails for accuracy
-  const regularWorkedDays = Number(attendanceSummary.regularWorkedDays) || 0;
-  const sundayWorkingDays = Number(attendanceSummary.sundayWorkingDays) || 0;
-  const paidLeaveDays = Number(attendanceSummary.paidLeaveDays) || 0;
-  const absentDays = Number(attendanceSummary.absentDays) || 0;
-  const totalRegularHours = attendanceSummary.totalRegularHours || '0';
-  const totalMonthDays = attendanceSummary.totalMonthDays || 0;
-  const totalSundays = attendanceSummary.totalSundays || 0;
+  const regularWorkingDays = Number(data.attendanceDetails?.summary?.regularWorkingDays) || 0;
+  const sundayWorkingDays = Number(data.attendanceDetails?.summary?.sundayWorkingDays) || 0;
+  const totalRegularHours = data.attendanceDetails?.summary?.totalRegularHours || '0';
+  const overtimeHours = data.attendanceDetails?.summary?.overtimeHours || '0';
+  const sundayOvertimeHours = data.attendanceDetails?.summary?.sundayOvertimeHours || '0';
 
   return `
 <!DOCTYPE html>
@@ -1367,13 +1396,13 @@ const generatePayslipHTML = (data: any): string => {
     <style>
         @page {
           size: A4;
-          margin: 0.2cm;
+          margin: 0.3cm;
         }
         
         body {
             font-family: 'Arial', sans-serif;
-            font-size: 9pt;
-            line-height: 1.2;
+            font-size: 10pt;
+            line-height: 1.3;
             color: #333;
             margin: 0;
             padding: 0;
@@ -1381,7 +1410,7 @@ const generatePayslipHTML = (data: any): string => {
         }
         
         .payslip-container {
-            max-width: 780px;
+            max-width: 800px;
             margin: 0 auto;
             background: white;
         }
@@ -1390,20 +1419,21 @@ const generatePayslipHTML = (data: any): string => {
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-bottom: 5px;
-            gap: 10px;
-            padding: 8px 0;
+            margin-bottom: 10px;
+            gap: 15px;
+            page-break-after: avoid;
+            padding: 10px 0;
             border-bottom: 2px solid #94d7f4;
             position: relative;
         }
 
         .logo {
-            height: 35px;
+            height: 40px;
             width: auto;
-            max-width: 100px;
+            max-width: 120px;
             object-fit: contain;
             position: absolute;
-            left: 5px;
+            left: 0;
         }
 
         .company-names {
@@ -1416,69 +1446,74 @@ const generatePayslipHTML = (data: any): string => {
         }
 
         .company-name-arabic {
-            font-size: 14pt;
+            font-size: 16pt;
             font-weight: bold;
             color: #1a1a1a;
             line-height: 1.2;
             direction: rtl;
             unicode-bidi: bidi-override;
             letter-spacing: 0;
-            margin-bottom: 2px;
+            margin-bottom: 3px;
         }
 
         .company-name-english {
-            font-size: 8pt;
+            font-size: 9pt;
             font-weight: bold;
             color: #1a1a1a;
-            line-height: 1.1;
-            letter-spacing: 0.05em;
+            line-height: 1.2;
+            letter-spacing: 0.06em;
             text-transform: uppercase;
         }
         
         .document-title {
             text-align: center;
-            margin: 5px 0 8px 0;
-            padding: 6px;
+            margin: 10px 0 15px 0;
+            padding: 8px;
             background: linear-gradient(135deg, #2c5aa0 0%, #4a90e2 100%);
             color: white;
-            border-radius: 4px;
-            font-size: 10pt;
+            border-radius: 6px;
+            font-size: 12pt;
             font-weight: bold;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            page-break-after: avoid;
         }
         
         .content {
-            padding: 0 10px 10px 10px;
+            padding: 0 15px 15px 15px;
         }
         
         .section {
-            margin-bottom: 8px;
+            margin-bottom: 12px;
+            page-break-inside: avoid;
         }
         
         .section-title {
-            font-size: 9pt;
+            font-size: 10pt;
             font-weight: bold;
             color: #2c5aa0;
-            margin-bottom: 6px;
-            padding-bottom: 3px;
+            margin-bottom: 8px;
+            padding-bottom: 4px;
             border-bottom: 1px solid #e8f4fd;
             text-transform: uppercase;
+            page-break-after: avoid;
         }
         
-        .compact-info-grid {
+        .info-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 3px 8px;
-            margin-bottom: 6px;
-            font-size: 8pt;
+            gap: 4px 12px;
+            margin-bottom: 8px;
+            page-break-inside: avoid;
         }
         
-        .compact-info-item {
+        .info-item {
             display: flex;
             justify-content: space-between;
-            padding: 2px 0;
-            border-bottom: 1px dotted #e5e5e5;
+            padding: 4px 0;
+            border-bottom: 1px solid #f5f5f5;
+            font-size: 9pt;
         }
         
         .info-label {
@@ -1491,25 +1526,26 @@ const generatePayslipHTML = (data: any): string => {
             font-weight: 600;
         }
         
-        .compact-salary-table {
+        .salary-table {
             width: 100%;
             border-collapse: collapse;
-            margin: 6px 0;
+            margin: 10px 0;
             border: 1px solid #ddd;
-            font-size: 8pt;
+            font-size: 9pt;
+            page-break-inside: avoid;
         }
         
-        .compact-salary-table th {
+        .salary-table th {
             background: #2c5aa0;
             color: white;
-            padding: 4px 4px;
+            padding: 8px 6px;
             text-align: left;
             font-weight: 600;
             border: 1px solid #2c5aa0;
         }
         
-        .compact-salary-table td {
-            padding: 3px 4px;
+        .salary-table td {
+            padding: 6px 6px;
             border: 1px solid #ddd;
             color: #333;
         }
@@ -1520,25 +1556,26 @@ const generatePayslipHTML = (data: any): string => {
             font-family: 'Courier New', monospace;
         }
         
-        .compact-summary {
+        .summary-section {
             background: #f8fbff;
-            padding: 6px;
-            border-radius: 3px;
-            margin: 6px 0;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
             border: 1px solid #e8f4fd;
+            page-break-inside: avoid;
         }
         
-        .compact-summary-row {
+        .summary-row {
             display: flex;
             justify-content: space-between;
-            padding: 3px 0;
-            font-size: 9pt;
+            padding: 5px 0;
+            font-size: 10pt;
         }
         
-        .compact-summary-row.total {
+        .summary-row.total {
             border-top: 1px solid #2c5aa0;
-            margin-top: 3px;
-            padding-top: 4px;
+            margin-top: 5px;
+            padding-top: 6px;
             font-weight: 700;
             color: #2c5aa0;
         }
@@ -1546,172 +1583,191 @@ const generatePayslipHTML = (data: any): string => {
         .net-pay {
             background: linear-gradient(135deg, #2c5aa0 0%, #4a90e2 100%);
             color: white;
-            padding: 8px;
+            padding: 12px;
             text-align: center;
-            margin: 8px 0;
-            border-radius: 4px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin: 12px 0;
+            border-radius: 6px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+            page-break-inside: avoid;
         }
         
         .net-pay-label {
-            font-size: 9pt;
+            font-size: 10pt;
             opacity: 0.95;
-            margin-bottom: 3px;
+            margin-bottom: 5px;
             font-weight: 600;
         }
         
         .net-pay-amount {
-            font-size: 14px;
+            font-size: 18px;
             font-weight: 700;
             font-family: 'Courier New', monospace;
-            letter-spacing: 0.3px;
+            letter-spacing: 0.5px;
         }
         
-        .compact-attendance-grid {
-            display: grid;
-            grid-template-columns: repeat(6, 1fr);
-            gap: 5px;
-            text-align: center;
-            margin-bottom: 8px;
-        }
-        
-        .attendance-stat-card {
-            padding: 5px;
-            background: white;
-            border-radius: 3px;
+        .attendance-summary {
+            background: #f8fbff;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
             border: 1px solid #e8f4fd;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            page-break-inside: avoid;
         }
         
-        .attendance-stat-card h4 {
-            margin: 0 0 3px 0;
-            font-size: 7pt;
+        .attendance-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            text-align: center;
+        }
+        
+        .summary-card {
+            padding: 10px;
+            background: white;
+            border-radius: 4px;
+            border: 1px solid #e8f4fd;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        
+        .sunday-card {
+            padding: 10px;
+            background: #fff9e6;
+            border-radius: 4px;
+            border: 1px solid #ffc107;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        
+        .summary-card h4 {
+            margin: 0 0 6px 0;
+            font-size: 8pt;
             font-weight: 600;
             color: #2c5aa0;
             text-transform: uppercase;
         }
         
-        .attendance-stat-value {
-            font-size: 11px;
+        .sunday-card h4 {
+            margin: 0 0 6px 0;
+            font-size: 8pt;
+            font-weight: 600;
+            color: #856404;
+            text-transform: uppercase;
+        }
+        
+        .summary-value {
+            font-size: 14px;
             font-weight: 700;
             color: #2c5aa0;
-            margin-bottom: 1px;
+            margin-bottom: 2px;
         }
         
-        .attendance-stat-label {
-            font-size: 7pt;
+        .sunday-value {
+            font-size: 14px;
+            font-weight: 700;
+            color: #856404;
+            margin-bottom: 2px;
+        }
+        
+        .summary-label {
+            font-size: 8pt;
             color: #666;
+            font-weight: 500;
         }
         
-        .sunday-stat {
-            background: #fff9e6;
-            border-color: #ffc107;
-        }
-        
-        .sunday-stat h4 {
+        .sunday-label {
+            font-size: 8pt;
             color: #856404;
+            font-weight: 500;
         }
         
-        .sunday-stat .attendance-stat-value {
-            color: #856404;
-        }
-        
-        .absent-stat {
-            background: #f8d7da;
-            border-color: #f5c6cb;
-        }
-        
-        .absent-stat h4 {
-            color: #721c24;
-        }
-        
-        .absent-stat .attendance-stat-value {
-            color: #721c24;
-        }
-        
-        .paid-leave-stat {
-            background: #d1ecf1;
-            border-color: #bee5eb;
-        }
-        
-        .paid-leave-stat h4 {
-            color: #0c5460;
-        }
-        
-        .paid-leave-stat .attendance-stat-value {
-            color: #0c5460;
-        }
-        
-        .compact-attendance-table {
+        .attendance-table {
             width: 100%;
             border-collapse: collapse;
-            margin: 6px 0;
+            margin: 10px 0;
             border: 1px solid #ddd;
-            font-size: 7pt;
+            font-size: 8pt;
+            page-break-inside: avoid;
         }
         
-        .compact-attendance-table th {
+        .attendance-table th {
             background: #2c5aa0;
             color: white;
-            padding: 3px 2px;
+            padding: 6px 4px;
             text-align: center;
             font-weight: 600;
             border: 1px solid #2c5aa0;
         }
         
-        .compact-attendance-table td {
-            padding: 2px 2px;
+        .attendance-table td {
+            padding: 4px 4px;
             border: 1px solid #ddd;
             color: #333;
             text-align: center;
         }
         
-        .status-paid-leave {
-            color: #0c5460;
-            font-weight: 600;
-        }
-        
-        .status-absent {
-            color: #721c24;
-            font-weight: 600;
-        }
-        
-        .status-sunday {
-            color: #856404;
+        .status-dayoff {
+            color: #6c757d;
             font-weight: 600;
         }
 
-        .calculation-summary {
+        .calculation-details {
             background: #f0f8ff;
-            padding: 8px;
-            border-radius: 3px;
-            margin: 6px 0;
+            padding: 12px;
+            border-radius: 4px;
+            margin: 10px 0;
             border: 1px solid #b8daff;
+            page-break-inside: avoid;
         }
-        
+
+        .calculation-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            font-size: 9pt;
+        }
+
+        .calculation-section {
+            padding: 8px;
+            background: white;
+            border-radius: 3px;
+            border: 1px solid #dee2e6;
+        }
+
+        .calculation-section strong {
+            color: #2c5aa0;
+            display: block;
+            margin-bottom: 5px;
+            font-size: 8pt;
+            text-transform: uppercase;
+        }
+
         .calculation-row {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 2px;
+            margin-bottom: 3px;
             font-size: 8pt;
-            padding: 3px 2px;
-            border-bottom: 1px dotted #d1e7ff;
         }
-        
-        .calculation-row:last-child {
-            border-bottom: none;
-            margin-bottom: 0;
-        }
-        
-        .calculation-row strong {
+
+        .tagline {
+            text-align: center;
+            font-weight: bold;
+            font-size: 10pt;
+            margin: 15px 0 8px 0;
             color: #2c5aa0;
-            min-width: 140px;
+            padding-top: 8px;
+            border-top: 1px solid #e9ecef;
+            page-break-inside: avoid;
         }
-        
-        .calculation-row span {
-            color: #333;
-            text-align: right;
-            flex-grow: 1;
+
+        .page-break {
+            page-break-before: always;
+        }
+
+        .no-break {
+            page-break-inside: avoid;
+        }
+
+        .compact {
+            margin-bottom: 8px;
         }
 
         @media print {
@@ -1726,15 +1782,15 @@ const generatePayslipHTML = (data: any): string => {
             }
             
             .content {
-                padding: 0 8px 8px 8px;
+                padding: 0 10px 10px 10px;
             }
             
             .document-title {
-                margin: 4px 0 6px 0;
+                margin: 8px 0 12px 0;
             }
 
             .section {
-                margin-bottom: 6px;
+                margin-bottom: 8px;
             }
         }
     </style>
@@ -1755,89 +1811,120 @@ const generatePayslipHTML = (data: any): string => {
         
         <div class="content">
             <!-- Employee Information Section -->
-            <div class="section">
+            <div class="section no-break">
                 <div class="section-title">Employee Information</div>
-                <div class="compact-info-grid">
-                    <div class="compact-info-item">
-                        <span class="info-label">Employee Name:</span>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">Employee Name</span>
                         <span class="info-value">${data.employeeName || ''}</span>
                     </div>
-                    <div class="compact-info-item">
-                        <span class="info-label">Designation:</span>
+                    <div class="info-item">
+                        <span class="info-label">Designation</span>
                         <span class="info-value">${data.designation || ''}</span>
                     </div>
-                    <div class="compact-info-item">
-                        <span class="info-label">Account Number:</span>
+                    <div class="info-item">
+                        <span class="info-label">Account Number</span>
                         <span class="info-value">${data.accountNumber || 'N/A'}</span>
                     </div>
-                    <div class="compact-info-item">
-                        <span class="info-label">IBAN Number:</span>
+                    <div class="info-item">
+                        <span class="info-label">IBAN Number</span>
                         <span class="info-value">${data.ibanNumber || ''}</span>
                     </div>
-                    <div class="compact-info-item">
-                        <span class="info-label">Labour Card:</span>
+                    <div class="info-item">
+                        <span class="info-label">Passport Number</span>
+                        <span class="info-value">${data.passportNumber || 'N/A'}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Passport Expiry</span>
+                        <span class="info-value">${data.passportExpiry || 'N/A'}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Labour Card Number</span>
                         <span class="info-value">${data.labourCard || ''}</span>
                     </div>
-                    <div class="compact-info-item">
-                        <span class="info-label">Labour Card Personal No:</span>
+                    <div class="info-item">
+                        <span class="info-label">Labour Card Personal Number</span>
                         <span class="info-value">${data.labourCardPersonalNo || ''}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Labour Card Expiry</span>
+                        <span class="info-value">${data.labourCardExpiry || 'N/A'}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Emirates ID</span>
+                        <span class="info-value">${data.emiratesId || 'N/A'}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Emirates ID Expiry</span>
+                        <span class="info-value">${data.emiratesIdExpiry || 'N/A'}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Regular Working Days</span>
+                        <span class="info-value">${regularWorkingDays} Days</span>
                     </div>
                 </div>
             </div>
 
-            <!-- Salary Calculation Summary -->
-            <div class="section">
-                <div class="section-title">Salary Calculation Summary</div>
-                <div class="calculation-summary">
-                    <div class="calculation-row">
-                        <strong>Total Monthly Salary:</strong>
-                        <span>AED ${(basicSalary + allowance).toFixed(2)} (Basic: ${basicSalary.toFixed(2)} + Allowance: ${allowance.toFixed(2)})</span>
+            <!-- Salary Calculation Details Section -->
+            <div class="section no-break">
+                <div class="section-title">Salary Calculation Details</div>
+                <div class="calculation-details">
+                    <div class="calculation-grid">
+                        <div class="calculation-section">
+                            <strong>Attendance Summary</strong>
+                            <div class="calculation-row">
+                                <span>Total Month Days:</span>
+                                <span>${attendanceSummary.totalMonthDays || 0}</span>
+                            </div>
+                            <div class="calculation-row">
+                                <span>Sundays in Month:</span>
+                                <span>${attendanceSummary.totalSundays || 0}</span>
+                            </div>
+                            <div class="calculation-row">
+                                <span>Regular Working Days:</span>
+                                <span>${attendanceSummary.regularWorkingDays || 0}</span>
+                            </div>
+                            <div class="calculation-row">
+                                <span>Sunday Working Days:</span>
+                                <span>${attendanceSummary.sundayWorkingDays || 0}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="calculation-section">
+                            <strong>Work Hours</strong>
+                            <div class="calculation-row">
+                                <span>Regular Hours:</span>
+                                <span>${formatHours(attendanceSummary.totalRegularHours)}</span>
+                            </div>
+                            <div class="calculation-row">
+                                <span>Overtime Hours:</span>
+                                <span>${formatHours(attendanceSummary.totalOvertimeHours)}</span>
+                            </div>
+                            <div class="calculation-row">
+                                <span>Sunday Overtime:</span>
+                                <span>${formatHours(attendanceSummary.sundayOvertimeHours)}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="calculation-section">
+                            <strong>Rates</strong>
+                            <div class="calculation-row">
+                                <span>Daily Rate:</span>
+                                <span>AED ${dailyRate.toFixed(2)}</span>
+                            </div>
+                            <div class="calculation-row">
+                                <span>Overtime Rate:</span>
+                                <span>AED ${overtimeHourlyRate.toFixed(2)}/hour</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="calculation-row">
-                        <strong>Daily Rate:</strong>
-                        <span>AED ${dailyRate.toFixed(2)} (${(basicSalary + allowance).toFixed(2)} ÷ ${totalMonthDays} days)</span>
-                    </div>
-                    <div class="calculation-row">
-                        <strong>Overtime Rate:</strong>
-                        <span>AED ${overtimeHourlyRate.toFixed(2)}/hour (Basic ${basicSalary.toFixed(2)} ÷ ${totalMonthDays} ÷ 10)</span>
-                    </div>
-                    ${sundayBonus > 0 ? `
-                    <div class="calculation-row">
-                        <strong>Sunday Bonus:</strong>
-                        <span style="color: #856404;">AED ${sundayBonus.toFixed(2)} (${sundayWorkingDays} days × ${dailyRate.toFixed(2)})</span>
-                    </div>
-                    ` : ''}
-                    ${absentDeduction > 0 ? `
-                    <div class="calculation-row">
-                        <strong>Absent Deduction:</strong>
-                        <span style="color: #721c24;">AED ${absentDeduction.toFixed(2)} (${absentDays} days × ${dailyRate.toFixed(2)})</span>
-                    </div>
-                    ` : ''}
-                    ${totalOvertimeHours > 0 ? `
-                    <div class="calculation-row">
-                        <strong>Overtime Hours:</strong>
-                        <span>${formatHours(totalOvertimeHours)} hours × ${overtimeHourlyRate.toFixed(2)} = AED ${overtime.toFixed(2)}</span>
-                    </div>
-                    ` : ''}
-                    ${paidLeaveDays > 0 ? `
-                    <div class="calculation-row">
-                        <strong>Paid Leave:</strong>
-                        <span style="color: #0c5460;">${paidLeaveDays} days × ${dailyRate.toFixed(2)} = AED ${(paidLeaveDays * dailyRate).toFixed(2)}</span>
-                    </div>
-                    ` : ''}
-                    ${totalMonthDays > 0 ? `
-                    <div class="calculation-row">
-                        <strong>Attendance Summary:</strong>
-                        <span>Worked: ${regularWorkedDays} days + Paid Leave: ${paidLeaveDays} days + Absent: ${absentDays} days + Sunday: ${sundayWorkingDays} days = ${totalMonthDays} total days</span>
-                    </div>
-                    ` : ''}
                 </div>
             </div>
             
             <!-- Salary Details Section -->
-            <div class="section">
+            <div class="section no-break">
                 <div class="section-title">Salary Details</div>
-                <table class="compact-salary-table">
+                <table class="salary-table">
                     <thead>
                         <tr>
                             <th style="width: 25%;">EARNINGS</th>
@@ -1848,51 +1935,44 @@ const generatePayslipHTML = (data: any): string => {
                     </thead>
                     <tbody>
                         <tr>
-                            <td>Basic Salary</td>
+                            <td>Base Salary</td>
                             <td class="amount">${basicSalary.toFixed(2)}</td>
                             <td>Food Allowance</td>
                             <td class="amount">${mess.toFixed(2)}</td>
                         </tr>
                         <tr>
-                            <td>Allowance</td>
-                            <td class="amount">${allowance.toFixed(2)}</td>
+                            <td>Transport</td>
+                            <td class="amount">${transport.toFixed(2)}</td>
                             <td>Salary Advance</td>
                             <td class="amount">${salaryAdvance.toFixed(2)}</td>
                         </tr>
                         <tr>
-                            <td>Transport</td>
-                            <td class="amount">${transport.toFixed(2)}</td>
+                            <td>Overtime</td>
+                            <td class="amount">${overtime.toFixed(2)}</td>
                             <td>Loan Deduction</td>
                             <td class="amount">${loanDeduction.toFixed(2)}</td>
                         </tr>
                         <tr>
-                            <td>Overtime</td>
-                            <td class="amount">${overtime.toFixed(2)}</td>
+                            <td>Special OT</td>
+                            <td class="amount">${specialOT.toFixed(2)}</td>
                             <td>Fine Amount</td>
                             <td class="amount">${fineAmount.toFixed(2)}</td>
                         </tr>
+                        ${sundayBonus > 0 ? `
                         <tr>
-                            <td>Special OT</td>
-                            <td class="amount">${specialOT.toFixed(2)}</td>
+                            <td>Sunday Bonus</td>
+                            <td class="amount">${sundayBonus.toFixed(2)}</td>
                             <td>Visa Deduction</td>
                             <td class="amount">${visaDeduction.toFixed(2)}</td>
                         </tr>
-                        ${sundayBonus > 0 ? `
+                        ` : `
                         <tr>
-                            <td style="color: #856404;">Sunday Bonus</td>
-                            <td class="amount" style="color: #856404;">${sundayBonus.toFixed(2)}</td>
                             <td></td>
                             <td class="amount"></td>
+                            <td>Visa Deduction</td>
+                            <td class="amount">${visaDeduction.toFixed(2)}</td>
                         </tr>
-                        ` : ''}
-                        ${absentDeduction > 0 ? `
-                        <tr>
-                            <td style="color: #721c24;">Absent Deduction</td>
-                            <td class="amount" style="color: #721c24;">-${absentDeduction.toFixed(2)}</td>
-                            <td></td>
-                            <td class="amount"></td>
-                        </tr>
-                        ` : ''}
+                        `}
                         <tr>
                             <td>Medical</td>
                             <td class="amount">${medical.toFixed(2)}</td>
@@ -1908,18 +1988,18 @@ const generatePayslipHTML = (data: any): string => {
                     </tbody>
                 </table>
                 
-                <div class="compact-summary">
-                    <div class="compact-summary-row">
+                <div class="summary-section">
+                    <div class="summary-row">
                         <span>Total Earnings</span>
                         <span style="font-weight: 600;">${totalEarnings.toFixed(2)} AED</span>
                     </div>
-                    <div class="compact-summary-row">
+                    <div class="summary-row">
                         <span>Total Deductions</span>
                         <span style="font-weight: 600;">${totalDeductions.toFixed(2)} AED</span>
                     </div>
-                    <div class="compact-summary-row total">
+                    <div class="summary-row total">
                         <span>NET PAY</span>
-                        <span style="color: #2c5aa0;">${net.toFixed(2)} AED</span>
+                        <span>${net.toFixed(2)} AED</span>
                     </div>
                 </div>
                 
@@ -1930,92 +2010,73 @@ const generatePayslipHTML = (data: any): string => {
             </div>
             
             <!-- Attendance Summary Section -->
-            <div class="section">
-                <div class="section-title">Attendance Summary</div>
-                <div class="compact-attendance-grid">
-                    <div class="attendance-stat-card">
-                        <h4>Month Days</h4>
-                        <div class="attendance-stat-value">${totalMonthDays}</div>
-                        <div class="attendance-stat-label">Days</div>
+            <div class="section no-break">
+                <div class="section-title">Attendance Records</div>
+                <div class="attendance-summary">
+                    <div class="attendance-summary-grid">
+                        <div class="summary-card">
+                            <h4>Regular Working Days</h4>
+                            <div class="summary-value">${regularWorkingDays}</div>
+                            <div class="summary-label">Days (Mon-Sat)</div>
+                        </div>
+                        
+                        <div class="summary-card">
+                            <h4>Regular Hours</h4>
+                            <div class="summary-value">${formatHours(totalRegularHours)}</div>
+                            <div class="summary-label">Hours (Mon-Sat)</div>
+                        </div>
+                        
+                        <div class="summary-card">
+                            <h4>Overtime Hours</h4>
+                            <div class="summary-value">${formatHours(overtimeHours)}</div>
+                            <div class="summary-label">Hours (Mon-Sat)</div>
+                        </div>
+                        
+                        ${sundayWorkingDays > 0 ? `
+                        <div class="sunday-card">
+                            <h4>🌟 Sunday Working</h4>
+                            <div class="sunday-value">${sundayWorkingDays}</div>
+                            <div class="sunday-label">Days (Extra Bonus)</div>
+                        </div>
+                        ` : `
+                        <div class="summary-card" style="opacity: 0.6;">
+                            <h4>Sunday Working</h4>
+                            <div class="summary-value">0</div>
+                            <div class="summary-label">Days</div>
+                        </div>
+                        `}
                     </div>
                     
-                    <div class="attendance-stat-card">
-                        <h4>Mon-Sat Worked</h4>
-                        <div class="attendance-stat-value">${regularWorkedDays}</div>
-                        <div class="attendance-stat-label">Days</div>
+                    ${parseFloat(sundayOvertimeHours) > 0 ? `
+                    <div style="margin-top: 8px; margin-bottom: 10px; text-align: center;">
+                        <div style="display: inline-block; background: #fff9e6; padding: 6px 12px; border-radius: 3px; border: 1px solid #ffc107;">
+                            <strong style="color: #856404; font-size: 8pt;">Sunday Overtime Hours: ${formatHours(sundayOvertimeHours)} Hours</strong>
+                        </div>
                     </div>
-                    
-                    <div class="attendance-stat-card">
-                        <h4>Regular Hours</h4>
-                        <div class="attendance-stat-value">${formatHours(totalRegularHours)}</div>
-                        <div class="attendance-stat-label">Hours</div>
-                    </div>
-                    
-                    <div class="attendance-stat-card">
-                        <h4>Overtime Hours</h4>
-                        <div class="attendance-stat-value">${formatHours(totalOvertimeHours)}</div>
-                        <div class="attendance-stat-label">Hours</div>
-                    </div>
-                    
-                    <div class="attendance-stat-card ${sundayWorkingDays > 0 ? 'sunday-stat' : ''}">
-                        <h4>Sunday Working</h4>
-                        <div class="attendance-stat-value">${sundayWorkingDays}</div>
-                        <div class="attendance-stat-label">Days</div>
-                    </div>
-                    
-                    <div class="attendance-stat-card ${sundayWorkingDays > 0 ? 'sunday-stat' : ''}">
-                        <h4>Sunday Bonus</h4>
-                        <div class="attendance-stat-value">${sundayBonus.toFixed(2)}</div>
-                        <div class="attendance-stat-label">AED</div>
-                    </div>
-                    
-                    <div class="attendance-stat-card ${paidLeaveDays > 0 ? 'paid-leave-stat' : ''}">
-                        <h4>Paid Leave</h4>
-                        <div class="attendance-stat-value">${paidLeaveDays}</div>
-                        <div class="attendance-stat-label">Days</div>
-                    </div>
-                    
-                    <div class="attendance-stat-card ${absentDays > 0 ? 'absent-stat' : ''}">
-                        <h4>Absent Days</h4>
-                        <div class="attendance-stat-value">${absentDays}</div>
-                        <div class="attendance-stat-label">Days</div>
-                    </div>
-                    
-                    <div class="attendance-stat-card ${absentDeduction > 0 ? 'absent-stat' : ''}">
-                        <h4>Absent Deduction</h4>
-                        <div class="attendance-stat-value">${absentDeduction.toFixed(2)}</div>
-                        <div class="attendance-stat-label">AED</div>
-                    </div>
+                    ` : ''}
                 </div>
-            </div>
-            
-            <!-- Attendance Records (Compact) -->
-            ${displayedRecords.length > 0 ? `
-            <div class="section">
-                <div class="section-title">Attendance Records (First ${maxRecords} days)</div>
-                <table class="compact-attendance-table">
+                
+                <table class="attendance-table">
                     <thead>
                         <tr>
-                            <th style="width: 6%;">S.NO</th>
-                            <th style="width: 12%;">DATE</th>
-                            <th style="width: 12%;">DAY</th>
-                            <th style="width: 10%;">STATUS</th>
-                            <th style="width: 12%;">HOURS</th>
-                            <th style="width: 12%;">OT HOURS</th>
+                            <th style="width: 8%;">S.NO</th>
+                            <th style="width: 15%;">DATE</th>
+                            <th style="width: 15%;">DAY</th>
+                            <th style="width: 12%;">STATUS</th>
+                            <th style="width: 15%;">REGULAR HOURS</th>
+                            <th style="width: 15%;">OT HOURS</th>
                         </tr>
                     </thead>
                     <tbody>
                         ${attendanceRows}
-                        ${moreRecordsNote}
                     </tbody>
                 </table>
             </div>
-            ` : ''}
             
             ${data.remark ? `
-            <div class="section">
+            <div class="section no-break">
                 <div class="section-title">Remarks</div>
-                <div style="color: #666; font-size: 8pt; padding: 4px; background: #f8f9fa; border-radius: 2px; border-left: 2px solid #2c5aa0;">
+                <div style="color: #666; font-size: 9pt; padding: 8px; background: #f8f9fa; border-radius: 3px; border-left: 3px solid #2c5aa0;">
                     ${data.remark}
                 </div>
             </div>
@@ -2061,6 +2122,7 @@ const convertToWords = (num: number): string => {
   return result.trim() + ' AED';
 };
 
+// Helper function to format hours
 const formatHours = (value: any) => {
   const num = Number(value);
   if (isNaN(num)) return '0';
