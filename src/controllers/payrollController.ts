@@ -1289,6 +1289,7 @@ export const generatePayslipPDF = asyncHandler(async (req: Request, res: Respons
 });
 
 
+// Helper function to generate HTML for payslip
 const generatePayslipHTML = (data: any): string => {
   const calculationDetails = data.calculationDetails || {};
   const rates = calculationDetails.rates || {};
@@ -1302,47 +1303,48 @@ const generatePayslipHTML = (data: any): string => {
 
   // Get attendance data
   const attendanceRecords = data.attendanceDetails?.records || [];
+
+  // Only show first 15-20 records to save space, or all if less than 20
   const maxRecords = Math.min(attendanceRecords.length, 50);
   const displayedRecords = attendanceRecords.slice(0, maxRecords);
 
+  // Generate attendance rows with proper styling
   const attendanceRows = displayedRecords
     .map((record: any) => {
-      const statusClass =
-        record.status === 'Absent'
-          ? 'status-absent'
-          : record.status === 'Paid Leave'
-            ? 'status-paid-leave'
-            : record.status === 'Sunday'
-              ? 'status-sunday'
-              : '';
+      // Determine row styling based on status
+      let rowStyle = '';
+      let statusClass = '';
 
-      const rowStyle =
-        record.status === 'Absent'
-          ? 'style="background-color: #f8d7da;"'
-          : record.status === 'Paid Leave'
-            ? 'style="background-color: #d1ecf1;"'
-            : record.status === 'Sunday'
-              ? 'style="background-color: #fff9e6;"'
-              : '';
+      if (record.status === 'Absent') {
+        rowStyle = 'style="background-color: #f8d7da;"';
+        statusClass = 'status-absent';
+      } else if (record.status === 'Paid Leave') {
+        rowStyle = 'style="background-color: #d1ecf1;"';
+        statusClass = 'status-paid-leave';
+      } else if (record.status === 'Present (Sunday)' || record.status === 'Sunday') {
+        rowStyle = 'style="background-color: #fff9e6;"';
+        statusClass = 'status-sunday';
+      } else if (record.status.includes('Sunday')) {
+        rowStyle = 'style="background-color: #fff9e6;"';
+        statusClass = 'status-sunday';
+      }
 
       return `
-        <tr ${rowStyle}>
-          <td>${record.sno || ''}</td>
-          <td>${record.date || ''}</td>
-          <td>${record.day || ''}</td>
-          <td>${record.status || ''}</td>
-          <td>${formatHours(record.hours)}</td>
-          <td>${formatHours(record.overtimeHours)}</td>
-        </tr>
-      `;
+      <tr ${rowStyle}>
+        <td>${record.sno || ''}</td>
+        <td>${record.date || ''}</td>
+        <td>${record.day || ''}</td>
+        <td class="${statusClass}">${record.status || ''}</td>
+        <td>${formatHours(record.hours)}</td>
+        <td>${formatHours(record.overtimeHours)}</td>
+      </tr>
+    `;
     })
     .join('');
 
-  const moreRecordsNote =
-    attendanceRecords.length > maxRecords
-      ? `<p style="text-align: center; margin-top: 8px; font-size: 11px; color: #666;">... and ${attendanceRecords.length - maxRecords
-      } more days</p>`
-      : '';
+  // Add note if more records exist
+  const moreRecordsNote = attendanceRecords.length > maxRecords ?
+    `<tr><td colspan="6" style="text-align: center; font-style: italic; color: #666;">... and ${attendanceRecords.length - maxRecords} more days</td></tr>` : '';
 
   const basicSalary = Number(data.basicSalary) || 0;
   const allowance = Number(data.allowance) || 0;
@@ -1361,6 +1363,7 @@ const generatePayslipHTML = (data: any): string => {
   const net = Number(data.net) || 0;
   const totalOvertimeHours = Number(data.totalOvertimeHours) || 0;
 
+  // Use data from calculationDetails for accuracy
   const regularWorkedDays = Number(attendanceSummary.regularWorkedDays) || 0;
   const sundayWorkingDays = Number(attendanceSummary.sundayWorkingDays) || 0;
   const paidLeaveDays = Number(attendanceSummary.paidLeaveDays) || 0;
@@ -1369,448 +1372,666 @@ const generatePayslipHTML = (data: any): string => {
   const totalMonthDays = attendanceSummary.totalMonthDays || 0;
   const totalSundays = attendanceSummary.totalSundays || 0;
 
-  // Calculate present days for old design (regularWorkedDays + sundayWorkingDays + paidLeaveDays)
-  const presentDays = regularWorkedDays + sundayWorkingDays + paidLeaveDays;
+  // Calculate earnings breakdown
+  const baseEarnings = basicSalary + allowance + transport + medical + bonus + specialOT;
+  const sundayBonusEarnings = sundayBonus;
+  const overtimeEarnings = overtime;
+  const absentDeductionAmount = absentDeduction;
+  const totalEarningsFromAttendance = baseEarnings + sundayBonusEarnings + overtimeEarnings - absentDeductionAmount;
 
   return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-          font-family: 'Arial', sans-serif; 
-          font-size: 11px;
-          line-height: 1.4;
-          color: #333;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payslip - ${data.period}</title>
+    <style>
+        @page {
+          size: A4;
+          margin: 0.2cm;
         }
-        .container { 
-          width: 100%; 
-          max-width: 210mm;
-          margin: 0 auto;
-          padding: 8px;
-        }
-        .header {
-          text-align: center;
-          margin-bottom: 15px;
-          padding-bottom: 10px;
-          border-bottom: 2px solid #2c3e50;
-        }
-        .company-name-ar {
-          font-size: 16px;
-          font-weight: bold;
-          color: #2c3e50;
-          margin-bottom: 3px;
-        }
-        .company-name-en {
-          font-size: 14px;
-          font-weight: bold;
-          color: #34495e;
-          margin-bottom: 8px;
-        }
-        .payslip-title {
-          font-size: 13px;
-          font-weight: bold;
-          color: #e74c3c;
-          margin-top: 8px;
-          padding: 5px;
-          background: #f8f9fa;
-          border-radius: 4px;
-        }
-
-        /* OLD DESIGN - EMPLOYEE INFORMATION TABLE */
-        .employee-info-section {
-          margin-bottom: 15px;
-        }
-        .employee-info-section h3 {
-          font-size: 12px;
-          background: #34495e;
-          color: white;
-          padding: 6px 10px;
-          margin-bottom: 0;
-          border-radius: 4px 4px 0 0;
-        }
-        .info-table {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: 10px;
-          border: 1px solid #ddd;
-        }
-        .info-table td {
-          padding: 6px 10px;
-          border: 1px solid #ddd;
-        }
-        .info-table td:nth-child(odd) {
-          background: #f8f9fa;
-          font-weight: bold;
-          color: #2c3e50;
-          width: 25%;
-        }
-        .info-table td:nth-child(even) {
-          background: white;
-          color: #555;
-          width: 25%;
-        }
-
-        /* WORKING DAYS SECTION - OLD DESIGN */
-        .working-days-section {
-          background: #e8f5e9;
-          border: 1px solid #4caf50;
-          padding: 8px 10px;
-          margin-bottom: 15px;
-          border-radius: 4px;
-          text-align: center;
-        }
-        .working-days-section strong {
-          font-size: 11px;
-          color: #2e7d32;
-        }
-        .working-days-value {
-          font-size: 14px;
-          font-weight: bold;
-          color: #1b5e20;
-          margin-left: 8px;
-        }
-
-        table { 
-          width: 100%; 
-          border-collapse: collapse; 
-          margin-bottom: 10px;
-          font-size: 10px;
-        }
-        th, td { 
-          padding: 6px 8px; 
-          text-align: left; 
-          border: 1px solid #ddd; 
-        }
-        th { 
-          background-color: #34495e; 
-          color: white; 
-          font-weight: bold;
-          font-size: 10px;
-        }
-        .salary-table th {
-          background-color: #2c3e50;
-        }
-        .amount { text-align: right; }
-        .total-row { 
-          font-weight: bold; 
-          background-color: #ecf0f1; 
-        }
-        .net-pay-row { 
-          font-weight: bold; 
-          background-color: #27ae60; 
-          color: white;
-          font-size: 12px;
-        }
-        .amount-in-words {
-          background: #d5f4e6;
-          padding: 8px;
-          margin: 10px 0;
-          border-left: 4px solid #27ae60;
-          border-radius: 4px;
-          text-align: center;
-          font-weight: bold;
-          font-size: 11px;
-        }
-        .summary-grid {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 8px;
-          margin-bottom: 12px;
-        }
-        .summary-card {
-          background: #f8f9fa;
-          border: 1px solid #ddd;
-          border-radius: 4px;
-          padding: 8px;
-          text-align: center;
-        }
-        .summary-card .label {
-          font-size: 9px;
-          color: #666;
-          margin-bottom: 3px;
-        }
-        .summary-card .value {
-          font-size: 13px;
-          font-weight: bold;
-          color: #2c3e50;
-        }
-        .summary-card .unit {
-          font-size: 9px;
-          color: #999;
-        }
-        .remarks-section {
-          background: #fff3cd;
-          border-left: 4px solid #ffc107;
-          padding: 8px;
-          margin: 10px 0;
-          border-radius: 4px;
-        }
-        .remarks-section strong {
-          color: #856404;
-          font-size: 11px;
-        }
-        .remarks-section p {
-          margin-top: 5px;
-          font-size: 10px;
-          color: #856404;
-        }
-        .attendance-section {
-          margin-top: 12px;
-        }
-        .attendance-section h3 {
-          font-size: 11px;
-          background: #34495e;
-          color: white;
-          padding: 6px;
-          margin-bottom: 8px;
-          border-radius: 4px;
-        }
-        .status-absent { background-color: #f8d7da !important; }
-        .status-paid-leave { background-color: #d1ecf1 !important; }
-        .status-sunday { background-color: #fff9e6 !important; }
         
-        .footer {
-          margin-top: 20px;
-          text-align: center;
-          font-size: 9px;
-          color: #666;
-          border-top: 1px solid #ddd;
-          padding-top: 10px;
+        body {
+            font-family: 'Arial', sans-serif;
+            font-size: 9pt;
+            line-height: 1.2;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            background: white;
         }
-        .footer-note {
-          margin: 5px 0;
+        
+        .payslip-container {
+            max-width: 780px;
+            margin: 0 auto;
+            background: white;
         }
-        .footer-company {
-          margin-top: 10px;
-          font-weight: bold;
-          color: #2c3e50;
+        
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 5px;
+            gap: 10px;
+            padding: 8px 0;
+            border-bottom: 2px solid #94d7f4;
+            position: relative;
+        }
+
+        .logo {
+            height: 35px;
+            width: auto;
+            max-width: 100px;
+            object-fit: contain;
+            position: absolute;
+            left: 5px;
+        }
+
+        .company-names {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            flex-grow: 1;
+        }
+
+        .company-name-arabic {
+            font-size: 14pt;
+            font-weight: bold;
+            color: #1a1a1a;
+            line-height: 1.2;
+            direction: rtl;
+            unicode-bidi: bidi-override;
+            letter-spacing: 0;
+            margin-bottom: 2px;
+        }
+
+        .company-name-english {
+            font-size: 8pt;
+            font-weight: bold;
+            color: #1a1a1a;
+            line-height: 1.1;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+        
+        .document-title {
+            text-align: center;
+            margin: 5px 0 8px 0;
+            padding: 6px;
+            background: linear-gradient(135deg, #2c5aa0 0%, #4a90e2 100%);
+            color: white;
+            border-radius: 4px;
+            font-size: 10pt;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .content {
+            padding: 0 10px 10px 10px;
+        }
+        
+        .section {
+            margin-bottom: 8px;
+        }
+        
+        .section-title {
+            font-size: 9pt;
+            font-weight: bold;
+            color: #2c5aa0;
+            margin-bottom: 6px;
+            padding-bottom: 3px;
+            border-bottom: 1px solid #e8f4fd;
+            text-transform: uppercase;
+        }
+        
+        .compact-info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 3px 8px;
+            margin-bottom: 6px;
+            font-size: 8pt;
+        }
+        
+        .compact-info-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 2px 0;
+            border-bottom: 1px dotted #e5e5e5;
+        }
+        
+        .info-label {
+            color: #666;
+            font-weight: 500;
+        }
+        
+        .info-value {
+            color: #333;
+            font-weight: 600;
+        }
+        
+        .compact-salary-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 6px 0;
+            border: 1px solid #ddd;
+            font-size: 8pt;
+        }
+        
+        .compact-salary-table th {
+            background: #2c5aa0;
+            color: white;
+            padding: 4px 4px;
+            text-align: left;
+            font-weight: 600;
+            border: 1px solid #2c5aa0;
+        }
+        
+        .compact-salary-table td {
+            padding: 3px 4px;
+            border: 1px solid #ddd;
+            color: #333;
+        }
+        
+        .amount {
+            text-align: right;
+            font-weight: 600;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .compact-summary {
+            background: #f8fbff;
+            padding: 6px;
+            border-radius: 3px;
+            margin: 6px 0;
+            border: 1px solid #e8f4fd;
+        }
+        
+        .compact-summary-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 3px 0;
+            font-size: 9pt;
+        }
+        
+        .compact-summary-row.total {
+            border-top: 2px solid #2c5aa0;
+            margin-top: 3px;
+            padding-top: 4px;
+            font-weight: 700;
+            color: #2c5aa0;
+        }
+        
+        .net-pay {
+            background: linear-gradient(135deg, #2c5aa0 0%, #4a90e2 100%);
+            color: white;
+            padding: 8px;
+            text-align: center;
+            margin: 8px 0;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .net-pay-label {
+            font-size: 9pt;
+            opacity: 0.95;
+            margin-bottom: 3px;
+            font-weight: 600;
+        }
+        
+        .net-pay-amount {
+            font-size: 14px;
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
+            letter-spacing: 0.3px;
+        }
+        
+        .compact-attendance-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 5px;
+            text-align: center;
+            margin-bottom: 8px;
+        }
+        
+        .attendance-stat-card {
+            padding: 5px;
+            background: white;
+            border-radius: 3px;
+            border: 1px solid #e8f4fd;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+        
+        .attendance-stat-card h4 {
+            margin: 0 0 3px 0;
+            font-size: 7pt;
+            font-weight: 600;
+            color: #2c5aa0;
+            text-transform: uppercase;
+        }
+        
+        .attendance-stat-value {
+            font-size: 11px;
+            font-weight: 700;
+            color: #2c5aa0;
+            margin-bottom: 1px;
+        }
+        
+        .attendance-stat-label {
+            font-size: 7pt;
+            color: #666;
+        }
+        
+        .sunday-stat {
+            background: #fff9e6;
+            border-color: #ffc107;
+        }
+        
+        .sunday-stat h4 {
+            color: #856404;
+        }
+        
+        .sunday-stat .attendance-stat-value {
+            color: #856404;
+        }
+        
+        .absent-stat {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+        }
+        
+        .absent-stat h4 {
+            color: #721c24;
+        }
+        
+        .absent-stat .attendance-stat-value {
+            color: #721c24;
+        }
+        
+        .paid-leave-stat {
+            background: #d1ecf1;
+            border-color: #bee5eb;
+        }
+        
+        .paid-leave-stat h4 {
+            color: #0c5460;
+        }
+        
+        .paid-leave-stat .attendance-stat-value {
+            color: #0c5460;
+        }
+        
+        .compact-attendance-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 6px 0;
+            border: 1px solid #ddd;
+            font-size: 7pt;
+        }
+        
+        .compact-attendance-table th {
+            background: #2c5aa0;
+            color: white;
+            padding: 3px 2px;
+            text-align: center;
+            font-weight: 600;
+            border: 1px solid #2c5aa0;
+        }
+        
+        .compact-attendance-table td {
+            padding: 2px 2px;
+            border: 1px solid #ddd;
+            color: #333;
+            text-align: center;
+        }
+        
+        .status-paid-leave {
+            color: #0c5460;
+            font-weight: 600;
+        }
+        
+        .status-absent {
+            color: #721c24;
+            font-weight: 600;
+        }
+        
+        .status-sunday {
+            color: #856404;
+            font-weight: 600;
+        }
+
+        .calculation-summary {
+            background: #f0f8ff;
+            padding: 6px;
+            border-radius: 3px;
+            margin: 6px 0;
+            border: 1px solid #b8daff;
+        }
+        
+        .calculation-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 2px;
+            font-size: 8pt;
+        }
+        
+        .calculation-row strong {
+            color: #2c5aa0;
         }
 
         @media print {
-          body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-          .container { padding: 0; }
+            body {
+                background: white;
+                margin: 0;
+                padding: 0;
+            }
+            
+            .payslip-container {
+                margin: 0;
+            }
+            
+            .content {
+                padding: 0 8px 8px 8px;
+            }
+            
+            .document-title {
+                margin: 4px 0 6px 0;
+            }
+
+            .section {
+                margin-bottom: 6px;
+            }
         }
-      </style>
-    </head>
-    <body>
-      <div class="container">
+    </style>
+</head>
+<body>
+    <div class="payslip-container">
         <div class="header">
-          <div class="company-name-ar">الغزال الأبيض للخدمات الفنية</div>
-          <div class="company-name-en">AL GHAZAL AL ABYAD TECHNICAL SERVICES</div>
-          <div class="payslip-title">📄 SALARY SLIP FOR THE MONTH OF ${data.periodText || ''}</div>
+            <img class="logo" src="https://agats.s3.ap-south-1.amazonaws.com/logo/alghlogo.jpg" alt="Company Logo">
+            <div class="company-names">
+                <div class="company-name-arabic">الغزال الأبيض للخدمات الفنية</div>
+                <div class="company-name-english">AL GHAZAL AL ABYAD TECHNICAL SERVICES</div>
+            </div>
         </div>
-
-        <!-- OLD DESIGN: EMPLOYEE INFORMATION TABLE -->
-        <div class="employee-info-section">
-          <h3>Employee Information</h3>
-          <table class="info-table">
-            <tr>
-              <td>Employee Name</td>
-              <td>${data.employeeName || ''}</td>
-              <td>Designation</td>
-              <td>${data.designation || ''}</td>
-            </tr>
-            <tr>
-              <td>Account Number</td>
-              <td>${data.accountNumber || 'N/A'}</td>
-              <td>IBAN Number</td>
-              <td>${data.ibanNumber || ''}</td>
-            </tr>
-            <tr>
-              <td>Passport Number</td>
-              <td>${data.passportNumber || 'N/A'}</td>
-              <td>Passport Expiry</td>
-              <td>${data.passportExpiry || 'N/A'}</td>
-            </tr>
-            <tr>
-              <td>Labour Card Number</td>
-              <td>${data.labourCard || ''}</td>
-              <td>Labour Card Personal Number</td>
-              <td>${data.labourCardPersonalNo || ''}</td>
-            </tr>
-            <tr>
-              <td>Labour Card Expiry</td>
-              <td>${data.labourCardExpiry || 'N/A'}</td>
-              <td>Emirates ID</td>
-              <td>${data.emiratesId || 'N/A'}</td>
-            </tr>
-            <tr>
-              <td>Emirates ID Expiry</td>
-              <td>${data.emiratesIdExpiry || 'N/A'}</td>
-              <td></td>
-              <td></td>
-            </tr>
-          </table>
+        
+        <div class="document-title">
+            SALARY SLIP FOR THE MONTH OF ${data.periodText || ''}
         </div>
+        
+        <div class="content">
+            <!-- Employee Information Section -->
+            <div class="section">
+                <div class="section-title">Employee Information</div>
+                <div class="compact-info-grid">
+                    <div class="compact-info-item">
+                        <span class="info-label">Employee Name:</span>
+                        <span class="info-value">${data.employeeName || ''}</span>
+                    </div>
+                    <div class="compact-info-item">
+                        <span class="info-label">Designation:</span>
+                        <span class="info-value">${data.designation || ''}</span>
+                    </div>
+                    <div class="compact-info-item">
+                        <span class="info-label">Account Number:</span>
+                        <span class="info-value">${data.accountNumber || 'N/A'}</span>
+                    </div>
+                    <div class="compact-info-item">
+                        <span class="info-label">IBAN Number:</span>
+                        <span class="info-value">${data.ibanNumber || ''}</span>
+                    </div>
+                    <div class="compact-info-item">
+                        <span class="info-label">Labour Card:</span>
+                        <span class="info-value">${data.labourCard || ''}</span>
+                    </div>
+                    <div class="compact-info-item">
+                        <span class="info-label">Labour Card Personal No:</span>
+                        <span class="info-value">${data.labourCardPersonalNo || ''}</span>
+                    </div>
+                </div>
+            </div>
 
-        <!-- OLD DESIGN: WORKING DAYS -->
-        <div class="working-days-section">
-          <strong>Working Days:</strong>
-          <span class="working-days-value">${presentDays} Days</span>
+            <!-- Salary Calculation Summary -->
+            <div class="section">
+                <div class="section-title">Salary Calculation Summary</div>
+                <div class="calculation-summary">
+                    <div class="calculation-row">
+                        <strong>Total Monthly Salary:</strong>
+                        <span>AED ${(basicSalary + allowance).toFixed(2)} (Basic: ${basicSalary.toFixed(2)} + Allowance: ${allowance.toFixed(2)})</span>
+                    </div>
+                    <div class="calculation-row">
+                        <strong>Daily Rate:</strong>
+                        <span>AED ${dailyRate.toFixed(2)} (${(basicSalary + allowance).toFixed(2)} ÷ ${totalMonthDays} days)</span>
+                    </div>
+                    <div class="calculation-row">
+                        <strong>Overtime Rate:</strong>
+                        <span>AED ${overtimeHourlyRate.toFixed(2)}/hour (Basic ${basicSalary.toFixed(2)} ÷ ${totalMonthDays} ÷ 10)</span>
+                    </div>
+                    ${sundayBonus > 0 ? `
+                    <div class="calculation-row">
+                        <strong>Sunday Bonus:</strong>
+                        <span style="color: #856404;">AED ${sundayBonus.toFixed(2)} (${sundayWorkingDays} days × ${dailyRate.toFixed(2)})</span>
+                    </div>
+                    ` : ''}
+                    ${absentDeduction > 0 ? `
+                    <div class="calculation-row">
+                        <strong>Absent Deduction:</strong>
+                        <span style="color: #721c24;">AED ${absentDeduction.toFixed(2)} (${absentDays} days × ${dailyRate.toFixed(2)})</span>
+                    </div>
+                    ` : ''}
+                    ${totalOvertimeHours > 0 ? `
+                    <div class="calculation-row">
+                        <strong>Overtime Hours:</strong>
+                        <span>${formatHours(totalOvertimeHours)} hours × ${overtimeHourlyRate.toFixed(2)} = AED ${overtime.toFixed(2)}</span>
+                    </div>
+                    ` : ''}
+                </div>
+            </div>
+            
+            <!-- Salary Details Section -->
+            <div class="section">
+                <div class="section-title">Salary Details</div>
+                <table class="compact-salary-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 25%;">EARNINGS</th>
+                            <th style="width: 15%;" class="amount">AMOUNT (AED)</th>
+                            <th style="width: 25%;">DEDUCTIONS</th>
+                            <th style="width: 15%;" class="amount">AMOUNT (AED)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Basic Salary</td>
+                            <td class="amount">${basicSalary.toFixed(2)}</td>
+                            <td>Food Allowance</td>
+                            <td class="amount">${mess.toFixed(2)}</td>
+                        </tr>
+                        <tr>
+                            <td>Allowance</td>
+                            <td class="amount">${allowance.toFixed(2)}</td>
+                            <td>Salary Advance</td>
+                            <td class="amount">${salaryAdvance.toFixed(2)}</td>
+                        </tr>
+                        <tr>
+                            <td>Transport</td>
+                            <td class="amount">${transport.toFixed(2)}</td>
+                            <td>Loan Deduction</td>
+                            <td class="amount">${loanDeduction.toFixed(2)}</td>
+                        </tr>
+                        <tr>
+                            <td>Medical</td>
+                            <td class="amount">${medical.toFixed(2)}</td>
+                            <td>Fine Amount</td>
+                            <td class="amount">${fineAmount.toFixed(2)}</td>
+                        </tr>
+                        <tr>
+                            <td>Bonus</td>
+                            <td class="amount">${bonus.toFixed(2)}</td>
+                            <td>Visa Deduction</td>
+                            <td class="amount">${visaDeduction.toFixed(2)}</td>
+                        </tr>
+                        <tr>
+                            <td>Special OT</td>
+                            <td class="amount">${specialOT.toFixed(2)}</td>
+                            <td></td>
+                            <td class="amount"></td>
+                        </tr>
+                        <tr>
+                            <td>Overtime</td>
+                            <td class="amount">${overtime.toFixed(2)}</td>
+                            <td></td>
+                            <td class="amount"></td>
+                        </tr>
+                        ${sundayBonus > 0 ? `
+                        <tr>
+                            <td style="color: #856404; font-weight: 600;">Sunday Bonus</td>
+                            <td class="amount" style="color: #856404;">${sundayBonus.toFixed(2)}</td>
+                            <td></td>
+                            <td class="amount"></td>
+                        </tr>
+                        ` : ''}
+                        ${absentDeduction > 0 ? `
+                        <tr>
+                            <td style="color: #721c24; font-weight: 600;">Absent Deduction</td>
+                            <td class="amount" style="color: #721c24;">-${absentDeduction.toFixed(2)}</td>
+                            <td></td>
+                            <td class="amount"></td>
+                        </tr>
+                        ` : ''}
+                    </tbody>
+                </table>
+                
+                <div class="compact-summary">
+                    <div class="compact-summary-row">
+                        <span>Total Earnings</span>
+                        <span>${totalEarningsFromAttendance.toFixed(2)} AED</span>
+                    </div>
+                    <div class="compact-summary-row">
+                        <span>Total Deductions</span>
+                        <span>${totalDeductions.toFixed(2)} AED</span>
+                    </div>
+                    <div class="compact-summary-row total">
+                        <span>NET PAY</span>
+                        <span style="color: #2c5aa0; font-weight: 800;">${net.toFixed(2)} AED</span>
+                    </div>
+                </div>
+                
+                <div class="net-pay">
+                    <div class="net-pay-label">AMOUNT IN WORDS</div>
+                    <div class="net-pay-amount">${data.netInWords || 'ZERO AED'}</div>
+                </div>
+            </div>
+            
+            <!-- Attendance Summary Section -->
+            <div class="section">
+                <div class="section-title">Attendance Summary</div>
+                <div class="compact-attendance-grid">
+                    <div class="attendance-stat-card">
+                        <h4>Total Month Days</h4>
+                        <div class="attendance-stat-value">${totalMonthDays}</div>
+                        <div class="attendance-stat-label">Days</div>
+                    </div>
+                    
+                    <div class="attendance-stat-card">
+                        <h4>Present Days (Mon-Sat)</h4>
+                        <div class="attendance-stat-value">${regularWorkedDays}</div>
+                        <div class="attendance-stat-label">Days</div>
+                    </div>
+                    
+                    <div class="attendance-stat-card ${paidLeaveDays > 0 ? 'paid-leave-stat' : ''}">
+                        <h4>Paid Leave Days</h4>
+                        <div class="attendance-stat-value">${paidLeaveDays}</div>
+                        <div class="attendance-stat-label">Days</div>
+                    </div>
+                    
+                    <div class="attendance-stat-card ${absentDays > 0 ? 'absent-stat' : ''}">
+                        <h4>Absent Days</h4>
+                        <div class="attendance-stat-value">${absentDays}</div>
+                        <div class="attendance-stat-label">Days</div>
+                    </div>
+                    
+                    <div class="attendance-stat-card ${sundayWorkingDays > 0 ? 'sunday-stat' : ''}">
+                        <h4>Sunday Working</h4>
+                        <div class="attendance-stat-value">${sundayWorkingDays}</div>
+                        <div class="attendance-stat-label">Days</div>
+                    </div>
+                    
+                    <div class="attendance-stat-card">
+                        <h4>Total Sundays</h4>
+                        <div class="attendance-stat-value">${totalSundays}</div>
+                        <div class="attendance-stat-label">Days</div>
+                    </div>
+                    
+                    <div class="attendance-stat-card">
+                        <h4>Regular Hours</h4>
+                        <div class="attendance-stat-value">${formatHours(totalRegularHours)}</div>
+                        <div class="attendance-stat-label">Hours</div>
+                    </div>
+                    
+                    <div class="attendance-stat-card">
+                        <h4>Overtime Hours</h4>
+                        <div class="attendance-stat-value">${formatHours(totalOvertimeHours)}</div>
+                        <div class="attendance-stat-label">Hours</div>
+                    </div>
+                    
+                    <div class="attendance-stat-card ${sundayWorkingDays > 0 ? 'sunday-stat' : ''}">
+                        <h4>Sunday Bonus</h4>
+                        <div class="attendance-stat-value">${sundayBonus.toFixed(2)}</div>
+                        <div class="attendance-stat-label">AED</div>
+                    </div>
+                    
+                    <div class="attendance-stat-card ${absentDeduction > 0 ? 'absent-stat' : ''}">
+                        <h4>Absent Deduction</h4>
+                        <div class="attendance-stat-value">${absentDeduction.toFixed(2)}</div>
+                        <div class="attendance-stat-label">AED</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Attendance Records (Compact) -->
+            ${displayedRecords.length > 0 ? `
+            <div class="section">
+                <div class="section-title">Attendance Records (First ${maxRecords} days)</div>
+                <table class="compact-attendance-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 6%;">S.NO</th>
+                            <th style="width: 12%;">DATE</th>
+                            <th style="width: 12%;">DAY</th>
+                            <th style="width: 10%;">STATUS</th>
+                            <th style="width: 12%;">HOURS</th>
+                            <th style="width: 12%;">OT HOURS</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${attendanceRows}
+                        ${moreRecordsNote}
+                    </tbody>
+                </table>
+                <div style="font-size: 7pt; color: #666; margin-top: 4px; text-align: center;">
+                    <strong>Legend:</strong> 
+                    <span style="background-color: #d1ecf1; padding: 1px 4px; margin: 0 2px;">Paid Leave</span>
+                    <span style="background-color: #f8d7da; padding: 1px 4px; margin: 0 2px;">Absent</span>
+                    <span style="background-color: #fff9e6; padding: 1px 4px; margin: 0 2px;">Sunday</span>
+                </div>
+            </div>
+            ` : ''}
+            
+            ${data.remark ? `
+            <div class="section">
+                <div class="section-title">Remarks</div>
+                <div style="color: #666; font-size: 8pt; padding: 4px; background: #f8f9fa; border-radius: 2px; border-left: 2px solid #2c5aa0;">
+                    ${data.remark}
+                </div>
+            </div>
+            ` : ''}
         </div>
-
-        <!-- SALARY DETAILS TABLE (UNCHANGED) -->
-        <table class="salary-table">
-          <thead>
-            <tr>
-              <th>EARNINGS</th>
-              <th class="amount">AMOUNT (AED)</th>
-              <th>DEDUCTIONS</th>
-              <th class="amount">AMOUNT (AED)</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Basic Salary</td>
-              <td class="amount">${basicSalary.toFixed(2)}</td>
-              <td>Food Allowance</td>
-              <td class="amount">${mess.toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td>Allowance</td>
-              <td class="amount">${allowance.toFixed(2)}</td>
-              <td>Salary Advance</td>
-              <td class="amount">${salaryAdvance.toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td>Transport</td>
-              <td class="amount">${transport.toFixed(2)}</td>
-              <td>Loan Deduction</td>
-              <td class="amount">${loanDeduction.toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td>Overtime</td>
-              <td class="amount">${overtime.toFixed(2)}</td>
-              <td>Fine Amount</td>
-              <td class="amount">${fineAmount.toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td>Special OT</td>
-              <td class="amount">${specialOT.toFixed(2)}</td>
-              <td>Visa Deduction</td>
-              <td class="amount">${visaDeduction.toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td>Medical</td>
-              <td class="amount">${medical.toFixed(2)}</td>
-              <td></td>
-              <td></td>
-            </tr>
-            <tr>
-              <td>Bonus</td>
-              <td class="amount">${bonus.toFixed(2)}</td>
-              <td></td>
-              <td></td>
-            </tr>
-          </tbody>
-        </table>
-
-        <table>
-          <tr class="total-row">
-            <td style="width: 25%;">Total Earnings</td>
-            <td class="amount" style="width: 25%;">${totalEarnings.toFixed(2)} AED</td>
-            <td style="width: 25%;">Total Deductions</td>
-            <td class="amount" style="width: 25%;">${totalDeductions.toFixed(2)} AED</td>
-          </tr>
-          <tr class="net-pay-row">
-            <td colspan="4" style="text-align: center; font-size: 13px;">
-              NET PAY: ${net.toFixed(2)} AED
-            </td>
-          </tr>
-        </table>
-
-        <div class="amount-in-words">
-          <strong>AMOUNT IN WORDS</strong><br>
-          ${data.netInWords || 'ZERO AED'}
-        </div>
-
-        <!-- ATTENDANCE SUMMARY (UNCHANGED) -->
-        <div class="summary-grid">
-          <div class="summary-card">
-            <div class="label">Total Working Days</div>
-            <div class="value">${presentDays}</div>
-            <div class="unit">Days</div>
-          </div>
-          <div class="summary-card">
-            <div class="label">Regular Hours</div>
-            <div class="value">${formatHours(totalRegularHours)}</div>
-            <div class="unit">Hours</div>
-          </div>
-          <div class="summary-card">
-            <div class="label">Overtime Hours</div>
-            <div class="value">${formatHours(totalOvertimeHours)}</div>
-            <div class="unit">Hours</div>
-          </div>
-          ${sundayWorkingDays > 0 ? `
-          <div class="summary-card">
-            <div class="label">🌟 Sunday Working</div>
-            <div class="value">${sundayWorkingDays}</div>
-            <div class="unit">Days</div>
-          </div>
-          ` : `
-          <div class="summary-card">
-            <div class="label">Sunday Working</div>
-            <div class="value">0</div>
-            <div class="unit">Days</div>
-          </div>
-          `}
-        </div>
-
-        ${data.attendanceDetails?.summary?.sundayOvertimeHours > 0 ? `
-        <div style="text-align: center; background: #fff9e6; padding: 6px; border-radius: 4px; margin-bottom: 10px; font-size: 10px;">
-          <strong>Sunday Overtime Hours:</strong> ${data.attendanceDetails.summary.sundayOvertimeHours} Hours
-        </div>
-        ` : ''}
-
-        <!-- ATTENDANCE RECORDS (UNCHANGED) -->
-        ${displayedRecords.length > 0 ? `
-        <div class="attendance-section">
-          <table>
-            <thead>
-              <tr>
-                <th>S.NO</th>
-                <th>DATE</th>
-                <th>DAY</th>
-                <th>STATUS</th>
-                <th>REGULAR HOURS</th>
-                <th>OT HOURS</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${attendanceRows}
-            </tbody>
-          </table>
-          ${moreRecordsNote}
-        </div>
-        ` : ''}
-
-        ${data.remark ? `
-        <div class="remarks-section">
-          <strong>📝 Remarks</strong>
-          <p>${data.remark}</p>
-        </div>
-        ` : ''}
-
-        <!-- FOOTER - OLD DESIGN -->
-        <div class="footer">
-          <div class="footer-note">We work U Relax</div>
-          <div class="footer-note">Note: This is a computer-generated payslip and does not require a signature.</div>
-          <div class="footer-note">Sunday working days are highlighted in yellow in the attendance table.</div>
-          <div class="footer-company">
-            AL GHAZAL AL ABYAD TECHNICAL SERVICES<br>
-            Office No:04, R09-France Cluster, International City-Dubai | P.O.Box:262760, Dubai-U.A.E<br>
-            Tel: 044102555 | www.alghazalgroup.com
-          </div>
-          <div style="margin-top: 8px; font-size: 9px;">
-            Generated on ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
+    </div>
+</body>
+</html>
   `;
 };
 // Helper function to convert number to words
