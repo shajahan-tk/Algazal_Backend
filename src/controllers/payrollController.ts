@@ -1586,79 +1586,42 @@ const generatePayslipHTML = (data: any): string => {
             letter-spacing: 0.3px;
         }
         
-        .compact-attendance-grid {
+        /* From OLD CODE - 3 boxes layout */
+        .attendance-summary-grid {
             display: grid;
-            grid-template-columns: repeat(6, 1fr);
-            gap: 5px;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
             text-align: center;
             margin-bottom: 8px;
         }
         
-        .attendance-stat-card {
-            padding: 5px;
+        .summary-card {
+            padding: 10px;
             background: white;
-            border-radius: 3px;
+            border-radius: 4px;
             border: 1px solid #e8f4fd;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
         }
         
-        .attendance-stat-card h4 {
-            margin: 0 0 3px 0;
-            font-size: 7pt;
+        .summary-card h4 {
+            margin: 0 0 6px 0;
+            font-size: 8pt;
             font-weight: 600;
             color: #2c5aa0;
             text-transform: uppercase;
         }
         
-        .attendance-stat-value {
-            font-size: 11px;
+        .summary-value {
+            font-size: 14px;
             font-weight: 700;
             color: #2c5aa0;
-            margin-bottom: 1px;
+            margin-bottom: 2px;
         }
         
-        .attendance-stat-label {
-            font-size: 7pt;
+        .summary-label {
+            font-size: 8pt;
             color: #666;
-        }
-        
-        .sunday-stat {
-            background: #fff9e6;
-            border-color: #ffc107;
-        }
-        
-        .sunday-stat h4 {
-            color: #856404;
-        }
-        
-        .sunday-stat .attendance-stat-value {
-            color: #856404;
-        }
-        
-        .absent-stat {
-            background: #f8d7da;
-            border-color: #f5c6cb;
-        }
-        
-        .absent-stat h4 {
-            color: #721c24;
-        }
-        
-        .absent-stat .attendance-stat-value {
-            color: #721c24;
-        }
-        
-        .paid-leave-stat {
-            background: #d1ecf1;
-            border-color: #bee5eb;
-        }
-        
-        .paid-leave-stat h4 {
-            color: #0c5460;
-        }
-        
-        .paid-leave-stat .attendance-stat-value {
-            color: #0c5460;
+            font-weight: 500;
         }
         
         .compact-attendance-table {
@@ -1697,75 +1660,6 @@ const generatePayslipHTML = (data: any): string => {
         
         .status-sunday {
             color: #856404;
-            font-weight: 600;
-        }
-
-        /* Salary Calculation Details Section */
-        .calculation-details {
-            background: #f8f9fa;
-            padding: 8px;
-            border-radius: 4px;
-            margin: 6px 0;
-            border: 1px solid #dee2e6;
-        }
-        
-        .calculation-details h3 {
-            font-size: 9pt;
-            font-weight: bold;
-            color: #2c5aa0;
-            margin-bottom: 6px;
-            text-align: center;
-            text-transform: uppercase;
-            border-bottom: 1px solid #2c5aa0;
-            padding-bottom: 4px;
-        }
-        
-        .calculation-step {
-            margin-bottom: 4px;
-            padding-bottom: 4px;
-            border-bottom: 1px dotted #ced4da;
-            font-size: 8pt;
-        }
-        
-        .calculation-step:last-child {
-            border-bottom: none;
-        }
-        
-        .step-title {
-            font-weight: 600;
-            color: #495057;
-            margin-bottom: 2px;
-        }
-        
-        .step-details {
-            display: flex;
-            justify-content: space-between;
-            color: #212529;
-        }
-        
-        .step-formula {
-            color: #666;
-            font-style: italic;
-            font-size: 7pt;
-        }
-        
-        .highlight-positive {
-            color: #28a745;
-            font-weight: 600;
-        }
-        
-        .highlight-negative {
-            color: #dc3545;
-            font-weight: 600;
-        }
-        
-        .highlight-sunday {
-            color: #856404;
-            font-weight: 600;
-        }
-        
-        .highlight-paid-leave {
-            color: #0c5460;
             font-weight: 600;
         }
 
@@ -1840,137 +1734,77 @@ const generatePayslipHTML = (data: any): string => {
                 </div>
             </div>
 
-            <!-- Salary Calculation Details Section -->
+            <!-- SALARY CALCULATION DETAILS - 3 BOXES LAYOUT -->
             <div class="section">
                 <div class="section-title">Salary Calculation Details</div>
-                <div class="calculation-details">
-                    <h3>ATTENDANCE-BASED SALARY CALCULATION</h3>
-                    
-                    <!-- Step 1: Basic Salary -->
-                    <div class="calculation-step">
-                        <div class="step-title">1. Basic Monthly Salary:</div>
-                        <div class="step-details">
-                            <span>Basic Salary: AED ${basicSalary.toFixed(2)}</span>
-                            <span>Allowance: AED ${allowance.toFixed(2)}</span>
-                        </div>
-                        <div class="step-details">
-                            <span>Total Monthly Salary: <strong>AED ${(basicSalary + allowance).toFixed(2)}</strong></span>
+                <div class="attendance-summary-grid">
+                    <!-- Box 1: Basic Calculation -->
+                    <div class="summary-card">
+                        <h4>Basic Salary Calculation</h4>
+                        <div class="summary-value">AED ${(basicSalary + allowance).toFixed(2)}</div>
+                        <div class="summary-label">
+                            Basic: ${basicSalary.toFixed(2)}<br>
+                            Allowance: ${allowance.toFixed(2)}<br>
+                            Daily Rate: ${dailyRate.toFixed(2)}<br>
+                            Days in Month: ${totalMonthDays}
                         </div>
                     </div>
                     
-                    <!-- Step 2: Daily Rate Calculation -->
-                    <div class="calculation-step">
-                        <div class="step-title">2. Daily Rate Calculation:</div>
-                        <div class="step-details">
-                            <span>Days in Month: ${totalMonthDays} days</span>
-                            <span>Daily Rate: AED ${dailyRate.toFixed(2)}</span>
-                        </div>
-                        <div class="step-formula">
-                            Formula: (Basic ${basicSalary.toFixed(2)} + Allowance ${allowance.toFixed(2)}) ÷ ${totalMonthDays} days
-                        </div>
-                    </div>
-                    
-                    <!-- Step 3: Overtime Rate Calculation -->
-                    <div class="calculation-step">
-                        <div class="step-title">3. Overtime Hourly Rate:</div>
-                        <div class="step-details">
-                            <span>Rate: AED ${overtimeHourlyRate.toFixed(2)} per hour</span>
-                        </div>
-                        <div class="step-formula">
-                            Formula: Basic ${basicSalary.toFixed(2)} ÷ ${totalMonthDays} days ÷ 10 hours
+                    <!-- Box 2: Overtime Calculation -->
+                    <div class="summary-card">
+                        <h4>Overtime Calculation</h4>
+                        <div class="summary-value">${formatHours(totalOvertimeHoursFromAttendance)} hrs</div>
+                        <div class="summary-label">
+                            Hourly Rate: ${overtimeHourlyRate.toFixed(2)}<br>
+                            Amount: AED ${overtime.toFixed(2)}<br>
+                            Rate Formula: Basic ÷ ${totalMonthDays} ÷ 10
                         </div>
                     </div>
                     
-                    <!-- Step 4: Sunday Bonus Calculation -->
-                    ${sundayBonus > 0 ? `
-                    <div class="calculation-step">
-                        <div class="step-title">4. Sunday Bonus Calculation:</div>
-                        <div class="step-details">
-                            <span>Sundays Worked: <span class="highlight-sunday">${sundayWorkingDays} days</span></span>
-                            <span>Daily Rate: AED ${dailyRate.toFixed(2)}</span>
-                        </div>
-                        <div class="step-details">
-                            <span>Sunday Bonus: <span class="highlight-sunday">+ AED ${sundayBonus.toFixed(2)}</span></span>
-                        </div>
-                        <div class="step-formula">
-                            Rule: ANY hours worked on Sunday = FULL day bonus (${sundayWorkingDays} × ${dailyRate.toFixed(2)})
+                    <!-- Box 3: Sunday Bonus -->
+                    <div class="summary-card" style="background-color: #fff9e6; border-color: #ffc107;">
+                        <h4 style="color: #856404;">Sunday Bonus</h4>
+                        <div class="summary-value" style="color: #856404;">AED ${sundayBonus.toFixed(2)}</div>
+                        <div class="summary-label" style="color: #856404;">
+                            Sundays Worked: ${sundayWorkingDays}<br>
+                            Daily Rate: ${dailyRate.toFixed(2)}<br>
+                            Rule: Any hours = Full day
                         </div>
                     </div>
-                    ` : ''}
-                    
-                    <!-- Step 5: Overtime Calculation -->
-                    ${overtime > 0 ? `
-                    <div class="calculation-step">
-                        <div class="step-title">5. Overtime Calculation:</div>
-                        <div class="step-details">
-                            <span>Total Overtime Hours: ${formatHours(totalOvertimeHoursFromAttendance)} hours</span>
-                            <span>Hourly Rate: AED ${overtimeHourlyRate.toFixed(2)}</span>
-                        </div>
-                        <div class="step-details">
-                            <span>Overtime Amount: <span class="highlight-positive">+ AED ${overtime.toFixed(2)}</span></span>
-                        </div>
-                        <div class="step-formula">
-                            Formula: ${formatHours(totalOvertimeHoursFromAttendance)} hours × ${overtimeHourlyRate.toFixed(2)}
+                </div>
+                
+                <!-- Second Row of 3 Boxes -->
+                <div class="attendance-summary-grid" style="margin-top: 8px;">
+                    <!-- Box 4: Absent Deduction -->
+                    <div class="summary-card" style="background-color: #f8d7da; border-color: #f5c6cb;">
+                        <h4 style="color: #721c24;">Absent Deduction</h4>
+                        <div class="summary-value" style="color: #721c24;">AED ${absentDeduction.toFixed(2)}</div>
+                        <div class="summary-label" style="color: #721c24;">
+                            Absent Days: ${absentDays}<br>
+                            Daily Rate: ${dailyRate.toFixed(2)}<br>
+                            Formula: Days × Daily Rate
                         </div>
                     </div>
-                    ` : ''}
                     
-                    <!-- Step 6: Absent Deduction Calculation -->
-                    ${absentDeduction > 0 ? `
-                    <div class="calculation-step">
-                        <div class="step-title">6. Absent Deduction Calculation:</div>
-                        <div class="step-details">
-                            <span>Absent Days: <span class="highlight-negative">${absentDays} days</span></span>
-                            <span>Daily Rate: AED ${dailyRate.toFixed(2)}</span>
-                        </div>
-                        <div class="step-details">
-                            <span>Absent Deduction: <span class="highlight-negative">- AED ${absentDeduction.toFixed(2)}</span></span>
-                        </div>
-                        <div class="step-formula">
-                            Formula: ${absentDays} days × ${dailyRate.toFixed(2)}
+                    <!-- Box 5: Paid Leave -->
+                    <div class="summary-card" style="background-color: #d1ecf1; border-color: #bee5eb;">
+                        <h4 style="color: #0c5460;">Paid Leave</h4>
+                        <div class="summary-value" style="color: #0c5460;">${paidLeaveDays} days</div>
+                        <div class="summary-label" style="color: #0c5460;">
+                            No pay, no bonus<br>
+                            No deduction<br>
+                            Excluded from calculation
                         </div>
                     </div>
-                    ` : ''}
                     
-                    <!-- Step 7: Paid Leave Information -->
-                    ${paidLeaveDays > 0 ? `
-                    <div class="calculation-step">
-                        <div class="step-title">7. Paid Leave Information:</div>
-                        <div class="step-details">
-                            <span>Paid Leave Days: <span class="highlight-paid-leave">${paidLeaveDays} days</span></span>
+                    <!-- Box 6: Final Calculation -->
+                    <div class="summary-card" style="background-color: #e7f3ff; border-color: #2c5aa0;">
+                        <h4 style="color: #2c5aa0;">Final from Attendance</h4>
+                        <div class="summary-value" style="color: #2c5aa0; font-size: 16px;">
+                            AED ${((basicSalary + allowance) + sundayBonus + overtime - absentDeduction).toFixed(2)}
                         </div>
-                        <div class="step-details">
-                            <span>Status: <span class="highlight-paid-leave">No pay, no bonus, no deduction</span></span>
-                        </div>
-                        <div class="step-formula">
-                            Note: Paid leave days are excluded from all calculations
-                        </div>
-                    </div>
-                    ` : ''}
-                    
-                    <!-- Step 8: Final Calculation -->
-                    <div class="calculation-step">
-                        <div class="step-title">8. Final Salary from Attendance:</div>
-                        <div class="step-details">
-                            <span>Base Monthly Salary: AED ${(basicSalary + allowance).toFixed(2)}</span>
-                        </div>
-                        ${sundayBonus > 0 ? `
-                        <div class="step-details">
-                            <span>Add: Sunday Bonus: <span class="highlight-sunday">+ AED ${sundayBonus.toFixed(2)}</span></span>
-                        </div>
-                        ` : ''}
-                        ${overtime > 0 ? `
-                        <div class="step-details">
-                            <span>Add: Overtime: <span class="highlight-positive">+ AED ${overtime.toFixed(2)}</span></span>
-                        </div>
-                        ` : ''}
-                        ${absentDeduction > 0 ? `
-                        <div class="step-details">
-                            <span>Less: Absent Deduction: <span class="highlight-negative">- AED ${absentDeduction.toFixed(2)}</span></span>
-                        </div>
-                        ` : ''}
-                        <div class="step-details">
-                            <span><strong>Total from Attendance: AED ${((basicSalary + allowance) + sundayBonus + overtime - absentDeduction).toFixed(2)}</strong></span>
+                        <div class="summary-label" style="color: #2c5aa0;">
+                            Base + Sunday Bonus + Overtime - Absent Deduction
                         </div>
                     </div>
                 </div>
@@ -2074,65 +1908,65 @@ const generatePayslipHTML = (data: any): string => {
             <!-- Attendance Summary Section -->
             <div class="section">
                 <div class="section-title">Attendance Summary</div>
-                <div class="compact-attendance-grid">
-                    <div class="attendance-stat-card">
+                <div class="attendance-summary-grid">
+                    <div class="summary-card">
                         <h4>Total Month Days</h4>
-                        <div class="attendance-stat-value">${totalMonthDays}</div>
-                        <div class="attendance-stat-label">Days</div>
+                        <div class="summary-value">${totalMonthDays}</div>
+                        <div class="summary-label">Days</div>
                     </div>
                     
-                    <div class="attendance-stat-card">
+                    <div class="summary-card">
                         <h4>Present Days (Mon-Sat)</h4>
-                        <div class="attendance-stat-value">${regularWorkedDays}</div>
-                        <div class="attendance-stat-label">Days</div>
+                        <div class="summary-value">${regularWorkedDays}</div>
+                        <div class="summary-label">Days</div>
                     </div>
                     
-                    <div class="attendance-stat-card ${paidLeaveDays > 0 ? 'paid-leave-stat' : ''}">
-                        <h4>Paid Leave Days</h4>
-                        <div class="attendance-stat-value">${paidLeaveDays}</div>
-                        <div class="attendance-stat-label">Days</div>
+                    <div class="summary-card" style="background-color: #d1ecf1; border-color: #bee5eb;">
+                        <h4 style="color: #0c5460;">Paid Leave Days</h4>
+                        <div class="summary-value" style="color: #0c5460;">${paidLeaveDays}</div>
+                        <div class="summary-label" style="color: #0c5460;">Days</div>
+                    </div>
+                </div>
+                
+                <!-- Second Row for Attendance Summary -->
+                <div class="attendance-summary-grid" style="margin-top: 8px;">
+                    <div class="summary-card" style="background-color: #f8d7da; border-color: #f5c6cb;">
+                        <h4 style="color: #721c24;">Absent Days</h4>
+                        <div class="summary-value" style="color: #721c24;">${absentDays}</div>
+                        <div class="summary-label" style="color: #721c24;">Days</div>
                     </div>
                     
-                    <div class="attendance-stat-card ${absentDays > 0 ? 'absent-stat' : ''}">
-                        <h4>Absent Days</h4>
-                        <div class="attendance-stat-value">${absentDays}</div>
-                        <div class="attendance-stat-label">Days</div>
+                    <div class="summary-card" style="background-color: #fff9e6; border-color: #ffc107;">
+                        <h4 style="color: #856404;">Sunday Working</h4>
+                        <div class="summary-value" style="color: #856404;">${sundayWorkingDays}</div>
+                        <div class="summary-label" style="color: #856404;">Days</div>
                     </div>
                     
-                    <div class="attendance-stat-card ${sundayWorkingDays > 0 ? 'sunday-stat' : ''}">
-                        <h4>Sunday Working</h4>
-                        <div class="attendance-stat-value">${sundayWorkingDays}</div>
-                        <div class="attendance-stat-label">Days</div>
-                    </div>
-                    
-                    <div class="attendance-stat-card">
+                    <div class="summary-card">
                         <h4>Total Sundays</h4>
-                        <div class="attendance-stat-value">${totalSundays}</div>
-                        <div class="attendance-stat-label">Days</div>
+                        <div class="summary-value">${totalSundays}</div>
+                        <div class="summary-label">Days</div>
                     </div>
-                    
-                    <div class="attendance-stat-card">
+                </div>
+                
+                <!-- Third Row for Hours -->
+                <div class="attendance-summary-grid" style="margin-top: 8px;">
+                    <div class="summary-card">
                         <h4>Regular Hours</h4>
-                        <div class="attendance-stat-value">${formatHours(totalRegularHours)}</div>
-                        <div class="attendance-stat-label">Hours</div>
+                        <div class="summary-value">${formatHours(totalRegularHours)}</div>
+                        <div class="summary-label">Hours</div>
                     </div>
                     
-                    <div class="attendance-stat-card">
+                    <div class="summary-card">
                         <h4>Overtime Hours</h4>
-                        <div class="attendance-stat-value">${formatHours(totalOvertimeHoursFromAttendance)}</div>
-                        <div class="attendance-stat-label">Hours</div>
+                        <div class="summary-value">${formatHours(totalOvertimeHoursFromAttendance)}</div>
+                        <div class="summary-label">Hours</div>
                     </div>
                     
-                    <div class="attendance-stat-card ${sundayWorkingDays > 0 ? 'sunday-stat' : ''}">
-                        <h4>Sunday Bonus</h4>
-                        <div class="attendance-stat-value">${sundayBonus.toFixed(2)}</div>
-                        <div class="attendance-stat-label">AED</div>
-                    </div>
-                    
-                    <div class="attendance-stat-card ${absentDeduction > 0 ? 'absent-stat' : ''}">
-                        <h4>Absent Deduction</h4>
-                        <div class="attendance-stat-value">${absentDeduction.toFixed(2)}</div>
-                        <div class="attendance-stat-label">AED</div>
+                    <div class="summary-card" style="opacity: 0.7;">
+                        <h4>Total Hours</h4>
+                        <div class="summary-value">${formatHours(Number(totalRegularHours) + totalOvertimeHoursFromAttendance)}</div>
+                        <div class="summary-label">Hours</div>
                     </div>
                 </div>
             </div>
