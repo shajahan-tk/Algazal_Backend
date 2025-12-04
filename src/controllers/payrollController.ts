@@ -1667,6 +1667,22 @@ const generatePayslipHTML = (data: any): string => {
             color: #856404;
             font-weight: 600;
         }
+        
+        /* Prepared by section */
+        .prepared-by-section {
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 1px solid #e9ecef;
+            text-align: right;
+            font-size: 8pt;
+            color: #666;
+        }
+        
+        .prepared-by-name {
+            font-weight: 600;
+            color: #2c5aa0;
+            margin-top: 5px;
+        }
 
         @media print {
             body {
@@ -1934,7 +1950,7 @@ const generatePayslipHTML = (data: any): string => {
                     </div>
                     
                     <div class="summary-card">
-                        <h4>Overtime Rate</h4>
+                        <h4>Overtime Per Hour Rate</h4>
                         <div class="summary-value">${overtimeHourlyRate.toFixed(2)}</div>
                         <div class="summary-label">AED/hour</div>
                     </div>
@@ -1984,6 +2000,12 @@ const generatePayslipHTML = (data: any): string => {
                 </div>
             </div>
             ` : ''}
+            
+            <!-- Prepared by Section -->
+            <div class="prepared-by-section">
+                <div>Prepared by:</div>
+                <div class="prepared-by-name">Meena Sridhar</div>
+            </div>
         </div>
     </div>
 </body>
