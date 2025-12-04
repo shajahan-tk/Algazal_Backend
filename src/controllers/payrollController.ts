@@ -1362,7 +1362,6 @@ const generatePayslipHTML = (data: any): string => {
   const totalEarnings = Number(data.totalEarnings) || 0;
   const totalDeductions = Number(data.totalDeductions) || 0;
   const net = Number(data.net) || 0;
-  const totalOvertimeHours = Number(data.totalOvertimeHours) || 0;
 
   // Use data from calculationDetails for accuracy
   const regularWorkedDays = Number(attendanceSummary.regularWorkedDays) || 0;
@@ -1373,8 +1372,14 @@ const generatePayslipHTML = (data: any): string => {
   const totalMonthDays = attendanceSummary.totalMonthDays || 0;
   const totalSundays = attendanceSummary.totalSundays || 0;
 
-  // Calculate total overtime hours (Mon-Sat + Sunday)
-  const totalOvertimeHoursFromAttendance = (attendanceSummary.totalOvertimeHours || 0) + (attendanceSummary.sundayOvertimeHours || 0);
+  // Get separate overtime hours
+  const regularOvertimeHours = attendanceSummary.totalOvertimeHours || 0; // Mon-Sat OT
+  const sundayOvertimeHours = attendanceSummary.sundayOvertimeHours || 0; // Sunday OT
+  const totalOvertimeHoursFromAttendance = regularOvertimeHours + sundayOvertimeHours;
+
+  // Calculate separate overtime amounts
+  const regularOvertimeAmount = regularOvertimeHours * overtimeHourlyRate;
+  const sundayOvertimeAmount = sundayOvertimeHours * overtimeHourlyRate;
 
   return `
 <!DOCTYPE html>
@@ -1731,11 +1736,11 @@ const generatePayslipHTML = (data: any): string => {
                         <span class="info-label">Labour Card Personal No:</span>
                         <span class="info-value">${data.labourCardPersonalNo || ''}</span>
                     </div>
-                      <div class="compact-info-item">
+                    <div class="compact-info-item">
                         <span class="info-label">Passport No:</span>
                         <span class="info-value">${data.passportNumber || ''}</span>
                     </div>
-                      <div class="compact-info-item">
+                    <div class="compact-info-item">
                         <span class="info-label">Emirate ID:</span>
                         <span class="info-value">${data.emiratesId || ''}</span>
                     </div>
@@ -1791,12 +1796,22 @@ const generatePayslipHTML = (data: any): string => {
                             <td></td>
                             <td class="amount"></td>
                         </tr>
+                        ${regularOvertimeAmount > 0 ? `
                         <tr>
-                            <td>Overtime</td>
-                            <td class="amount">${overtime.toFixed(2)}</td>
+                            <td>Overtime (Mon-Sat)</td>
+                            <td class="amount">${regularOvertimeAmount.toFixed(2)}</td>
                             <td></td>
                             <td class="amount"></td>
                         </tr>
+                        ` : ''}
+                        ${sundayOvertimeAmount > 0 ? `
+                        <tr>
+                            <td style="color: #856404;">Overtime (Sunday)</td>
+                            <td class="amount" style="color: #856404;">${sundayOvertimeAmount.toFixed(2)}</td>
+                            <td></td>
+                            <td class="amount"></td>
+                        </tr>
+                        ` : ''}
                         ${sundayBonus > 0 ? `
                         <tr>
                             <td style="color: #856404; font-weight: 600;">Sunday Bonus</td>
@@ -1817,14 +1832,6 @@ const generatePayslipHTML = (data: any): string => {
                 </table>
                 
                 <div class="compact-summary">
-                    <div class="compact-summary-row">
-                        <span>Total Earnings</span>
-                        <span>${totalEarnings.toFixed(2)} AED</span>
-                    </div>
-                    <div class="compact-summary-row">
-                        <span>Total Deductions</span>
-                        <span>${totalDeductions.toFixed(2)} AED</span>
-                    </div>
                     <div class="compact-summary-row total">
                         <span>NET PAY</span>
                         <span style="color: #2c5aa0; font-weight: 800;">${net.toFixed(2)} AED</span>
@@ -1889,16 +1896,53 @@ const generatePayslipHTML = (data: any): string => {
                         <div class="summary-label">Hours</div>
                     </div>
                     
+                    ${regularOvertimeHours > 0 ? `
                     <div class="summary-card">
-                        <h4>Overtime Hours</h4>
-                        <div class="summary-value">${formatHours(totalOvertimeHoursFromAttendance)}</div>
+                        <h4>Overtime (Mon-Sat)</h4>
+                        <div class="summary-value">${formatHours(regularOvertimeHours)}</div>
                         <div class="summary-label">Hours</div>
                     </div>
+                    ` : `
+                    <div class="summary-card" style="opacity: 0.6;">
+                        <h4>Overtime (Mon-Sat)</h4>
+                        <div class="summary-value">0</div>
+                        <div class="summary-label">Hours</div>
+                    </div>
+                    `}
                     
+                    ${sundayOvertimeHours > 0 ? `
+                    <div class="summary-card" style="background-color: #fff9e6; border-color: #ffc107;">
+                        <h4 style="color: #856404;">Overtime (Sunday)</h4>
+                        <div class="summary-value" style="color: #856404;">${formatHours(sundayOvertimeHours)}</div>
+                        <div class="summary-label" style="color: #856404;">Hours</div>
+                    </div>
+                    ` : `
+                    <div class="summary-card" style="opacity: 0.6;">
+                        <h4>Overtime (Sunday)</h4>
+                        <div class="summary-value">0</div>
+                        <div class="summary-label">Hours</div>
+                    </div>
+                    `}
+                </div>
+                
+                <!-- Fourth Row for Total Hours and OT Rate -->
+                <div class="attendance-summary-grid" style="margin-top: 8px;">
                     <div class="summary-card" style="opacity: 0.7;">
                         <h4>Total Hours</h4>
                         <div class="summary-value">${formatHours(Number(totalRegularHours) + totalOvertimeHoursFromAttendance)}</div>
                         <div class="summary-label">Hours</div>
+                    </div>
+                    
+                    <div class="summary-card">
+                        <h4>Overtime Rate</h4>
+                        <div class="summary-value">${overtimeHourlyRate.toFixed(2)}</div>
+                        <div class="summary-label">AED/hour</div>
+                    </div>
+                    
+                    <div class="summary-card">
+                        <h4>Daily Rate</h4>
+                        <div class="summary-value">${dailyRate.toFixed(2)}</div>
+                        <div class="summary-label">AED/day</div>
                     </div>
                 </div>
             </div>
