@@ -628,6 +628,7 @@ const calculateAttendanceSummary = (attendances: any[], startDate: Date, endDate
   let absentDays = 0;
   let totalRegularHours = 0; // Mon-Sat actual hours
   let totalOvertimeHours = 0; // Mon-Sat overtime
+  let sundayWorkingHours = 0; // Sunday regular hours
   let sundayOvertimeHours = 0; // Sunday overtime
 
   // Process each attendance record
@@ -649,6 +650,7 @@ const calculateAttendanceSummary = (attendances: any[], startDate: Date, endDate
         // SUNDAY: Any hours = full day bonus
         if (regularHours > 0) {
           sundayWorkingDays++;
+          sundayWorkingHours += regularHours;
         }
         sundayOvertimeHours += overtime;
       } else {
@@ -662,9 +664,9 @@ const calculateAttendanceSummary = (attendances: any[], startDate: Date, endDate
     }
   });
 
-  // Calculate total hours for display
-  const totalHours = totalRegularHours + totalOvertimeHours;
-  const normalHours = totalRegularHours; // Hours without overtime
+  // Calculate total hours for display INCLUDING SUNDAY HOURS
+  const totalHours = totalRegularHours + totalOvertimeHours + sundayWorkingHours + sundayOvertimeHours;
+  const normalHours = totalRegularHours; // Hours without overtime (Mon-Sat only)
 
   return {
     workingDays: regularWorkedDays, // Mon-Sat worked days
@@ -681,6 +683,7 @@ const calculateAttendanceSummary = (attendances: any[], startDate: Date, endDate
     sundayWorkingDays,
     totalRegularHours: parseFloat(totalRegularHours.toFixed(2)),
     totalOvertimeHours: parseFloat(totalOvertimeHours.toFixed(2)),
+    sundayWorkingHours: parseFloat(sundayWorkingHours.toFixed(2)),
     sundayOvertimeHours: parseFloat(sundayOvertimeHours.toFixed(2))
   };
 };
