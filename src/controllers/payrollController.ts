@@ -1304,7 +1304,7 @@ const generatePayslipHTML = (data: any): string => {
   const attendanceRecords = data.attendanceDetails?.records || [];
 
   // Only show first 15-20 records to save space, or all if less than 20
-  const maxRecords = Math.min(attendanceRecords.length, 20);
+  const maxRecords = Math.min(attendanceRecords.length, 50);
   const displayedRecords = attendanceRecords.slice(0, maxRecords);
 
   const attendanceRows = displayedRecords
