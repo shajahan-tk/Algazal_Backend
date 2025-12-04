@@ -9,23 +9,24 @@ import { LPO } from "../models/lpoModel";
 import { Client } from "../models/clientModel";
 import ExcelJS from "exceljs";
 
-interface ProjectProfitData {
+export interface ProjectProfitData {
   projectName: string;
   clientName: string;
   lpoNumber: string;
-  workStartDate: Date | null;
-  workEndDate: Date | null;
+  workStartDate: string | null;
+  workEndDate: string | null;
   monthlyBudget: number;
   monthlyMaterialExpense: number;
   profit: number;
   attention: string;
-  grnStatus: string; // "Received" or "Not Received"
+  grnStatus: string;
   grnNumber?: string;
   projectId: string;
+  budgetPercentage: number; // NEW FIELD
+  totalQuotationAmount: number; // NEW FIELD
 }
-
 export const getProjectProfitReport = asyncHandler(async (req: Request, res: Response) => {
-  const { month, year, export: exportType, search } = req.query;
+  const { month, year, export: exportType, search, page = 1, limit = 10 } = req.query;
 
   if (!month || !year) {
     throw new ApiError(400, "Month and year are required");
@@ -33,6 +34,8 @@ export const getProjectProfitReport = asyncHandler(async (req: Request, res: Res
 
   const selectedMonth = parseInt(month as string);
   const selectedYear = parseInt(year as string);
+  const pageNumber = parseInt(page as string);
+  const limitNumber = parseInt(limit as string);
 
   if (selectedMonth < 1 || selectedMonth > 12) {
     throw new ApiError(400, "Invalid month. Must be between 1 and 12.");
@@ -42,28 +45,45 @@ export const getProjectProfitReport = asyncHandler(async (req: Request, res: Res
     throw new ApiError(400, "Invalid year. Must be between 2000 and 2100.");
   }
 
-  // Find all budgets that have allocations for the selected month
-  const budgets = await Budget.find({
+  // Build query for budgets
+  const budgetQuery: any = {
     "monthlyBudgets": {
       $elemMatch: {
         month: selectedMonth,
         year: selectedYear
       }
     }
-  })
+  };
+
+  // Find all budgets that have allocations for the selected month
+  const budgets = await Budget.find(budgetQuery)
     .populate("project", "projectName projectNumber workStartDate workEndDate attention grnNumber")
-    .populate("quotation", "netAmount");
+    .populate("quotation", "netAmount")
+    .populate({
+      path: "project",
+      populate: {
+        path: "client",
+        select: "clientName"
+      }
+    });
 
   if (!budgets.length) {
     return res.status(200).json(
-      new ApiResponse(200, [], "No projects found with budget allocation for the selected month")
+      new ApiResponse(200, {
+        data: [],
+        total: 0,
+        page: pageNumber,
+        limit: limitNumber,
+        totalPages: 0
+      }, "No projects found with budget allocation for the selected month")
     );
   }
 
-  const projectProfitData: ProjectProfitData[] = [];
+  const projectProfitData: any[] = [];
 
   for (const budget of budgets) {
     const project = budget.project as any;
+    const quotation = budget.quotation as any;
 
     // Get monthly budget allocation
     const monthlyBudgetAllocation = budget.monthlyBudgets.find(
@@ -73,8 +93,7 @@ export const getProjectProfitReport = asyncHandler(async (req: Request, res: Res
     if (!monthlyBudgetAllocation) continue;
 
     // Get client name
-    const projectWithClient = await Project.findById(project._id).populate("client", "clientName");
-    const clientName = (projectWithClient?.client as any)?.clientName || "N/A";
+    const clientName = project.client?.clientName || "N/A";
 
     // Get LPO number
     const lpo = await LPO.findOne({ project: project._id });
@@ -82,7 +101,7 @@ export const getProjectProfitReport = asyncHandler(async (req: Request, res: Res
 
     // Calculate monthly material expenses
     const startDate = new Date(selectedYear, selectedMonth - 1, 1);
-    const endDate = new Date(selectedYear, selectedMonth, 0, 23, 59, 59); // End of month
+    const endDate = new Date(selectedYear, selectedMonth, 0, 23, 59, 59);
 
     const expenses = await Expense.find({
       project: project._id,
@@ -109,6 +128,11 @@ export const getProjectProfitReport = asyncHandler(async (req: Request, res: Res
     const grnStatus = project.grnNumber ? "Received" : "Not Received";
     const grnNumber = project.grnNumber || undefined;
 
+    // Calculate budget percentage (monthly budget vs total quotation amount)
+    const budgetPercentage = quotation?.netAmount
+      ? (monthlyBudgetAllocation.allocatedAmount / quotation.netAmount) * 100
+      : 0;
+
     projectProfitData.push({
       projectName: project.projectName,
       clientName,
@@ -122,6 +146,8 @@ export const getProjectProfitReport = asyncHandler(async (req: Request, res: Res
       grnStatus,
       grnNumber,
       projectId: project._id,
+      budgetPercentage: parseFloat(budgetPercentage.toFixed(2)),
+      totalQuotationAmount: quotation?.netAmount || 0
     });
   }
 
@@ -137,18 +163,31 @@ export const getProjectProfitReport = asyncHandler(async (req: Request, res: Res
     );
   }
 
-  // If export is requested, generate Excel file
+  // Apply pagination
+  const total = filteredData.length;
+  const totalPages = Math.ceil(total / limitNumber);
+  const startIndex = (pageNumber - 1) * limitNumber;
+  const endIndex = Math.min(startIndex + limitNumber, total);
+  const paginatedData = filteredData.slice(startIndex, endIndex);
+
+  // If export is requested, generate Excel file (without pagination)
   if (exportType === 'excel') {
     return generateExcelReport(filteredData, selectedMonth, selectedYear, res);
   }
 
   return res.status(200).json(
-    new ApiResponse(200, filteredData, "Project profit report fetched successfully")
+    new ApiResponse(200, {
+      data: paginatedData,
+      total,
+      page: pageNumber,
+      limit: limitNumber,
+      totalPages
+    }, "Project profit report fetched successfully")
   );
 });
 
 const generateExcelReport = async (
-  data: ProjectProfitData[],
+  data: any[],
   month: number,
   year: number,
   res: Response
@@ -159,12 +198,12 @@ const generateExcelReport = async (
 
     // Add title
     const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
-    worksheet.mergeCells('A1:K1');
+    worksheet.mergeCells('A1:L1');
     worksheet.getCell('A1').value = `Project Profit Report - ${monthName} ${year}`;
     worksheet.getCell('A1').font = { size: 16, bold: true };
     worksheet.getCell('A1').alignment = { horizontal: 'center' };
 
-    // Add headers
+    // Add headers (added Budget Percentage column)
     const headers = [
       'Project Name',
       'Client Name',
@@ -174,6 +213,7 @@ const generateExcelReport = async (
       'Monthly Budget (AED)',
       'Material Expense (AED)',
       'Profit (AED)',
+      'Budget %',
       'Attention',
       'GRN Status',
       'GRN Number'
@@ -185,7 +225,7 @@ const generateExcelReport = async (
     headerRow.fill = {
       type: 'pattern',
       pattern: 'solid',
-      fgColor: { argb: 'FFE6E6FA' } // Light purple background
+      fgColor: { argb: 'FFE6E6FA' }
     };
     headerRow.border = {
       top: { style: 'thin' },
@@ -205,6 +245,7 @@ const generateExcelReport = async (
         item.monthlyBudget,
         item.monthlyMaterialExpense,
         item.profit,
+        `${item.budgetPercentage}%`,
         item.attention,
         item.grnStatus,
         item.grnNumber || 'N/A'
@@ -224,29 +265,48 @@ const generateExcelReport = async (
         profitCell.fill = {
           type: 'pattern',
           pattern: 'solid',
-          fgColor: { argb: 'FF90EE90' } // Light green for profit
+          fgColor: { argb: 'FF90EE90' }
         };
       } else if (item.profit < 0) {
         profitCell.fill = {
           type: 'pattern',
           pattern: 'solid',
-          fgColor: { argb: 'FFFFB6C1' } // Light red for loss
+          fgColor: { argb: 'FFFFB6C1' }
+        };
+      }
+
+      // Color code budget percentage
+      const budgetPercentageCell = row.getCell(9);
+      if (item.budgetPercentage > 100) {
+        // Budget exceeds quotation amount
+        budgetPercentageCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFFB6C1' }
+        };
+        budgetPercentageCell.font = { color: { argb: 'FFFF0000' } };
+      } else if (item.budgetPercentage > 80) {
+        // High percentage
+        budgetPercentageCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFFFFB5' }
         };
       }
 
       // Color code GRN status
-      const grnStatusCell = row.getCell(10); // GRN Status column
+      const grnStatusCell = row.getCell(11); // GRN Status column
       if (item.grnStatus === 'Received') {
         grnStatusCell.fill = {
           type: 'pattern',
           pattern: 'solid',
-          fgColor: { argb: 'FF90EE90' } // Light green for received
+          fgColor: { argb: 'FF90EE90' }
         };
       } else {
         grnStatusCell.fill = {
           type: 'pattern',
           pattern: 'solid',
-          fgColor: { argb: 'FFFFB6C1' } // Light red for not received
+          fgColor: { argb: 'FFFFB6C1' }
         };
       }
     });
@@ -280,6 +340,7 @@ const generateExcelReport = async (
       totalProfit,
       '',
       '',
+      '',
       ''
     ]);
 
@@ -287,7 +348,7 @@ const generateExcelReport = async (
     summaryRow.fill = {
       type: 'pattern',
       pattern: 'solid',
-      fgColor: { argb: 'FFFFE4B5' } // Light orange background
+      fgColor: { argb: 'FFFFE4B5' }
     };
 
     // Set response headers for file download
