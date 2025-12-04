@@ -11,7 +11,6 @@ import { Types } from "mongoose";
 import puppeteer from "puppeteer";
 import { VisaExpense } from "../models/visaExpenseModel";
 // Comprehensive salary calculation based on attendance
-// Comprehensive salary calculation based on attendance
 export const calculateSalaryBasedOnAttendance = async (
   userId: Types.ObjectId,
   basicSalary: number,
@@ -36,65 +35,63 @@ export const calculateSalaryBasedOnAttendance = async (
       date: { $gte: startDate, $lte: endDate }
     });
 
-    // Initialize counters
+    // ✅ Initialize counters (MUST MATCH monthly attendance view)
     let regularWorkedDays = 0; // Mon-Sat days with ANY hours worked
     let sundayWorkingDays = 0; // Sundays worked (any hours = full bonus)
     let paidLeaveDays = 0;
     let absentDays = 0;
-    let totalRegularHours = 0; // For tracking only (Mon-Sat)
-    let totalOvertimeHours = 0; // Overtime hours (Mon-Sat)
+    let totalRegularHours = 0; // Mon-Sat actual working hours (excluding overtime)
+    let totalOvertimeHours = 0; // Mon-Sat overtime hours
     let sundayOvertimeHours = 0; // Sunday overtime hours
 
     // Count Sundays in the month
     let totalSundays = 0;
     let currentDate = new Date(startDate);
     while (currentDate <= endDate) {
-      if (currentDate.getDay() === 0) { // Sunday
+      if (currentDate.getDay() === 0) {
         totalSundays++;
       }
       currentDate.setDate(currentDate.getDate() + 1);
     }
 
-    // Process each attendance record
+    // ✅ Process each attendance record (CONSISTENT LOGIC)
     attendances.forEach(att => {
       const date = new Date(att.date);
       const isSunday = date.getDay() === 0;
 
       if (att.isPaidLeave) {
-        // PAID LEAVE: Count as paid leave day, but NOT as worked day and NO bonus
+        // ✅ PAID LEAVE: Count as paid leave day, NOT as worked day, NO salary, NO bonus
         paidLeaveDays++;
 
-        // For paid leave on Sunday: NOT counted as Sunday bonus (no bonus for paid leave)
-        if (isSunday) {
-          // Sunday paid leave is just counted as paid leave, NOT as Sunday working day
-        }
-        // For paid leave on Mon-Sat: NOT counted as worked day
+        // Paid leave is NEVER counted as worked day or Sunday bonus
+        // This is the KEY FIX - paid leave gets NO pay at all
       } else if (!att.present) {
-        // ABSENT: Not paid
+        // ✅ ABSENT: Not paid
         absentDays++;
       } else if (att.present) {
-        // PRESENT AND WORKED
-        const regularHours = att.workingHours || 0;
+        // ✅ PRESENT AND WORKED
+        const workingHours = att.workingHours || 0;
         const overtime = att.overtimeHours || 0;
 
         if (isSunday) {
-          // SUNDAY: Any hours worked = full day bonus
-          if (regularHours > 0) {
+          // ✅ SUNDAY: Any hours worked = full day bonus
+          if (workingHours > 0) {
             sundayWorkingDays++;
           }
           sundayOvertimeHours += overtime;
         } else {
-          // REGULAR DAY (Mon-Sat): ANY hours worked = full day pay
-          if (regularHours > 0) {
+          // ✅ MON-SAT: ANY hours worked = full day pay
+          if (workingHours > 0) {
             regularWorkedDays++;
-            totalRegularHours += regularHours;
+            // Track actual hours for display (this is the working hours INCLUDING overtime)
+            totalRegularHours += workingHours;
             totalOvertimeHours += overtime;
           }
         }
       }
     });
 
-    // CALCULATION FORMULAS:
+    // ✅ CALCULATION FORMULAS (Same as before, but clearer)
     // 1. Daily Rate for base salary: (Basic + Allowance) ÷ ALL days in month
     const totalMonthlySalary = basicSalary + allowance;
     const dailyRate = daysInMonth > 0 ? totalMonthlySalary / daysInMonth : 0;
@@ -102,38 +99,38 @@ export const calculateSalaryBasedOnAttendance = async (
     // 2. Overtime Hourly Rate: Basic salary ÷ ALL days ÷ 10 hours per day
     const overtimeHourlyRate = daysInMonth > 0 ? basicSalary / daysInMonth / 10 : 0;
 
-    console.log('Salary Calculation Details:', {
+    console.log('✅ FIXED Salary Calculation Details:', {
       totalMonthDays: daysInMonth,
       totalSundays,
-      paidLeaveDays,
-      absentDays,
-      regularWorkedDays,
-      sundayWorkingDays,
-      totalRegularHours,
-      totalOvertimeHours,
-      sundayOvertimeHours,
+      paidLeaveDays: paidLeaveDays + ' (NO PAY, NO BONUS)',
+      absentDays: absentDays + ' (NO PAY)',
+      regularWorkedDays: regularWorkedDays + ' (Mon-Sat with hours)',
+      sundayWorkingDays: sundayWorkingDays + ' (Sundays with hours)',
+      totalRegularHours: totalRegularHours + ' (Mon-Sat total hours)',
+      totalOvertimeHours: totalOvertimeHours + ' (Mon-Sat overtime)',
+      sundayOvertimeHours: sundayOvertimeHours + ' (Sunday overtime)',
       dailyRate: dailyRate.toFixed(2),
       overtimeHourlyRate: overtimeHourlyRate.toFixed(2),
       totalMonthlySalary: totalMonthlySalary.toFixed(2)
     });
 
-    // Calculate BASE SALARY (Mon-Sat only): Worked days × Daily rate
+    // ✅ Calculate BASE SALARY (Mon-Sat only): Worked days × Daily rate
     const baseSalaryAmount = regularWorkedDays * dailyRate;
 
-    // Calculate REGULAR OVERTIME (Mon-Sat only)
+    // ✅ Calculate REGULAR OVERTIME (Mon-Sat only)
     const regularOvertimeAmount = totalOvertimeHours * overtimeHourlyRate;
 
-    // Calculate SUNDAY BONUS: Full daily rate for each Sunday worked (any hours)
+    // ✅ Calculate SUNDAY BONUS: Full daily rate for each Sunday worked
     // IMPORTANT: Paid leave on Sunday gets NO bonus
     const sundayBonus = sundayWorkingDays * dailyRate;
 
-    // Calculate SUNDAY OVERTIME (if any, same rate as regular overtime)
+    // ✅ Calculate SUNDAY OVERTIME
     const sundayOvertimeAmount = sundayOvertimeHours * overtimeHourlyRate;
 
-    // Total overtime = Regular overtime + Sunday overtime
+    // ✅ Total overtime = Regular overtime + Sunday overtime
     const totalOvertimeAmount = regularOvertimeAmount + sundayOvertimeAmount;
 
-    // Total earnings = Base salary (Mon-Sat) + All overtime + Sunday bonus
+    // ✅ Total earnings = Base salary (Mon-Sat) + All overtime + Sunday bonus
     const totalEarnings = baseSalaryAmount + totalOvertimeAmount + sundayBonus;
 
     return {
@@ -144,13 +141,13 @@ export const calculateSalaryBasedOnAttendance = async (
       attendanceSummary: {
         totalMonthDays: daysInMonth,
         totalSundays,
-        paidLeaveDays,
-        absentDays,
-        regularWorkedDays,
-        sundayWorkingDays,
-        totalRegularHours,
-        totalOvertimeHours,
-        sundayOvertimeHours
+        paidLeaveDays, // These days get NO PAY and NO BONUS
+        absentDays, // These days get NO PAY
+        regularWorkedDays, // Mon-Sat with hours = Full day pay
+        sundayWorkingDays, // Sundays with hours = Full day bonus
+        totalRegularHours, // Total hours worked Mon-Sat (for display)
+        totalOvertimeHours, // Overtime hours Mon-Sat
+        sundayOvertimeHours // Overtime hours Sunday
       },
       rates: {
         dailyRate: Math.round(dailyRate * 100) / 100,
@@ -161,13 +158,13 @@ export const calculateSalaryBasedOnAttendance = async (
           days: regularWorkedDays,
           dailyRate: Math.round(dailyRate * 100) / 100,
           amount: Math.round(baseSalaryAmount * 100) / 100,
-          rule: "Any hours worked Mon-Sat = Full day pay"
+          rule: "Any hours worked Mon-Sat = Full day pay (Paid leave excluded)"
         },
         sundayBonus: {
           days: sundayWorkingDays,
           dailyRate: Math.round(dailyRate * 100) / 100,
           amount: Math.round(sundayBonus * 100) / 100,
-          rule: "Any hours worked on Sunday = Full day bonus (Paid leave = No bonus)"
+          rule: "Any hours worked on Sunday = Full day bonus (Paid leave excluded)"
         },
         regularOvertime: {
           hours: totalOvertimeHours,
@@ -179,7 +176,8 @@ export const calculateSalaryBasedOnAttendance = async (
           rate: Math.round(overtimeHourlyRate * 100) / 100,
           amount: Math.round(sundayOvertimeAmount * 100) / 100
         }
-      }
+      },
+      period
     };
 
   } catch (error) {
@@ -205,11 +203,22 @@ export const calculateSalaryBasedOnAttendance = async (
         overtimeHourlyRate: 0
       },
       calculationBreakdown: {
-        monSatBaseSalary: { days: 0, dailyRate: 0, amount: 0, rule: "Any hours worked Mon-Sat = Full day pay" },
-        sundayBonus: { days: 0, dailyRate: 0, amount: 0, rule: "Any hours worked on Sunday = Full day bonus (Paid leave = No bonus)" },
+        monSatBaseSalary: {
+          days: 0,
+          dailyRate: 0,
+          amount: 0,
+          rule: "Any hours worked Mon-Sat = Full day pay (Paid leave excluded)"
+        },
+        sundayBonus: {
+          days: 0,
+          dailyRate: 0,
+          amount: 0,
+          rule: "Any hours worked on Sunday = Full day bonus (Paid leave excluded)"
+        },
         regularOvertime: { hours: 0, rate: 0, amount: 0 },
         sundayOvertime: { hours: 0, rate: 0, amount: 0 }
-      }
+      },
+      period: ''
     };
   }
 };

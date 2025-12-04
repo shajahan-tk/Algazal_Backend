@@ -608,6 +608,84 @@ export const getNormalMonthlyAttendance = asyncHandler(
 );
 
 // Get user's monthly attendance by type
+const calculateAttendanceSummary = (attendances: any[], startDate: Date, endDate: Date) => {
+  const daysInMonth = endDate.getDate();
+
+  // Count Sundays in the month
+  let totalSundays = 0;
+  let currentDate = new Date(startDate);
+  while (currentDate <= endDate) {
+    if (currentDate.getDay() === 0) {
+      totalSundays++;
+    }
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+
+  // Initialize counters
+  let regularWorkedDays = 0; // Mon-Sat with ANY hours
+  let sundayWorkingDays = 0; // Sundays with ANY hours
+  let paidLeaveDays = 0;
+  let absentDays = 0;
+  let totalRegularHours = 0; // Mon-Sat actual hours
+  let totalOvertimeHours = 0; // Mon-Sat overtime
+  let sundayOvertimeHours = 0; // Sunday overtime
+
+  // Process each attendance record
+  attendances.forEach(att => {
+    const date = new Date(att.date);
+    const isSunday = date.getDay() === 0;
+
+    if (att.isPaidLeave) {
+      // PAID LEAVE: Not counted as worked day, NO bonus
+      paidLeaveDays++;
+    } else if (!att.present) {
+      // ABSENT: Not paid
+      absentDays++;
+    } else if (att.present) {
+      const regularHours = att.workingHours || 0;
+      const overtime = att.overtimeHours || 0;
+
+      if (isSunday) {
+        // SUNDAY: Any hours = full day bonus
+        if (regularHours > 0) {
+          sundayWorkingDays++;
+        }
+        sundayOvertimeHours += overtime;
+      } else {
+        // MON-SAT: Any hours = full day pay
+        if (regularHours > 0) {
+          regularWorkedDays++;
+          totalRegularHours += regularHours;
+          totalOvertimeHours += overtime;
+        }
+      }
+    }
+  });
+
+  // Calculate total hours for display
+  const totalHours = totalRegularHours + totalOvertimeHours;
+  const normalHours = totalRegularHours; // Hours without overtime
+
+  return {
+    workingDays: regularWorkedDays, // Mon-Sat worked days
+    normalHours: parseFloat(normalHours.toFixed(2)),
+    overtimeHours: parseFloat(totalOvertimeHours.toFixed(2)),
+    totalHours: parseFloat(totalHours.toFixed(2)),
+
+    // Extended details
+    totalMonthDays: daysInMonth,
+    totalSundays,
+    paidLeaveDays,
+    absentDays,
+    regularWorkedDays,
+    sundayWorkingDays,
+    totalRegularHours: parseFloat(totalRegularHours.toFixed(2)),
+    totalOvertimeHours: parseFloat(totalOvertimeHours.toFixed(2)),
+    sundayOvertimeHours: parseFloat(sundayOvertimeHours.toFixed(2))
+  };
+};
+
+// Get user's monthly attendance by type (FIXED)
 export const getUserMonthlyAttendanceByType = asyncHandler(
   async (req: Request, res: Response) => {
     const { userId } = req.params;
@@ -651,27 +729,8 @@ export const getUserMonthlyAttendanceByType = asyncHandler(
       .populate("projects.project", "projectName")
       .populate("project", "projectName");
 
-    // Calculate simple totals
-    let totalWorkingDays = 0;
-    let totalNormalHours = 0;
-    let totalOvertimeHours = 0;
-    let totalHours = 0;
-
-    attendance.forEach((a) => {
-      if (a.present) {
-        totalWorkingDays++;
-        totalHours += a.workingHours;
-        totalOvertimeHours += a.overtimeHours;
-        totalNormalHours += Math.max(0, a.workingHours - a.overtimeHours);
-      }
-    });
-
-    const totals = {
-      workingDays: totalWorkingDays,
-      normalHours: parseFloat(totalNormalHours.toFixed(2)),
-      overtimeHours: parseFloat(totalOvertimeHours.toFixed(2)),
-      totalHours: parseFloat(totalHours.toFixed(2))
-    };
+    // Use consistent calculation
+    const totals = calculateAttendanceSummary(attendance, startDate, endDate);
 
     res.status(200).json(
       new ApiResponse(
@@ -688,3 +747,6 @@ export const getUserMonthlyAttendanceByType = asyncHandler(
     );
   }
 );
+
+// Export the helper function for use in other controllers
+export { calculateAttendanceSummary };
