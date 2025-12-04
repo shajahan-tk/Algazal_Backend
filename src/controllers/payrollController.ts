@@ -1731,6 +1731,14 @@ const generatePayslipHTML = (data: any): string => {
                         <span class="info-label">Labour Card Personal No:</span>
                         <span class="info-value">${data.labourCardPersonalNo || ''}</span>
                     </div>
+                      <div class="compact-info-item">
+                        <span class="info-label">Passport No:</span>
+                        <span class="info-value">${data.passportNumber || ''}</span>
+                    </div>
+                      <div class="compact-info-item">
+                        <span class="info-label">Emirate ID:</span>
+                        <span class="info-value">${data.emiratesId || ''}</span>
+                    </div>
                 </div>
             </div>
             
