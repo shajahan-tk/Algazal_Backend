@@ -1290,6 +1290,7 @@ export const generatePayslipPDF = asyncHandler(async (req: Request, res: Respons
 
 
 // Helper function to generate HTML for payslip
+// Helper function to generate HTML for payslip
 const generatePayslipHTML = (data: any): string => {
   const calculationDetails = data.calculationDetails || {};
   const rates = calculationDetails.rates || {};
@@ -1703,23 +1704,60 @@ const generatePayslipHTML = (data: any): string => {
             font-weight: 600;
         }
 
-        .calculation-summary {
-            background: #f0f8ff;
-            padding: 6px;
-            border-radius: 3px;
+        /* OLD STYLE CALCULATION DETAILS */
+        .old-calculation-details {
+            background: #f8f9fa;
+            padding: 8px;
+            border-radius: 4px;
             margin: 6px 0;
-            border: 1px solid #b8daff;
+            border: 1px solid #dee2e6;
         }
         
-        .calculation-row {
+        .old-calculation-title {
+            font-size: 9pt;
+            font-weight: bold;
+            color: #2c5aa0;
+            margin-bottom: 6px;
+            text-align: center;
+            text-transform: uppercase;
+        }
+        
+        .old-calculation-row {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 2px;
+            margin-bottom: 3px;
+            padding-bottom: 3px;
+            border-bottom: 1px dotted #ced4da;
             font-size: 8pt;
         }
         
-        .calculation-row strong {
-            color: #2c5aa0;
+        .old-calculation-row:last-child {
+            border-bottom: none;
+        }
+        
+        .old-calculation-label {
+            color: #495057;
+            font-weight: 500;
+        }
+        
+        .old-calculation-value {
+            color: #212529;
+            font-weight: 600;
+            text-align: right;
+        }
+        
+        .old-calculation-section {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #dee2e6;
+        }
+        
+        .old-calculation-section-title {
+            font-size: 8pt;
+            font-weight: bold;
+            color: #495057;
+            margin-bottom: 4px;
+            text-transform: uppercase;
         }
 
         @media print {
@@ -1793,40 +1831,139 @@ const generatePayslipHTML = (data: any): string => {
                 </div>
             </div>
 
-            <!-- Salary Calculation Summary -->
+            <!-- OLD STYLE CALCULATION DETAILS SECTION -->
             <div class="section">
-                <div class="section-title">Salary Calculation Summary</div>
-                <div class="calculation-summary">
-                    <div class="calculation-row">
-                        <strong>Total Monthly Salary:</strong>
-                        <span>AED ${(basicSalary + allowance).toFixed(2)} (Basic: ${basicSalary.toFixed(2)} + Allowance: ${allowance.toFixed(2)})</span>
+                <div class="section-title">Salary Calculation Details</div>
+                <div class="old-calculation-details">
+                    <div class="old-calculation-title">Monthly Salary Calculation</div>
+                    
+                    <!-- Basic Salary Calculation -->
+                    <div class="old-calculation-section">
+                        <div class="old-calculation-section-title">Base Salary Calculation</div>
+                        <div class="old-calculation-row">
+                            <span class="old-calculation-label">Basic Salary:</span>
+                            <span class="old-calculation-value">AED ${basicSalary.toFixed(2)}</span>
+                        </div>
+                        <div class="old-calculation-row">
+                            <span class="old-calculation-label">Allowance:</span>
+                            <span class="old-calculation-value">AED ${allowance.toFixed(2)}</span>
+                        </div>
+                        <div class="old-calculation-row">
+                            <span class="old-calculation-label">Total Monthly Salary:</span>
+                            <span class="old-calculation-value">AED ${(basicSalary + allowance).toFixed(2)}</span>
+                        </div>
+                        <div class="old-calculation-row">
+                            <span class="old-calculation-label">Days in Month:</span>
+                            <span class="old-calculation-value">${totalMonthDays} days</span>
+                        </div>
+                        <div class="old-calculation-row">
+                            <span class="old-calculation-label">Daily Rate:</span>
+                            <span class="old-calculation-value">AED ${dailyRate.toFixed(2)} (${(basicSalary + allowance).toFixed(2)} ÷ ${totalMonthDays})</span>
+                        </div>
                     </div>
-                    <div class="calculation-row">
-                        <strong>Daily Rate:</strong>
-                        <span>AED ${dailyRate.toFixed(2)} (${(basicSalary + allowance).toFixed(2)} ÷ ${totalMonthDays} days)</span>
+                    
+                    <!-- Overtime Calculation -->
+                    <div class="old-calculation-section">
+                        <div class="old-calculation-section-title">Overtime Calculation</div>
+                        <div class="old-calculation-row">
+                            <span class="old-calculation-label">Overtime Hourly Rate:</span>
+                            <span class="old-calculation-value">AED ${overtimeHourlyRate.toFixed(2)} (Basic ${basicSalary.toFixed(2)} ÷ ${totalMonthDays} ÷ 10)</span>
+                        </div>
+                        ${totalOvertimeHours > 0 ? `
+                        <div class="old-calculation-row">
+                            <span class="old-calculation-label">Total Overtime Hours:</span>
+                            <span class="old-calculation-value">${formatHours(totalOvertimeHours)} hours</span>
+                        </div>
+                        <div class="old-calculation-row">
+                            <span class="old-calculation-label">Overtime Amount:</span>
+                            <span class="old-calculation-value">AED ${overtime.toFixed(2)} (${formatHours(totalOvertimeHours)} × ${overtimeHourlyRate.toFixed(2)})</span>
+                        </div>
+                        ` : ''}
                     </div>
-                    <div class="calculation-row">
-                        <strong>Overtime Rate:</strong>
-                        <span>AED ${overtimeHourlyRate.toFixed(2)}/hour (Basic ${basicSalary.toFixed(2)} ÷ ${totalMonthDays} ÷ 10)</span>
-                    </div>
+                    
+                    <!-- Sunday Bonus Calculation -->
                     ${sundayBonus > 0 ? `
-                    <div class="calculation-row">
-                        <strong>Sunday Bonus:</strong>
-                        <span style="color: #856404;">AED ${sundayBonus.toFixed(2)} (${sundayWorkingDays} days × ${dailyRate.toFixed(2)})</span>
+                    <div class="old-calculation-section">
+                        <div class="old-calculation-section-title">Sunday Bonus Calculation</div>
+                        <div class="old-calculation-row">
+                            <span class="old-calculation-label">Sundays Worked:</span>
+                            <span class="old-calculation-value">${sundayWorkingDays} days</span>
+                        </div>
+                        <div class="old-calculation-row">
+                            <span class="old-calculation-label">Daily Rate:</span>
+                            <span class="old-calculation-value">AED ${dailyRate.toFixed(2)}</span>
+                        </div>
+                        <div class="old-calculation-row">
+                            <span class="old-calculation-label">Sunday Bonus Amount:</span>
+                            <span class="old-calculation-value" style="color: #856404;">AED ${sundayBonus.toFixed(2)} (${sundayWorkingDays} × ${dailyRate.toFixed(2)})</span>
+                        </div>
                     </div>
                     ` : ''}
+                    
+                    <!-- Absent Deduction Calculation -->
                     ${absentDeduction > 0 ? `
-                    <div class="calculation-row">
-                        <strong>Absent Deduction:</strong>
-                        <span style="color: #721c24;">AED ${absentDeduction.toFixed(2)} (${absentDays} days × ${dailyRate.toFixed(2)})</span>
+                    <div class="old-calculation-section">
+                        <div class="old-calculation-section-title">Absent Deduction Calculation</div>
+                        <div class="old-calculation-row">
+                            <span class="old-calculation-label">Absent Days:</span>
+                            <span class="old-calculation-value">${absentDays} days</span>
+                        </div>
+                        <div class="old-calculation-row">
+                            <span class="old-calculation-label">Daily Rate:</span>
+                            <span class="old-calculation-value">AED ${dailyRate.toFixed(2)}</span>
+                        </div>
+                        <div class="old-calculation-row">
+                            <span class="old-calculation-label">Absent Deduction Amount:</span>
+                            <span class="old-calculation-value" style="color: #721c24;">AED ${absentDeduction.toFixed(2)} (${absentDays} × ${dailyRate.toFixed(2)})</span>
+                        </div>
                     </div>
                     ` : ''}
-                    ${totalOvertimeHours > 0 ? `
-                    <div class="calculation-row">
-                        <strong>Overtime Hours:</strong>
-                        <span>${formatHours(totalOvertimeHours)} hours × ${overtimeHourlyRate.toFixed(2)} = AED ${overtime.toFixed(2)}</span>
+                    
+                    <!-- Paid Leave Information -->
+                    ${paidLeaveDays > 0 ? `
+                    <div class="old-calculation-section">
+                        <div class="old-calculation-section-title">Paid Leave Information</div>
+                        <div class="old-calculation-row">
+                            <span class="old-calculation-label">Paid Leave Days:</span>
+                            <span class="old-calculation-value" style="color: #0c5460;">${paidLeaveDays} days</span>
+                        </div>
+                        <div class="old-calculation-row">
+                            <span class="old-calculation-label">Note:</span>
+                            <span class="old-calculation-value" style="color: #0c5460;">No pay, no bonus, no deduction</span>
+                        </div>
                     </div>
                     ` : ''}
+                    
+                    <!-- Final Calculation -->
+                    <div class="old-calculation-section">
+                        <div class="old-calculation-section-title">Final Calculation</div>
+                        <div class="old-calculation-row">
+                            <span class="old-calculation-label">Base Monthly Salary:</span>
+                            <span class="old-calculation-value">AED ${(basicSalary + allowance).toFixed(2)}</span>
+                        </div>
+                        ${sundayBonus > 0 ? `
+                        <div class="old-calculation-row">
+                            <span class="old-calculation-label">Add: Sunday Bonus:</span>
+                            <span class="old-calculation-value" style="color: #856404;">+ AED ${sundayBonus.toFixed(2)}</span>
+                        </div>
+                        ` : ''}
+                        ${overtime > 0 ? `
+                        <div class="old-calculation-row">
+                            <span class="old-calculation-label">Add: Overtime:</span>
+                            <span class="old-calculation-value">+ AED ${overtime.toFixed(2)}</span>
+                        </div>
+                        ` : ''}
+                        ${absentDeduction > 0 ? `
+                        <div class="old-calculation-row">
+                            <span class="old-calculation-label">Less: Absent Deduction:</span>
+                            <span class="old-calculation-value" style="color: #721c24;">- AED ${absentDeduction.toFixed(2)}</span>
+                        </div>
+                        ` : ''}
+                        <div class="old-calculation-row">
+                            <span class="old-calculation-label">Total from Attendance:</span>
+                            <span class="old-calculation-value" style="font-weight: 800;">AED ${((basicSalary + allowance) + sundayBonus + overtime - absentDeduction).toFixed(2)}</span>
+                        </div>
+                    </div>
                 </div>
             </div>
             
