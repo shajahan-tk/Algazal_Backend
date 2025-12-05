@@ -25,6 +25,7 @@ export interface ProjectProfitData {
   budgetPercentage: number; // NEW FIELD
   totalQuotationAmount: number; // NEW FIELD
 }
+
 export const getProjectProfitReport = asyncHandler(async (req: Request, res: Response) => {
   const { month, year, export: exportType, search, page = 1, limit = 10 } = req.query;
 
