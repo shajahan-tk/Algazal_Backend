@@ -75,7 +75,13 @@ export const getProjectProfitReport = asyncHandler(async (req: Request, res: Res
         total: 0,
         page: pageNumber,
         limit: limitNumber,
-        totalPages: 0
+        totalPages: 0,
+        summary: {
+          totalBudget: 0,
+          totalExpense: 0,
+          totalProfit: 0,
+          totalProjects: 0
+        }
       }, "No projects found with budget allocation for the selected month")
     );
   }
@@ -152,6 +158,14 @@ export const getProjectProfitReport = asyncHandler(async (req: Request, res: Res
     });
   }
 
+  // Calculate TOTAL SUMMARY for the entire month (before filtering/pagination)
+  const totalMonthSummary = {
+    totalBudget: projectProfitData.reduce((sum, item) => sum + item.monthlyBudget, 0),
+    totalExpense: projectProfitData.reduce((sum, item) => sum + item.monthlyMaterialExpense, 0),
+    totalProfit: projectProfitData.reduce((sum, item) => sum + item.profit, 0),
+    totalProjects: projectProfitData.length
+  };
+
   // Apply search filter if search term is provided
   let filteredData = projectProfitData;
   if (search && typeof search === 'string' && search.trim() !== '') {
@@ -171,9 +185,17 @@ export const getProjectProfitReport = asyncHandler(async (req: Request, res: Res
   const endIndex = Math.min(startIndex + limitNumber, total);
   const paginatedData = filteredData.slice(startIndex, endIndex);
 
+  // Calculate CURRENT PAGE SUMMARY (optional - if you want both)
+  const currentPageSummary = {
+    pageBudget: paginatedData.reduce((sum, item) => sum + item.monthlyBudget, 0),
+    pageExpense: paginatedData.reduce((sum, item) => sum + item.monthlyMaterialExpense, 0),
+    pageProfit: paginatedData.reduce((sum, item) => sum + item.profit, 0),
+    pageProjects: paginatedData.length
+  };
+
   // If export is requested, generate Excel file (without pagination)
   if (exportType === 'excel') {
-    return generateExcelReport(filteredData, selectedMonth, selectedYear, res);
+    return generateExcelReport(filteredData, selectedMonth, selectedYear, totalMonthSummary, res);
   }
 
   return res.status(200).json(
@@ -182,7 +204,16 @@ export const getProjectProfitReport = asyncHandler(async (req: Request, res: Res
       total,
       page: pageNumber,
       limit: limitNumber,
-      totalPages
+      totalPages,
+      summary: {
+        // Return the ENTIRE MONTH summary
+        totalBudget: totalMonthSummary.totalBudget,
+        totalExpense: totalMonthSummary.totalExpense,
+        totalProfit: totalMonthSummary.totalProfit,
+        totalProjects: totalMonthSummary.totalProjects,
+        // Also include page summary if needed
+        pageSummary: currentPageSummary
+      }
     }, "Project profit report fetched successfully")
   );
 });
@@ -191,6 +222,7 @@ const generateExcelReport = async (
   data: any[],
   month: number,
   year: number,
+  summary: { totalBudget: number; totalExpense: number; totalProfit: number; totalProjects: number },
   res: Response
 ) => {
   try {
@@ -199,10 +231,21 @@ const generateExcelReport = async (
 
     // Add title
     const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
-    worksheet.mergeCells('A1:L1');
+    worksheet.mergeCells('A1:M1');
     worksheet.getCell('A1').value = `Project Profit Report - ${monthName} ${year}`;
     worksheet.getCell('A1').font = { size: 16, bold: true };
     worksheet.getCell('A1').alignment = { horizontal: 'center' };
+
+    // Add summary row at the top
+    worksheet.mergeCells('A2:M2');
+    worksheet.getCell('A2').value = `Total Projects: ${summary.totalProjects} | Total Budget: AED ${summary.totalBudget.toFixed(2)} | Total Expense: AED ${summary.totalExpense.toFixed(2)} | Total Profit: AED ${summary.totalProfit.toFixed(2)}`;
+    worksheet.getCell('A2').font = { bold: true };
+    worksheet.getCell('A2').fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFFFE4B5' }
+    };
+    worksheet.getCell('A2').alignment = { horizontal: 'center' };
 
     // Add headers (added Budget Percentage column)
     const headers = [
@@ -220,7 +263,7 @@ const generateExcelReport = async (
       'GRN Number'
     ];
 
-    // Add header row
+    // Add header row (starting from row 3)
     const headerRow = worksheet.addRow(headers);
     headerRow.font = { bold: true };
     headerRow.fill = {
@@ -324,32 +367,29 @@ const generateExcelReport = async (
       column.width = Math.min(Math.max(maxLength + 2, 10), 50);
     });
 
-    // Add summary row
-    const totalBudget = data.reduce((sum, item) => sum + item.monthlyBudget, 0);
-    const totalExpense = data.reduce((sum, item) => sum + item.monthlyMaterialExpense, 0);
-    const totalProfit = data.reduce((sum, item) => sum + item.profit, 0);
-
+    // Add grand total row at the bottom
+    const lastRow = worksheet.rowCount + 1;
     worksheet.addRow([]); // Empty row
-    const summaryRow = worksheet.addRow([
-      'TOTAL',
+    const totalRow = worksheet.addRow([
+      'GRAND TOTAL',
       '',
       '',
       '',
       '',
-      totalBudget,
-      totalExpense,
-      totalProfit,
+      summary.totalBudget,
+      summary.totalExpense,
+      summary.totalProfit,
       '',
       '',
       '',
       ''
     ]);
 
-    summaryRow.font = { bold: true };
-    summaryRow.fill = {
+    totalRow.font = { bold: true };
+    totalRow.fill = {
       type: 'pattern',
       pattern: 'solid',
-      fgColor: { argb: 'FFFFE4B5' }
+      fgColor: { argb: 'FFFFA07A' }
     };
 
     // Set response headers for file download
