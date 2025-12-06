@@ -542,18 +542,55 @@ export const getPayroll = asyncHandler(async (req: Request, res: Response) => {
 
 // Get all payroll records
 export const getPayrolls = asyncHandler(async (req: Request, res: Response) => {
-  const { employee, labourCard, labourCardPersonalNo, startDate, endDate, month, year, page = 1, limit = 10 } = req.query;
+  const { employee, labourCard, labourCardPersonalNo, startDate, endDate, month, year, page = 1, limit = 10, search } = req.query;
   const skip = (Number(page) - 1) * Number(limit);
 
   interface PayrollFilter {
-    employee?: Types.ObjectId | string;
+    employee?: any;
     labourCard?: string;
     labourCardPersonalNo?: string;
     createdAt?: { $gte?: Date; $lte?: Date };
   }
 
   const filter: PayrollFilter = {};
-  if (employee) filter.employee = new Types.ObjectId(employee as string);
+
+  // Handle search by employee name
+  if (search) {
+    const searchRegex = new RegExp(search as string, 'i'); // Case-insensitive search
+    const users = await User.find({
+      $or: [
+        { firstName: { $regex: searchRegex } },
+        { lastName: { $regex: searchRegex } }
+      ]
+    }).select('_id');
+
+    if (users.length > 0) {
+      filter.employee = { $in: users.map(user => user._id) };
+    } else {
+      // If no users match the search, return empty results
+      return res.status(200).json(
+        new ApiResponse(
+          200,
+          {
+            payrolls: [],
+            pagination: {
+              total: 0,
+              page: Number(page),
+              limit: Number(limit),
+              totalPages: 0,
+              hasNextPage: false,
+              hasPreviousPage: false,
+            },
+          },
+          "No payrolls found matching the search criteria"
+        )
+      );
+    }
+  } else {
+    // Only apply these filters if not searching by name
+    if (employee) filter.employee = new Types.ObjectId(employee as string);
+  }
+
   if (labourCard) filter.labourCard = labourCard as string;
   if (labourCardPersonalNo) filter.labourCardPersonalNo = labourCardPersonalNo as string;
 
