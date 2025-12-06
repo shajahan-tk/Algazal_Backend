@@ -1029,8 +1029,6 @@ export const getPayslipData = asyncHandler(async (req: Request, res: Response) =
 });
 
 // Export payrolls to Excel
-// Export payrolls to Excel
-// Export payrolls to Excel
 export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Response) => {
   const { month, year, search, employee, period, labourCard, startDate, endDate } = req.query;
 
@@ -1298,8 +1296,8 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
 
   // Row 1: Prepared By: Meena S
   const preparedRow = signatureStartRow;
-  worksheet.mergeCells(`A${preparedRow}:C${preparedRow}`);
-  worksheet.mergeCells(`D${preparedRow}:H${preparedRow}`);
+  worksheet.mergeCells(`A${preparedRow}:B${preparedRow}`);
+  worksheet.mergeCells(`C${preparedRow}:D${preparedRow}`);
 
   const preparedKeyCell = worksheet.getCell(`A${preparedRow}`);
   preparedKeyCell.value = 'Prepared By:';
@@ -1312,7 +1310,7 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     right: { style: 'thin' }
   };
 
-  const preparedValueCell = worksheet.getCell(`D${preparedRow}`);
+  const preparedValueCell = worksheet.getCell(`C${preparedRow}`);
   preparedValueCell.value = 'Meena S';
   preparedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
   preparedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
@@ -1325,8 +1323,8 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
 
   // Row 2: Verified By: Syed Ibrahim
   const verifiedRow = signatureStartRow + 1;
-  worksheet.mergeCells(`A${verifiedRow}:C${verifiedRow}`);
-  worksheet.mergeCells(`D${verifiedRow}:H${verifiedRow}`);
+  worksheet.mergeCells(`A${verifiedRow}:B${verifiedRow}`);
+  worksheet.mergeCells(`C${verifiedRow}:D${verifiedRow}`);
 
   const verifiedKeyCell = worksheet.getCell(`A${verifiedRow}`);
   verifiedKeyCell.value = 'Verified By:';
@@ -1339,7 +1337,7 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     right: { style: 'thin' }
   };
 
-  const verifiedValueCell = worksheet.getCell(`D${verifiedRow}`);
+  const verifiedValueCell = worksheet.getCell(`C${verifiedRow}`);
   verifiedValueCell.value = 'Syed Ibrahim';
   verifiedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
   verifiedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
@@ -1352,8 +1350,8 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
 
   // Row 3: Approved By: Layla Juma Ibrahim Obaid Alsuwaidi
   const approvedRow = signatureStartRow + 2;
-  worksheet.mergeCells(`A${approvedRow}:C${approvedRow}`);
-  worksheet.mergeCells(`D${approvedRow}:H${approvedRow}`);
+  worksheet.mergeCells(`A${approvedRow}:B${approvedRow}`);
+  worksheet.mergeCells(`C${approvedRow}:D${approvedRow}`);
 
   const approvedKeyCell = worksheet.getCell(`A${approvedRow}`);
   approvedKeyCell.value = 'Approved By:';
@@ -1366,7 +1364,7 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     right: { style: 'thin' }
   };
 
-  const approvedValueCell = worksheet.getCell(`D${approvedRow}`);
+  const approvedValueCell = worksheet.getCell(`C${approvedRow}`);
   approvedValueCell.value = 'Layla Juma Ibrahim Obaid Alsuwaidi';
   approvedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
   approvedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
