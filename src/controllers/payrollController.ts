@@ -1029,9 +1029,6 @@ export const getPayslipData = asyncHandler(async (req: Request, res: Response) =
 });
 
 // Export payrolls to Excel
-// Export payrolls to Excel
-// Export payrolls to Excel
-// Export payrolls to Excel
 export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Response) => {
   const { month, year, search, employee, period, labourCard, startDate, endDate } = req.query;
 
@@ -1201,7 +1198,7 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     totalAllDeductions += totalDeductions;
     totalNetPay += Number(payroll.net) || 0;
 
-    worksheet.addRow({
+    const row = worksheet.addRow({
       serialNo: i + 1,
       name: `${payroll.employee.firstName} ${payroll.employee.lastName}`,
       designation: payroll.employee.role,
@@ -1231,6 +1228,22 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
       net: payroll.net,
       remark: payroll.remark || ''
     });
+
+    // Apply background color based on user role
+    const userRole = payroll.employee.role?.toLowerCase() || '';
+    let bgColor = 'FFFFFFFF'; // Default white
+
+    if (userRole.includes('engineer')) {
+      bgColor = 'FFD4E6F1'; // Light blue
+    } else if (userRole.includes('super admin') || userRole.includes('admin')) {
+      bgColor = 'FFFFC7CE'; // Light red
+    }
+
+    row.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: bgColor }
+    };
   }
 
   // Add TOTAL ROW at the end with actual calculated numbers
@@ -1274,6 +1287,109 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   };
   totalRow.alignment = { vertical: 'middle', horizontal: 'right' };
   totalRow.height = 22;
+
+  // Add empty row after total
+  worksheet.addRow({});
+
+  // Add signature box section
+  const signatureStartRow = worksheet.lastRow!.number + 1;
+
+  // Merge cells for "Prepared By" section (columns A-I)
+  worksheet.mergeCells(`A${signatureStartRow}:I${signatureStartRow}`);
+  worksheet.mergeCells(`A${signatureStartRow + 1}:I${signatureStartRow + 1}`);
+
+  // Merge cells for "Verified By" section (columns J-R)
+  worksheet.mergeCells(`J${signatureStartRow}:R${signatureStartRow}`);
+  worksheet.mergeCells(`J${signatureStartRow + 1}:R${signatureStartRow + 1}`);
+
+  // Merge cells for "Approved By" section (columns S-AA)
+  worksheet.mergeCells(`S${signatureStartRow}:AA${signatureStartRow}`);
+  worksheet.mergeCells(`S${signatureStartRow + 1}:AA${signatureStartRow + 1}`);
+
+  // Add "Prepared By" label and value
+  const preparedLabelCell = worksheet.getCell(`A${signatureStartRow}`);
+  preparedLabelCell.value = 'Prepared By:';
+  preparedLabelCell.font = { bold: true, size: 11 };
+  preparedLabelCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  preparedLabelCell.border = {
+    top: { style: 'medium' },
+    left: { style: 'medium' },
+    bottom: { style: 'thin' },
+    right: { style: 'thin' }
+  };
+
+  const preparedValueCell = worksheet.getCell(`A${signatureStartRow + 1}`);
+  preparedValueCell.value = 'Meena S';
+  preparedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+  preparedValueCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  preparedValueCell.border = {
+    top: { style: 'thin' },
+    left: { style: 'medium' },
+    bottom: { style: 'medium' },
+    right: { style: 'thin' }
+  };
+
+  // Add "Verified By" label and value
+  const verifiedLabelCell = worksheet.getCell(`J${signatureStartRow}`);
+  verifiedLabelCell.value = 'Verified By:';
+  verifiedLabelCell.font = { bold: true, size: 11 };
+  verifiedLabelCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  verifiedLabelCell.border = {
+    top: { style: 'medium' },
+    left: { style: 'thin' },
+    bottom: { style: 'thin' },
+    right: { style: 'thin' }
+  };
+
+  const verifiedValueCell = worksheet.getCell(`J${signatureStartRow + 1}`);
+  verifiedValueCell.value = 'Syed Ibrahim';
+  verifiedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+  verifiedValueCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  verifiedValueCell.border = {
+    top: { style: 'thin' },
+    left: { style: 'thin' },
+    bottom: { style: 'medium' },
+    right: { style: 'thin' }
+  };
+
+  // Add "Approved By" label and value
+  const approvedLabelCell = worksheet.getCell(`S${signatureStartRow}`);
+  approvedLabelCell.value = 'Approved By:';
+  approvedLabelCell.font = { bold: true, size: 11 };
+  approvedLabelCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  approvedLabelCell.border = {
+    top: { style: 'medium' },
+    left: { style: 'thin' },
+    bottom: { style: 'thin' },
+    right: { style: 'medium' }
+  };
+
+  const approvedValueCell = worksheet.getCell(`S${signatureStartRow + 1}`);
+  approvedValueCell.value = 'Layla Juma Ibrahim Obaid Alsuwaidi';
+  approvedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+  approvedValueCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  approvedValueCell.border = {
+    top: { style: 'thin' },
+    left: { style: 'thin' },
+    bottom: { style: 'medium' },
+    right: { style: 'medium' }
+  };
+
+  // Set row heights for signature section
+  worksheet.getRow(signatureStartRow).height = 25;
+  worksheet.getRow(signatureStartRow + 1).height = 25;
+
+  // Add empty row
+  worksheet.addRow({});
+
+  // Add footer text
+  const footerRow = worksheet.addRow({});
+  worksheet.mergeCells(`A${footerRow.number}:AA${footerRow.number}`);
+  const footerCell = worksheet.getCell(`A${footerRow.number}`);
+  footerCell.value = 'This payroll is generated using AGATS software';
+  footerCell.font = { italic: true, size: 10, color: { argb: 'FF808080' } }; // Gray color
+  footerCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  footerRow.height = 20;
 
   // Style the header row
   const headerRow = worksheet.getRow(1);
