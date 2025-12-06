@@ -1258,9 +1258,14 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     row.height = 18;
 
     // Apply border and center alignment to all cells in the row
-    row.eachCell({ includeEmpty: true }, (cell) => {
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
       cell.border = dataBorder;
       cell.alignment = { vertical: 'middle', horizontal: 'center' };
+
+      // Reduce font size for NAME column (column 2)
+      if (colNumber === 2) {
+        cell.font = { size: 8 };
+      }
     });
   }
 
