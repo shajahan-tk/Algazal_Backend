@@ -1030,6 +1030,7 @@ export const getPayslipData = asyncHandler(async (req: Request, res: Response) =
 
 // Export payrolls to Excel
 // Export payrolls to Excel
+// Export payrolls to Excel
 export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Response) => {
   const { month, year, search, employee, period, labourCard, startDate, endDate } = req.query;
 
@@ -1187,6 +1188,49 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     });
   }
 
+  // Add TOTAL ROW at the end
+  const lastRowNumber = worksheet.lastRow?.number || 1;
+  const totalRow = worksheet.addRow({
+    serialNo: '',
+    name: '',
+    designation: '',
+    emiratesId: '',
+    labourCard: '',
+    labourCardPersonalNo: '',
+    period: 'TOTAL',
+    basicSalary: { formula: `SUM(H2:H${lastRowNumber})` },
+    allowance: { formula: `SUM(I2:I${lastRowNumber})` },
+    transport: { formula: `SUM(J2:J${lastRowNumber})` },
+    overtime: { formula: `SUM(K2:K${lastRowNumber})` },
+    specialOT: { formula: `SUM(L2:L${lastRowNumber})` },
+    sundayBonus: { formula: `SUM(M2:M${lastRowNumber})` },
+    absentDeduction: { formula: `SUM(N2:N${lastRowNumber})` },
+    medical: { formula: `SUM(O2:O${lastRowNumber})` },
+    bonus: { formula: `SUM(P2:P${lastRowNumber})` },
+    mess: { formula: `SUM(Q2:Q${lastRowNumber})` },
+    salaryAdvance: { formula: `SUM(R2:R${lastRowNumber})` },
+    loanDeduction: { formula: `SUM(S2:S${lastRowNumber})` },
+    fineAmount: { formula: `SUM(T2:T${lastRowNumber})` },
+    visaDeduction: { formula: `SUM(U2:U${lastRowNumber})` },
+    otherDeduction1: { formula: `SUM(V2:V${lastRowNumber})` },
+    otherDeduction2: { formula: `SUM(W2:W${lastRowNumber})` },
+    otherDeduction3: { formula: `SUM(X2:X${lastRowNumber})` },
+    totalEarnings: { formula: `SUM(Y2:Y${lastRowNumber})` },
+    totalDeductions: { formula: `SUM(Z2:Z${lastRowNumber})` },
+    net: { formula: `SUM(AA2:AA${lastRowNumber})` },
+    remark: ''
+  });
+
+  // Style the total row
+  totalRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  totalRow.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FF28a745' }
+  };
+  totalRow.alignment = { vertical: 'middle', horizontal: 'right' };
+  totalRow.height = 22;
+
   // Style the header row
   const headerRow = worksheet.getRow(1);
   headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -1220,7 +1264,6 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   await workbook.xlsx.write(res);
   res.end();
 });
-
 // Generate payslip PDF
 export const generatePayslipPDF = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
