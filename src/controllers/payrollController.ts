@@ -1031,6 +1031,7 @@ export const getPayslipData = asyncHandler(async (req: Request, res: Response) =
 // Export payrolls to Excel
 // Export payrolls to Excel
 // Export payrolls to Excel
+// Export payrolls to Excel
 export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Response) => {
   const { month, year, search, employee, period, labourCard, startDate, endDate } = req.query;
 
@@ -1110,6 +1111,28 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     { header: 'REMARK', key: 'remark', width: 30 }
   ];
 
+  // Initialize totals
+  let totalBasicSalary = 0;
+  let totalAllowance = 0;
+  let totalTransport = 0;
+  let totalOvertime = 0;
+  let totalSpecialOT = 0;
+  let totalSundayBonus = 0;
+  let totalAbsentDeduction = 0;
+  let totalMedical = 0;
+  let totalBonus = 0;
+  let totalMess = 0;
+  let totalSalaryAdvance = 0;
+  let totalLoanDeduction = 0;
+  let totalFineAmount = 0;
+  let totalVisaDeduction = 0;
+  let totalOtherDeduction1 = 0;
+  let totalOtherDeduction2 = 0;
+  let totalOtherDeduction3 = 0;
+  let totalAllEarnings = 0;
+  let totalAllDeductions = 0;
+  let totalNetPay = 0;
+
   // Add data rows
   for (let i = 0; i < payrolls.length; i++) {
     const payroll = payrolls[i];
@@ -1156,6 +1179,28 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
 
     const totalDeductions = mess + salaryAdvance + loanDeduction + fineAmount + visaDeduction + otherDeduction1 + otherDeduction2 + otherDeduction3;
 
+    // Accumulate totals
+    totalBasicSalary += basicSalary;
+    totalAllowance += allowance;
+    totalTransport += transport;
+    totalOvertime += overtime;
+    totalSpecialOT += specialOT;
+    totalSundayBonus += sundayBonus;
+    totalAbsentDeduction += absentDeduction;
+    totalMedical += medical;
+    totalBonus += bonus;
+    totalMess += mess;
+    totalSalaryAdvance += salaryAdvance;
+    totalLoanDeduction += loanDeduction;
+    totalFineAmount += fineAmount;
+    totalVisaDeduction += visaDeduction;
+    totalOtherDeduction1 += otherDeduction1;
+    totalOtherDeduction2 += otherDeduction2;
+    totalOtherDeduction3 += otherDeduction3;
+    totalAllEarnings += totalEarnings;
+    totalAllDeductions += totalDeductions;
+    totalNetPay += Number(payroll.net) || 0;
+
     worksheet.addRow({
       serialNo: i + 1,
       name: `${payroll.employee.firstName} ${payroll.employee.lastName}`,
@@ -1188,8 +1233,7 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     });
   }
 
-  // Add TOTAL ROW at the end
-  const lastRowNumber = worksheet.lastRow?.number || 1;
+  // Add TOTAL ROW at the end with actual calculated numbers
   const totalRow = worksheet.addRow({
     serialNo: '',
     name: '',
@@ -1198,35 +1242,35 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     labourCard: '',
     labourCardPersonalNo: '',
     period: 'TOTAL',
-    basicSalary: { formula: `SUM(H2:H${lastRowNumber})` },
-    allowance: { formula: `SUM(I2:I${lastRowNumber})` },
-    transport: { formula: `SUM(J2:J${lastRowNumber})` },
-    overtime: { formula: `SUM(K2:K${lastRowNumber})` },
-    specialOT: { formula: `SUM(L2:L${lastRowNumber})` },
-    sundayBonus: { formula: `SUM(M2:M${lastRowNumber})` },
-    absentDeduction: { formula: `SUM(N2:N${lastRowNumber})` },
-    medical: { formula: `SUM(O2:O${lastRowNumber})` },
-    bonus: { formula: `SUM(P2:P${lastRowNumber})` },
-    mess: { formula: `SUM(Q2:Q${lastRowNumber})` },
-    salaryAdvance: { formula: `SUM(R2:R${lastRowNumber})` },
-    loanDeduction: { formula: `SUM(S2:S${lastRowNumber})` },
-    fineAmount: { formula: `SUM(T2:T${lastRowNumber})` },
-    visaDeduction: { formula: `SUM(U2:U${lastRowNumber})` },
-    otherDeduction1: { formula: `SUM(V2:V${lastRowNumber})` },
-    otherDeduction2: { formula: `SUM(W2:W${lastRowNumber})` },
-    otherDeduction3: { formula: `SUM(X2:X${lastRowNumber})` },
-    totalEarnings: { formula: `SUM(Y2:Y${lastRowNumber})` },
-    totalDeductions: { formula: `SUM(Z2:Z${lastRowNumber})` },
-    net: { formula: `SUM(AA2:AA${lastRowNumber})` },
+    basicSalary: totalBasicSalary,
+    allowance: totalAllowance,
+    transport: totalTransport,
+    overtime: totalOvertime,
+    specialOT: totalSpecialOT,
+    sundayBonus: totalSundayBonus,
+    absentDeduction: totalAbsentDeduction,
+    medical: totalMedical,
+    bonus: totalBonus,
+    mess: totalMess,
+    salaryAdvance: totalSalaryAdvance,
+    loanDeduction: totalLoanDeduction,
+    fineAmount: totalFineAmount,
+    visaDeduction: totalVisaDeduction,
+    otherDeduction1: totalOtherDeduction1,
+    otherDeduction2: totalOtherDeduction2,
+    otherDeduction3: totalOtherDeduction3,
+    totalEarnings: totalAllEarnings,
+    totalDeductions: totalAllDeductions,
+    net: totalNetPay,
     remark: ''
   });
 
   // Style the total row
-  totalRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  totalRow.font = { bold: true };
   totalRow.fill = {
     type: 'pattern',
     pattern: 'solid',
-    fgColor: { argb: 'FF28a745' }
+    fgColor: { argb: 'FFFFEB3B' } // Yellow background for totals
   };
   totalRow.alignment = { vertical: 'middle', horizontal: 'right' };
   totalRow.height = 22;
