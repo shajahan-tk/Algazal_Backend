@@ -1131,6 +1131,14 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   let totalAllDeductions = 0;
   let totalNetPay = 0;
 
+  // Border style for data rows
+  const dataBorder = {
+    top: { style: 'thin' as const },
+    left: { style: 'thin' as const },
+    bottom: { style: 'thin' as const },
+    right: { style: 'thin' as const }
+  };
+
   // Add data rows
   for (let i = 0; i < payrolls.length; i++) {
     const payroll = payrolls[i];
@@ -1245,6 +1253,15 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
       pattern: 'solid',
       fgColor: { argb: bgColor }
     };
+
+    // Set row height for data rows
+    row.height = 18;
+
+    // Apply border and center alignment to all cells in the row
+    row.eachCell({ includeEmpty: true }, (cell) => {
+      cell.border = dataBorder;
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    });
   }
 
   // Add TOTAL ROW at the end with actual calculated numbers
@@ -1286,8 +1303,13 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     pattern: 'solid',
     fgColor: { argb: 'FFFFEB3B' } // Yellow background for totals
   };
-  totalRow.alignment = { vertical: 'middle', horizontal: 'right' };
-  totalRow.height = 22;
+  totalRow.height = 20;
+
+  // Apply border and center alignment to total row
+  totalRow.eachCell({ includeEmpty: true }, (cell) => {
+    cell.border = dataBorder;
+    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+  });
 
   // Add empty row after total
   worksheet.addRow({});
@@ -1401,8 +1423,13 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     pattern: 'solid',
     fgColor: { argb: 'FF2c5aa0' }
   };
-  headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
-  headerRow.height = 20;
+  headerRow.height = 22;
+
+  // Apply border and center alignment to header row
+  headerRow.eachCell({ includeEmpty: true }, (cell) => {
+    cell.border = dataBorder;
+    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+  });
 
   let filename = 'payroll_report';
   if (month && year) {
