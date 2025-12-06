@@ -1028,6 +1028,7 @@ export const getPayslipData = asyncHandler(async (req: Request, res: Response) =
   );
 });
 
+
 // Export payrolls to Excel
 export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Response) => {
   const { month, year, search, employee, period, labourCard, startDate, endDate } = req.query;
@@ -1078,34 +1079,34 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
 
   // Add headers with separate BASIC SALARY and ALLOWANCE columns
   worksheet.columns = [
-    { header: 'S/NO', key: 'serialNo', width: 8 },
-    { header: 'NAME', key: 'name', width: 25 },
-    { header: 'Designation', key: 'designation', width: 20 },
-    { header: 'EMIRATES ID', key: 'emiratesId', width: 20 },
-    { header: 'LABOUR CARD', key: 'labourCard', width: 20 },
-    { header: 'LABOUR CARD PERSONAL NO', key: 'labourCardPersonalNo', width: 25 },
-    { header: 'PERIOD', key: 'period', width: 15 },
-    { header: 'BASIC SALARY', key: 'basicSalary', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'ALLOWANCE', key: 'allowance', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'TRANSPORT', key: 'transport', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'OVERTIME', key: 'overtime', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'SPECIAL OVERTIME', key: 'specialOT', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'SUNDAY BONUS', key: 'sundayBonus', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'ABSENT DEDUCTION', key: 'absentDeduction', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'MEDICAL', key: 'medical', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'BONUS', key: 'bonus', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'FOOD ALLOWANCE', key: 'mess', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'SALARY ADVANCE', key: 'salaryAdvance', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'LOAN DEDUCTION', key: 'loanDeduction', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'FINE AMOUNT', key: 'fineAmount', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'VISA DEDUCTION', key: 'visaDeduction', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'OTHER DEDUCTION 1', key: 'otherDeduction1', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'OTHER DEDUCTION 2', key: 'otherDeduction2', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'OTHER DEDUCTION 3', key: 'otherDeduction3', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'TOTAL EARNINGS', key: 'totalEarnings', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'TOTAL DEDUCTIONS', key: 'totalDeductions', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'NET PAY', key: 'net', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'REMARK', key: 'remark', width: 30 }
+    { header: 'S/NO', key: 'serialNo', width: 6 },
+    { header: 'NAME', key: 'name', width: 20 },
+    { header: 'Designation', key: 'designation', width: 15 },
+    { header: 'EMIRATES ID', key: 'emiratesId', width: 18 },
+    { header: 'LABOUR CARD', key: 'labourCard', width: 18 },
+    { header: 'LABOUR CARD PERSONAL NO', key: 'labourCardPersonalNo', width: 22 },
+    { header: 'PERIOD', key: 'period', width: 12 },
+    { header: 'BASIC SALARY', key: 'basicSalary', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'ALLOWANCE', key: 'allowance', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'TRANSPORT', key: 'transport', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'OVERTIME', key: 'overtime', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'SPECIAL OVERTIME', key: 'specialOT', width: 14, style: { numFmt: '#,##0.00' } },
+    { header: 'SUNDAY BONUS', key: 'sundayBonus', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'ABSENT DEDUCTION', key: 'absentDeduction', width: 14, style: { numFmt: '#,##0.00' } },
+    { header: 'MEDICAL', key: 'medical', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'BONUS', key: 'bonus', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'FOOD ALLOWANCE', key: 'mess', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'SALARY ADVANCE', key: 'salaryAdvance', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'LOAN DEDUCTION', key: 'loanDeduction', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'FINE AMOUNT', key: 'fineAmount', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'VISA DEDUCTION', key: 'visaDeduction', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'OTHER DEDUCTION 1', key: 'otherDeduction1', width: 14, style: { numFmt: '#,##0.00' } },
+    { header: 'OTHER DEDUCTION 2', key: 'otherDeduction2', width: 14, style: { numFmt: '#,##0.00' } },
+    { header: 'OTHER DEDUCTION 3', key: 'otherDeduction3', width: 14, style: { numFmt: '#,##0.00' } },
+    { header: 'TOTAL EARNINGS', key: 'totalEarnings', width: 14, style: { numFmt: '#,##0.00' } },
+    { header: 'TOTAL DEDUCTIONS', key: 'totalDeductions', width: 14, style: { numFmt: '#,##0.00' } },
+    { header: 'NET PAY', key: 'net', width: 14, style: { numFmt: '#,##0.00' } },
+    { header: 'REMARK', key: 'remark', width: 25 }
   ];
 
   // Initialize totals
@@ -1425,6 +1426,7 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   await workbook.xlsx.write(res);
   res.end();
 });
+
 // Generate payslip PDF
 export const generatePayslipPDF = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
