@@ -1029,6 +1029,7 @@ export const getPayslipData = asyncHandler(async (req: Request, res: Response) =
 });
 
 // Export payrolls to Excel
+// Export payrolls to Excel
 export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Response) => {
   const { month, year, search, employee, period, labourCard, startDate, endDate } = req.query;
 
@@ -1076,7 +1077,7 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Payroll Report');
 
-  // Add headers with new fields
+  // Add headers with separate BASIC SALARY and ALLOWANCE columns
   worksheet.columns = [
     { header: 'S/NO', key: 'serialNo', width: 8 },
     { header: 'NAME', key: 'name', width: 25 },
@@ -1085,7 +1086,8 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     { header: 'LABOUR CARD', key: 'labourCard', width: 20 },
     { header: 'LABOUR CARD PERSONAL NO', key: 'labourCardPersonalNo', width: 25 },
     { header: 'PERIOD', key: 'period', width: 15 },
-    { header: 'BASE SALARY', key: 'baseSalary', width: 15, style: { numFmt: '#,##0.00' } },
+    { header: 'BASIC SALARY', key: 'basicSalary', width: 15, style: { numFmt: '#,##0.00' } },
+    { header: 'ALLOWANCE', key: 'allowance', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'TRANSPORT', key: 'transport', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'OVERTIME', key: 'overtime', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'SPECIAL OVERTIME', key: 'specialOT', width: 15, style: { numFmt: '#,##0.00' } },
@@ -1098,7 +1100,6 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     { header: 'LOAN DEDUCTION', key: 'loanDeduction', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'FINE AMOUNT', key: 'fineAmount', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'VISA DEDUCTION', key: 'visaDeduction', width: 15, style: { numFmt: '#,##0.00' } },
-    // NEW DEDUCTION FIELDS
     { header: 'OTHER DEDUCTION 1', key: 'otherDeduction1', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'OTHER DEDUCTION 2', key: 'otherDeduction2', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'OTHER DEDUCTION 3', key: 'otherDeduction3', width: 15, style: { numFmt: '#,##0.00' } },
@@ -1115,18 +1116,44 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
       continue;
     }
 
+    // Get employee expense data
     const employeeExpense = await EmployeeExpense.findOne({ employee: payroll.employee._id }).lean();
+    const basicSalary = Number(employeeExpense?.basicSalary) || 0;
+    const allowance = Number(employeeExpense?.allowance) || 0;
+
+    // Get calculation details
     const calculationDetails: any = payroll.calculationDetails || await calculateSalaryBasedOnAttendance(
       payroll.employee._id,
-      employeeExpense?.basicSalary || 0,
-      employeeExpense?.allowance || 0,
+      basicSalary,
+      allowance,
       payroll.period
     );
 
-    const absentDeduction = calculationDetails.absentDeduction || 0;
-    const totalEarnings = calculationDetails.totalEarnings + payroll.transport + payroll.specialOT + payroll.medical + payroll.bonus;
-    const totalDeductions = payroll.mess + payroll.salaryAdvance + payroll.loanDeduction + payroll.fineAmount + payroll.visaDeduction
-      + (payroll.otherDeduction1 || 0) + (payroll.otherDeduction2 || 0) + (payroll.otherDeduction3 || 0);
+    // Extract values with proper fallbacks
+    const sundayBonus = Number(calculationDetails.sundayBonus) || 0;
+    const absentDeduction = Number(calculationDetails.absentDeduction) || 0;
+    const baseSalaryFromAttendance = Number(calculationDetails.baseSalaryFromAttendance) || (basicSalary + allowance);
+
+    // Calculate total earnings properly
+    const transport = Number(payroll.transport) || 0;
+    const overtime = Number(payroll.overtime) || 0;
+    const specialOT = Number(payroll.specialOT) || 0;
+    const medical = Number(payroll.medical) || 0;
+    const bonus = Number(payroll.bonus) || 0;
+
+    const totalEarnings = baseSalaryFromAttendance + transport + overtime + specialOT + medical + bonus + sundayBonus - absentDeduction;
+
+    // Calculate total deductions properly
+    const mess = Number(payroll.mess) || 0;
+    const salaryAdvance = Number(payroll.salaryAdvance) || 0;
+    const loanDeduction = Number(payroll.loanDeduction) || 0;
+    const fineAmount = Number(payroll.fineAmount) || 0;
+    const visaDeduction = Number(payroll.visaDeduction) || 0;
+    const otherDeduction1 = Number(payroll.otherDeduction1) || 0;
+    const otherDeduction2 = Number(payroll.otherDeduction2) || 0;
+    const otherDeduction3 = Number(payroll.otherDeduction3) || 0;
+
+    const totalDeductions = mess + salaryAdvance + loanDeduction + fineAmount + visaDeduction + otherDeduction1 + otherDeduction2 + otherDeduction3;
 
     worksheet.addRow({
       serialNo: i + 1,
@@ -1136,29 +1163,40 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
       labourCard: payroll.labourCard,
       labourCardPersonalNo: payroll.labourCardPersonalNo,
       period: payroll.period,
-      baseSalary: calculationDetails.baseSalaryAmount,
-      transport: payroll.transport,
-      overtime: payroll.overtime,
-      specialOT: payroll.specialOT || 0,
-      sundayBonus: calculationDetails.sundayBonus || 0,
+      basicSalary: basicSalary,
+      allowance: allowance,
+      transport: transport,
+      overtime: overtime,
+      specialOT: specialOT,
+      sundayBonus: sundayBonus,
       absentDeduction: absentDeduction,
-      medical: payroll.medical,
-      bonus: payroll.bonus,
-      mess: payroll.mess,
-      salaryAdvance: payroll.salaryAdvance,
-      loanDeduction: payroll.loanDeduction,
-      fineAmount: payroll.fineAmount,
-      visaDeduction: payroll.visaDeduction || 0,
-      // NEW DEDUCTION FIELDS
-      otherDeduction1: payroll.otherDeduction1 || 0,
-      otherDeduction2: payroll.otherDeduction2 || 0,
-      otherDeduction3: payroll.otherDeduction3 || 0,
+      medical: medical,
+      bonus: bonus,
+      mess: mess,
+      salaryAdvance: salaryAdvance,
+      loanDeduction: loanDeduction,
+      fineAmount: fineAmount,
+      visaDeduction: visaDeduction,
+      otherDeduction1: otherDeduction1,
+      otherDeduction2: otherDeduction2,
+      otherDeduction3: otherDeduction3,
       totalEarnings: totalEarnings,
       totalDeductions: totalDeductions,
       net: payroll.net,
       remark: payroll.remark || ''
     });
   }
+
+  // Style the header row
+  const headerRow = worksheet.getRow(1);
+  headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  headerRow.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FF2c5aa0' }
+  };
+  headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+  headerRow.height = 20;
 
   let filename = 'payroll_report';
   if (month && year) {
