@@ -1029,6 +1029,7 @@ export const getPayslipData = asyncHandler(async (req: Request, res: Response) =
 });
 
 // Export payrolls to Excel
+// Export payrolls to Excel
 export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Response) => {
   const { month, year, search, employee, period, labourCard, startDate, endDate } = req.query;
 
@@ -1294,80 +1295,86 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   // Add signature box section
   const signatureStartRow = worksheet.lastRow!.number + 1;
 
-  // Merge cells for "Prepared By" section (columns A-I)
-  worksheet.mergeCells(`A${signatureStartRow}:I${signatureStartRow}`);
-  worksheet.mergeCells(`A${signatureStartRow + 1}:I${signatureStartRow + 1}`);
+  // Row 1: Prepared By: Meena S
+  const preparedRow = signatureStartRow;
+  worksheet.mergeCells(`A${preparedRow}:F${preparedRow}`);
+  worksheet.mergeCells(`G${preparedRow}:L${preparedRow}`);
+  worksheet.mergeCells(`M${preparedRow}:R${preparedRow}`);
+  worksheet.mergeCells(`S${preparedRow}:AA${preparedRow}`);
 
-  // Merge cells for "Verified By" section (columns J-R)
-  worksheet.mergeCells(`J${signatureStartRow}:R${signatureStartRow}`);
-  worksheet.mergeCells(`J${signatureStartRow + 1}:R${signatureStartRow + 1}`);
-
-  // Merge cells for "Approved By" section (columns S-AA)
-  worksheet.mergeCells(`S${signatureStartRow}:AA${signatureStartRow}`);
-  worksheet.mergeCells(`S${signatureStartRow + 1}:AA${signatureStartRow + 1}`);
-
-  // Add "Prepared By" label and value
-  const preparedLabelCell = worksheet.getCell(`A${signatureStartRow}`);
-  preparedLabelCell.value = 'Prepared By:';
-  preparedLabelCell.font = { bold: true, size: 11 };
-  preparedLabelCell.alignment = { vertical: 'middle', horizontal: 'center' };
-  preparedLabelCell.border = {
+  const preparedKeyCell = worksheet.getCell(`A${preparedRow}`);
+  preparedKeyCell.value = 'Prepared By:';
+  preparedKeyCell.font = { bold: true, size: 11 };
+  preparedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
+  preparedKeyCell.border = {
     top: { style: 'medium' },
     left: { style: 'medium' },
     bottom: { style: 'thin' },
     right: { style: 'thin' }
   };
 
-  const preparedValueCell = worksheet.getCell(`A${signatureStartRow + 1}`);
+  const preparedValueCell = worksheet.getCell(`G${preparedRow}`);
   preparedValueCell.value = 'Meena S';
   preparedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
-  preparedValueCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  preparedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
   preparedValueCell.border = {
-    top: { style: 'thin' },
-    left: { style: 'medium' },
-    bottom: { style: 'medium' },
-    right: { style: 'thin' }
-  };
-
-  // Add "Verified By" label and value
-  const verifiedLabelCell = worksheet.getCell(`J${signatureStartRow}`);
-  verifiedLabelCell.value = 'Verified By:';
-  verifiedLabelCell.font = { bold: true, size: 11 };
-  verifiedLabelCell.alignment = { vertical: 'middle', horizontal: 'center' };
-  verifiedLabelCell.border = {
-    top: { style: 'medium' },
-    left: { style: 'thin' },
-    bottom: { style: 'thin' },
-    right: { style: 'thin' }
-  };
-
-  const verifiedValueCell = worksheet.getCell(`J${signatureStartRow + 1}`);
-  verifiedValueCell.value = 'Syed Ibrahim';
-  verifiedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
-  verifiedValueCell.alignment = { vertical: 'middle', horizontal: 'center' };
-  verifiedValueCell.border = {
-    top: { style: 'thin' },
-    left: { style: 'thin' },
-    bottom: { style: 'medium' },
-    right: { style: 'thin' }
-  };
-
-  // Add "Approved By" label and value
-  const approvedLabelCell = worksheet.getCell(`S${signatureStartRow}`);
-  approvedLabelCell.value = 'Approved By:';
-  approvedLabelCell.font = { bold: true, size: 11 };
-  approvedLabelCell.alignment = { vertical: 'middle', horizontal: 'center' };
-  approvedLabelCell.border = {
     top: { style: 'medium' },
     left: { style: 'thin' },
     bottom: { style: 'thin' },
     right: { style: 'medium' }
   };
 
-  const approvedValueCell = worksheet.getCell(`S${signatureStartRow + 1}`);
+  // Row 2: Verified By: Syed Ibrahim
+  const verifiedRow = signatureStartRow + 1;
+  worksheet.mergeCells(`A${verifiedRow}:F${verifiedRow}`);
+  worksheet.mergeCells(`G${verifiedRow}:L${verifiedRow}`);
+  worksheet.mergeCells(`M${verifiedRow}:R${verifiedRow}`);
+  worksheet.mergeCells(`S${verifiedRow}:AA${verifiedRow}`);
+
+  const verifiedKeyCell = worksheet.getCell(`A${verifiedRow}`);
+  verifiedKeyCell.value = 'Verified By:';
+  verifiedKeyCell.font = { bold: true, size: 11 };
+  verifiedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
+  verifiedKeyCell.border = {
+    top: { style: 'thin' },
+    left: { style: 'medium' },
+    bottom: { style: 'thin' },
+    right: { style: 'thin' }
+  };
+
+  const verifiedValueCell = worksheet.getCell(`G${verifiedRow}`);
+  verifiedValueCell.value = 'Syed Ibrahim';
+  verifiedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+  verifiedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+  verifiedValueCell.border = {
+    top: { style: 'thin' },
+    left: { style: 'thin' },
+    bottom: { style: 'thin' },
+    right: { style: 'medium' }
+  };
+
+  // Row 3: Approved By: Layla Juma Ibrahim Obaid Alsuwaidi
+  const approvedRow = signatureStartRow + 2;
+  worksheet.mergeCells(`A${approvedRow}:F${approvedRow}`);
+  worksheet.mergeCells(`G${approvedRow}:L${approvedRow}`);
+  worksheet.mergeCells(`M${approvedRow}:R${approvedRow}`);
+  worksheet.mergeCells(`S${approvedRow}:AA${approvedRow}`);
+
+  const approvedKeyCell = worksheet.getCell(`A${approvedRow}`);
+  approvedKeyCell.value = 'Approved By:';
+  approvedKeyCell.font = { bold: true, size: 11 };
+  approvedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
+  approvedKeyCell.border = {
+    top: { style: 'thin' },
+    left: { style: 'medium' },
+    bottom: { style: 'medium' },
+    right: { style: 'thin' }
+  };
+
+  const approvedValueCell = worksheet.getCell(`G${approvedRow}`);
   approvedValueCell.value = 'Layla Juma Ibrahim Obaid Alsuwaidi';
   approvedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
-  approvedValueCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  approvedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
   approvedValueCell.border = {
     top: { style: 'thin' },
     left: { style: 'thin' },
@@ -1376,8 +1383,9 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   };
 
   // Set row heights for signature section
-  worksheet.getRow(signatureStartRow).height = 25;
-  worksheet.getRow(signatureStartRow + 1).height = 25;
+  worksheet.getRow(preparedRow).height = 25;
+  worksheet.getRow(verifiedRow).height = 25;
+  worksheet.getRow(approvedRow).height = 25;
 
   // Add empty row
   worksheet.addRow({});
