@@ -679,7 +679,7 @@ export const generateInvoiceData = asyncHandler(
         "clientName clientAddress mobileNumber contactPerson trnNumber pincode workStartDate workEndDate"
       )
       .populate<{ createdBy: IUser }>("createdBy", "firstName lastName")
-      .populate("assignedEngineers", "firstName lastName") // Changed from assignedTo
+      .populate("assignedEngineers", "firstName lastName")
       .lean();
 
     if (!project) {
@@ -725,7 +725,7 @@ export const generateInvoiceData = asyncHandler(
     // Enhanced vendee information with proper type checking
     const vendeeInfo = {
       name: clientData?.clientName || "IMDAAD LLC",
-      contactPerson: engineerNames, // Changed to use engineerNames
+      contactPerson: engineerNames,
       poBox: clientData?.pincode || "18220",
       address: clientData?.clientAddress || "DUBAI - UAE",
       phone: clientData?.mobileNumber || "(04) 812 8888",
@@ -757,37 +757,97 @@ export const generateInvoiceData = asyncHandler(
       total: item.totalPrice || 0,
     }));
 
-    function getDaysLeft(validUntil?: Date): string {
-      if (!validUntil) return "N/A";
+    // Function to extract payment days from terms and conditions
+    const extractPaymentDays = (termsAndConditions: string[]): number => {
+      if (!termsAndConditions || termsAndConditions.length < 2) {
+        return 30; // Default to 30 days if not found
+      }
+
+      const secondTerm = termsAndConditions[1];
+
+      // Look for numbers in the string with patterns like:
+      // "30 days", "60 days", "90 days", "30", "60", "90", "net 30", "net 60"
+      const matches = secondTerm.match(/\b(\d+)\s*(?:days?)?\b/i);
+
+      if (matches && matches[1]) {
+        const days = parseInt(matches[1], 10);
+        // Common payment terms: 30, 60, 90 days
+        return [30, 60, 90, 120].includes(days) ? days : 30;
+      }
+
+      return 30; // Default to 30 days if no number found
+    };
+
+    // Function to get payment terms display text
+    const getPaymentTermsText = (paymentDays: number): string => {
+      return `Net ${paymentDays} days from invoice date`;
+    };
+
+    // Function to calculate days left until payment is due
+    const getDaysLeftFromInvoiceDate = (invoiceDate?: Date, paymentDays: number = 30): string => {
+      if (!invoiceDate) {
+        return `Invoice date not set - Payment terms: Net ${paymentDays} days`;
+      }
+
+      const invoice = new Date(invoiceDate);
+      if (isNaN(invoice.getTime())) {
+        return "Invalid invoice date";
+      }
+
+      // Calculate due date by adding payment days to invoice date
+      const dueDate = new Date(invoice);
+      dueDate.setDate(dueDate.getDate() + paymentDays);
 
       const today = new Date();
+      today.setHours(0, 0, 0, 0); // Normalize to start of day
+      dueDate.setHours(0, 0, 0, 0); // Normalize to start of day
 
       // Calculate difference in ms
-      const diffTime = validUntil.getTime() - today.getTime();
+      const diffTime = dueDate.getTime() - today.getTime();
 
       // Convert ms → days
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-      if (diffDays < 0) return "Expired";
-      if (diffDays === 0) return "Today";
+      if (diffDays < 0) {
+        return `${Math.abs(diffDays)} days overdue (Due: ${dueDate.toLocaleDateString('en-GB')})`;
+      }
+      if (diffDays === 0) {
+        return `Due today (${dueDate.toLocaleDateString('en-GB')})`;
+      }
+      if (diffDays === 1) {
+        return `Due tomorrow (${dueDate.toLocaleDateString('en-GB')})`;
+      }
 
-      return `${diffDays} days left`;
-    }
+      return `${diffDays} days left (Due: ${dueDate.toLocaleDateString('en-GB')})`;
+    };
+
+    // Extract payment days from terms
+    const paymentDays = extractPaymentDays(quotation.termsAndConditions);
+
+    // Get payment terms text
+    const paymentTermsText = getPaymentTermsText(paymentDays);
+
+    // Get days left message
+    const daysLeftMessage = getDaysLeftFromInvoiceDate(project.invoiceDate, paymentDays);
 
     // Enhanced response structure with type-safe checks
     const response = {
       _id: project._id.toString(),
       invoiceNumber,
-      date: new Date().toISOString(),
+      date: project.invoiceDate ? project.invoiceDate.toISOString() : new Date().toISOString(),
       orderNumber: lpo.lpoNumber || "N/A",
       vendor: vendorInfo,
       vendee: vendeeInfo,
       subject: quotation.scopeOfWork?.join(", ") || "N/A",
-      paymentTerms: getDaysLeft(quotation.validUntil) || "N/A",
+      paymentTerms: daysLeftMessage, // This shows "X days left" or "X days overdue"
+      paymentTermsText: paymentTermsText, // This shows "Net 30 days from invoice date"
+      paymentDays: paymentDays, // This shows the number (30, 60, 90)
       amountInWords: convertToWords(quotation.netAmount || 0),
       products,
       summary: {
         amount: quotation.subtotal || 0,
+        discount: quotation.discountAmount || 0,
+        effective: quotation.subtotal - (quotation.discountAmount || 0),
         vat: quotation.vatAmount || 0,
         totalReceivable: quotation.netAmount || 0,
       },
@@ -798,6 +858,8 @@ export const generateInvoiceData = asyncHandler(
       },
       projectName: project.projectName,
       location: project.location,
+      invoiceDate: project.invoiceDate ? project.invoiceDate.toISOString() : null,
+      invoiceRemarks: project.invoiceRemarks || "",
     };
 
     res
@@ -1217,8 +1279,18 @@ export const generateInvoicePdf = asyncHandler(
       (sum, item) => sum + (item.totalPrice || 0),
       0
     );
-    const vatAmount = subtotal * (quotation.vatPercentage / 100);
-    const totalAmount = subtotal + vatAmount;
+
+    // Get discount amount from quotation (assuming discountAmount field exists)
+    const discountAmount = quotation.discountAmount || 0;
+
+    // Calculate effective amount after discount
+    const effectiveAmount = subtotal - discountAmount;
+
+    // Calculate VAT on effective amount
+    const vatAmount = effectiveAmount * (quotation.vatPercentage / 100);
+
+    // Calculate final total
+    const totalAmount = effectiveAmount + vatAmount;
 
     // Helper function to convert amount to words
     const convertToWords = (num: number): string => {
@@ -1506,16 +1578,24 @@ export const generateInvoicePdf = asyncHandler(
       margin-bottom: 4px;
     }
     .amount-label {
-      width: 140px;
+      width: 180px;
       font-weight: bold;
       text-align: right;
       padding-right: 10px;
       font-size: 9.5pt;
     }
     .amount-value {
-      width: 100px;
+      width: 120px;
       text-align: right;
       font-size: 9.5pt;
+    }
+    .effective-row {
+      display: flex;
+      justify-content: flex-end;
+      background-color: #f0f0f0;
+      font-weight: bold;
+      margin-top: 2px;
+      padding: 4px 0;
     }
     .net-amount-row {
       display: flex;
@@ -1684,7 +1764,10 @@ export const generateInvoicePdf = asyncHandler(
       <div class="invoice-header">
         <div>
           <p><strong>Invoice No:</strong> ${invoiceNumber}</p>
-          <p><strong>Date:</strong> ${formatDate(new Date())}</p>
+          <p><strong>Date:</strong> ${project?.invoiceDate
+        ? dayjs(project.invoiceDate).format('DD MMMM, YYYY')
+        : formatDate(new Date())
+      }</p>
           ${lpo ? `<p><strong>LPO :</strong> ${lpo.lpoNumber}</p>` : ''}
           ${project.grnNumber ? `<p><strong>GRN :</strong> ${project.grnNumber}</p>` : ''}
         </div>
@@ -1752,6 +1835,16 @@ export const generateInvoicePdf = asyncHandler(
             <div class="amount-label">SUBTOTAL:</div>
             <div class="amount-value">${subtotal.toFixed(2)} AED&nbsp;</div>
           </div>
+          ${discountAmount > 0 ? `
+          <div class="amount-summary-row">
+            <div class="amount-label">DISCOUNT:</div>
+            <div class="amount-value">${discountAmount.toFixed(2)} AED&nbsp;</div>
+          </div>
+          <div class="effective-row">
+            <div class="amount-label">EFFECTIVE AMOUNT:</div>
+            <div class="amount-value">${effectiveAmount.toFixed(2)} AED&nbsp;</div>
+          </div>
+          ` : ''}
           <div class="amount-summary-row">
             <div class="amount-label">VAT ${quotation.vatPercentage}%:</div>
             <div class="amount-value">${vatAmount.toFixed(2)} AED&nbsp;</div>
@@ -1788,6 +1881,14 @@ export const generateInvoicePdf = asyncHandler(
 </div>
 ` : ''}
 
+      ${project.invoiceRemarks ? `
+<div class="terms-section">
+  <div class="section-title">REMARKS</div>
+  <div class="terms-box">
+    <p>${project.invoiceRemarks}</p>
+  </div>
+</div>
+` : ''}
      
     </div>
 

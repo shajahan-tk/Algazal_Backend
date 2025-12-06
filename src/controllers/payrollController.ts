@@ -44,6 +44,7 @@ export const calculateSalaryBasedOnAttendance = async (
     let totalRegularHours = 0; // Mon-Sat actual working hours
     let totalOvertimeHours = 0; // Mon-Sat overtime hours
     let sundayOvertimeHours = 0; // Sunday overtime hours
+    let sundayRegularHours = 0; // Sunday normal hours (added for PDF display)
 
     // Count Sundays in the month
     let totalSundays = 0;
@@ -75,6 +76,7 @@ export const calculateSalaryBasedOnAttendance = async (
           // ✅ SUNDAY: Any hours worked = full day bonus
           if (workingHours > 0) {
             sundayWorkingDays++;
+            sundayRegularHours += workingHours; // Track Sunday normal hours
           }
           sundayOvertimeHours += overtime;
         } else {
@@ -111,7 +113,8 @@ export const calculateSalaryBasedOnAttendance = async (
       absentDays: absentDays + ' (WILL BE DEDUCTED FROM BASE)',
       totalRegularHours: totalRegularHours.toFixed(2) + ' hours',
       totalOvertimeHours: totalOvertimeHours.toFixed(2) + ' hours',
-      sundayOvertimeHours: sundayOvertimeHours.toFixed(2) + ' hours'
+      sundayOvertimeHours: sundayOvertimeHours.toFixed(2) + ' hours',
+      sundayRegularHours: sundayRegularHours.toFixed(2) + ' hours (Sunday normal hours)'
     });
 
     // ✅ NEW CALCULATION LOGIC
@@ -163,7 +166,8 @@ export const calculateSalaryBasedOnAttendance = async (
         sundayWorkingDays, // Sundays with hours = Full day bonus
         totalRegularHours, // Total hours worked Mon-Sat (for display)
         totalOvertimeHours, // Overtime hours Mon-Sat
-        sundayOvertimeHours // Overtime hours Sunday
+        sundayOvertimeHours, // Overtime hours Sunday
+        sundayRegularHours // Sunday normal hours (added)
       },
 
       rates: {
@@ -225,7 +229,8 @@ export const calculateSalaryBasedOnAttendance = async (
         sundayWorkingDays: 0,
         totalRegularHours: 0,
         totalOvertimeHours: 0,
-        sundayOvertimeHours: 0
+        sundayOvertimeHours: 0,
+        sundayRegularHours: 0
       },
       rates: {
         dailyRate: 0,
@@ -325,7 +330,7 @@ export const getEmployeeSummary = asyncHandler(async (req: Request, res: Respons
       baseSalaryAmount: salaryData.baseSalaryAmount,
       overtimeAmount: salaryData.overtimeAmount,
       sundayBonus: salaryData.sundayBonus,
-      absentDeduction: salaryData.absentDeduction, // NEW
+      absentDeduction: salaryData.absentDeduction,
       totalEarnings: salaryData.totalEarnings,
       attendanceSummary: salaryData.attendanceSummary,
       rates: salaryData.rates,
@@ -358,7 +363,13 @@ export const getEmployeeSummary = asyncHandler(async (req: Request, res: Respons
 // Create payroll with new calculation system
 export const createPayroll = asyncHandler(async (req: Request, res: Response) => {
   // Get all required fields from request body
-  let { employee, labourCard, labourCardPersonalNo, transport, medical, bonus, specialOT, mess, salaryAdvance, loanDeduction, fineAmount, visaDeduction, remark } = req.body;
+  let {
+    employee, labourCard, labourCardPersonalNo, transport, medical, bonus,
+    specialOT, mess, salaryAdvance, loanDeduction, fineAmount, visaDeduction,
+    // NEW DEDUCTION FIELDS
+    otherDeduction1, otherDeduction2, otherDeduction3,
+    remark
+  } = req.body;
 
   console.log('Creating payroll with new attendance-based calculation:', req.body);
 
@@ -372,6 +383,10 @@ export const createPayroll = asyncHandler(async (req: Request, res: Response) =>
   loanDeduction = Number(loanDeduction) || 0;
   fineAmount = Number(fineAmount) || 0;
   visaDeduction = Number(visaDeduction) || 0;
+  // NEW DEDUCTION FIELDS
+  otherDeduction1 = Number(otherDeduction1) || 0;
+  otherDeduction2 = Number(otherDeduction2) || 0;
+  otherDeduction3 = Number(otherDeduction3) || 0;
 
   if (!employee || !labourCard || !labourCardPersonalNo) {
     throw new ApiError(400, "Required fields are missing");
@@ -408,7 +423,11 @@ export const createPayroll = asyncHandler(async (req: Request, res: Response) =>
 
   // Calculate total earnings: Base salary + overtime + Sunday bonus - absent deduction + other allowances
   const totalEarnings = baseSalaryFromAttendance + transport + overtime + specialOT + medical + bonus + salaryData.sundayBonus - absentDeduction;
-  const totalDeductions = mess + salaryAdvance + loanDeduction + fineAmount + visaDeduction;
+
+  // Calculate total deductions including new fields
+  const totalDeductions = mess + salaryAdvance + loanDeduction + fineAmount + visaDeduction
+    + otherDeduction1 + otherDeduction2 + otherDeduction3;
+
   const net = totalEarnings - totalDeductions;
 
   const payroll = await Payroll.create({
@@ -426,6 +445,10 @@ export const createPayroll = asyncHandler(async (req: Request, res: Response) =>
     loanDeduction,
     fineAmount,
     visaDeduction,
+    // NEW DEDUCTION FIELDS
+    otherDeduction1,
+    otherDeduction2,
+    otherDeduction3,
     net,
     remark,
     createdBy: req.user?.userId,
@@ -496,7 +519,8 @@ export const getPayroll = asyncHandler(async (req: Request, res: Response) => {
 
   const absentDeduction = calculationDetails.absentDeduction || 0;
   const totalEarnings = calculationDetails.totalEarnings + payroll.transport + payroll.specialOT + payroll.medical + payroll.bonus;
-  const totalDeductions = payroll.mess + payroll.salaryAdvance + payroll.loanDeduction + payroll.fineAmount + payroll.visaDeduction;
+  const totalDeductions = payroll.mess + payroll.salaryAdvance + payroll.loanDeduction + payroll.fineAmount + payroll.visaDeduction
+    + (payroll.otherDeduction1 || 0) + (payroll.otherDeduction2 || 0) + (payroll.otherDeduction3 || 0);
 
   const enhancedPayroll = {
     ...payroll.toObject(),
@@ -584,7 +608,8 @@ export const getPayrolls = asyncHandler(async (req: Request, res: Response) => {
 
       const absentDeduction = calculationDetails.absentDeduction || 0;
       const totalEarnings = calculationDetails.totalEarnings + payroll.transport + payroll.specialOT + payroll.medical + payroll.bonus;
-      const totalDeductions = payroll.mess + payroll.salaryAdvance + payroll.loanDeduction + payroll.fineAmount + payroll.visaDeduction;
+      const totalDeductions = payroll.mess + payroll.salaryAdvance + payroll.loanDeduction + payroll.fineAmount + payroll.visaDeduction
+        + (payroll.otherDeduction1 || 0) + (payroll.otherDeduction2 || 0) + (payroll.otherDeduction3 || 0);
 
       return {
         _id: payroll._id,
@@ -608,6 +633,10 @@ export const getPayrolls = asyncHandler(async (req: Request, res: Response) => {
         loanDeduction: payroll.loanDeduction,
         fineAmount: payroll.fineAmount,
         visaDeduction: payroll.visaDeduction || 0,
+        // NEW DEDUCTION FIELDS
+        otherDeduction1: payroll.otherDeduction1 || 0,
+        otherDeduction2: payroll.otherDeduction2 || 0,
+        otherDeduction3: payroll.otherDeduction3 || 0,
         totalDeductions,
         net: payroll.net,
         remark: payroll.remark,
@@ -671,6 +700,10 @@ export const updatePayroll = asyncHandler(async (req: Request, res: Response) =>
   if (updateData.loanDeduction !== undefined) updateData.loanDeduction = Number(updateData.loanDeduction) || 0;
   if (updateData.fineAmount !== undefined) updateData.fineAmount = Number(updateData.fineAmount) || 0;
   if (updateData.visaDeduction !== undefined) updateData.visaDeduction = Number(updateData.visaDeduction) || 0;
+  // NEW DEDUCTION FIELDS
+  if (updateData.otherDeduction1 !== undefined) updateData.otherDeduction1 = Number(updateData.otherDeduction1) || 0;
+  if (updateData.otherDeduction2 !== undefined) updateData.otherDeduction2 = Number(updateData.otherDeduction2) || 0;
+  if (updateData.otherDeduction3 !== undefined) updateData.otherDeduction3 = Number(updateData.otherDeduction3) || 0;
 
   // Fetch employee expense to get basicSalary and allowance for recalculation
   const employeeExpense = await EmployeeExpense.findOne({
@@ -689,6 +722,10 @@ export const updatePayroll = asyncHandler(async (req: Request, res: Response) =>
   const loanDeduction = updateData.loanDeduction !== undefined ? updateData.loanDeduction : payroll.loanDeduction;
   const fineAmount = updateData.fineAmount !== undefined ? updateData.fineAmount : payroll.fineAmount;
   const visaDeduction = updateData.visaDeduction !== undefined ? updateData.visaDeduction : (payroll.visaDeduction || 0);
+  // NEW DEDUCTION FIELDS
+  const otherDeduction1 = updateData.otherDeduction1 !== undefined ? updateData.otherDeduction1 : (payroll.otherDeduction1 || 0);
+  const otherDeduction2 = updateData.otherDeduction2 !== undefined ? updateData.otherDeduction2 : (payroll.otherDeduction2 || 0);
+  const otherDeduction3 = updateData.otherDeduction3 !== undefined ? updateData.otherDeduction3 : (payroll.otherDeduction3 || 0);
 
   // Recalculate salary with new calculation system
   const salaryData = await calculateSalaryBasedOnAttendance(
@@ -705,7 +742,8 @@ export const updatePayroll = asyncHandler(async (req: Request, res: Response) =>
   // Recalculate net salary with new system
   const baseSalaryFromAttendance = salaryData.baseSalaryAmount;
   const totalEarnings = baseSalaryFromAttendance + transport + overtime + specialOT + medical + bonus + salaryData.sundayBonus - absentDeduction;
-  const totalDeductions = mess + salaryAdvance + loanDeduction + fineAmount + visaDeduction;
+  const totalDeductions = mess + salaryAdvance + loanDeduction + fineAmount + visaDeduction
+    + otherDeduction1 + otherDeduction2 + otherDeduction3;
   updateData.net = totalEarnings - totalDeductions;
 
   // Update calculation details
@@ -814,6 +852,7 @@ export const getPayslipData = asyncHandler(async (req: Request, res: Response) =
     let presentDays = 0;
     let sundayWorkingDays = 0;
     let sundayOvertimeHours = 0;
+    let sundayRegularHours = 0; // Added for Sunday normal hours
     let regularWorkingDays = 0;
     let totalRegularHours = 0;
     let absentDays = 0;
@@ -863,6 +902,7 @@ export const getPayslipData = asyncHandler(async (req: Request, res: Response) =
           if (isSunday) {
             if (regularHours > 0) {
               sundayWorkingDays++;
+              sundayRegularHours += regularHours; // Track Sunday normal hours
               status = 'Present (Sunday)';
             }
             sundayOvertimeHours += overtime;
@@ -902,6 +942,7 @@ export const getPayslipData = asyncHandler(async (req: Request, res: Response) =
         presentDays,
         regularWorkingDays,
         sundayWorkingDays,
+        sundayRegularHours: sundayRegularHours.toFixed(2),
         totalHours: totalHours.toFixed(2),
         totalRegularHours: totalRegularHours.toFixed(2),
         overtimeHours: overtimeHours.toFixed(2),
@@ -914,6 +955,7 @@ export const getPayslipData = asyncHandler(async (req: Request, res: Response) =
       records
     };
   };
+
   const attendanceDetails = await getAttendanceDetails(payroll.employee._id, payroll.period);
 
   const [month, year] = payroll.period.split('-');
@@ -922,8 +964,12 @@ export const getPayslipData = asyncHandler(async (req: Request, res: Response) =
 
   // ✅ Use calculationDetails properly
   const absentDeduction = calculationDetails.absentDeduction || 0;
+  const sundayBonus = calculationDetails.sundayBonus || 0;
+  const totalOvertimeHours = (calculationDetails.attendanceSummary?.totalOvertimeHours || 0) +
+    (calculationDetails.attendanceSummary?.sundayOvertimeHours || 0);
   const totalEarnings = calculationDetails.totalEarnings + payroll.transport + payroll.specialOT + payroll.medical + payroll.bonus;
-  const totalDeductions = payroll.mess + payroll.salaryAdvance + payroll.loanDeduction + payroll.fineAmount + (payroll.visaDeduction || 0);
+  const totalDeductions = payroll.mess + payroll.salaryAdvance + payroll.loanDeduction + payroll.fineAmount + payroll.visaDeduction
+    + (payroll.otherDeduction1 || 0) + (payroll.otherDeduction2 || 0) + (payroll.otherDeduction3 || 0);
 
   const payslipData = {
     employeeName: `${payroll.employee.firstName} ${payroll.employee.lastName}`,
@@ -940,9 +986,11 @@ export const getPayslipData = asyncHandler(async (req: Request, res: Response) =
     basicSalary: basicSalary,
     allowance: allowance,
     totalMonthlySalary: basicSalary + allowance,
-    sundayBonus: calculationDetails.sundayBonus || 0,
+    sundayBonus: sundayBonus,
     absentDeduction: absentDeduction,
     regularHours: calculationDetails.attendanceSummary.totalRegularHours,
+    sundayRegularHours: calculationDetails.attendanceSummary.sundayRegularHours || 0, // Added
+    totalOvertimeHours: totalOvertimeHours,
     transport: payroll.transport,
     overtime: payroll.overtime,
     specialOT: payroll.specialOT || 0,
@@ -953,6 +1001,10 @@ export const getPayslipData = asyncHandler(async (req: Request, res: Response) =
     loanDeduction: payroll.loanDeduction,
     fineAmount: payroll.fineAmount,
     visaDeduction: payroll.visaDeduction || 0,
+    // NEW DEDUCTION FIELDS
+    otherDeduction1: payroll.otherDeduction1 || 0,
+    otherDeduction2: payroll.otherDeduction2 || 0,
+    otherDeduction3: payroll.otherDeduction3 || 0,
     totalEarnings,
     totalDeductions,
     net: payroll.net,
@@ -1046,6 +1098,10 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     { header: 'LOAN DEDUCTION', key: 'loanDeduction', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'FINE AMOUNT', key: 'fineAmount', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'VISA DEDUCTION', key: 'visaDeduction', width: 15, style: { numFmt: '#,##0.00' } },
+    // NEW DEDUCTION FIELDS
+    { header: 'OTHER DEDUCTION 1', key: 'otherDeduction1', width: 15, style: { numFmt: '#,##0.00' } },
+    { header: 'OTHER DEDUCTION 2', key: 'otherDeduction2', width: 15, style: { numFmt: '#,##0.00' } },
+    { header: 'OTHER DEDUCTION 3', key: 'otherDeduction3', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'TOTAL EARNINGS', key: 'totalEarnings', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'TOTAL DEDUCTIONS', key: 'totalDeductions', width: 15, style: { numFmt: '#,##0.00' } },
     { header: 'NET PAY', key: 'net', width: 15, style: { numFmt: '#,##0.00' } },
@@ -1069,7 +1125,8 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
 
     const absentDeduction = calculationDetails.absentDeduction || 0;
     const totalEarnings = calculationDetails.totalEarnings + payroll.transport + payroll.specialOT + payroll.medical + payroll.bonus;
-    const totalDeductions = payroll.mess + payroll.salaryAdvance + payroll.loanDeduction + payroll.fineAmount + payroll.visaDeduction;
+    const totalDeductions = payroll.mess + payroll.salaryAdvance + payroll.loanDeduction + payroll.fineAmount + payroll.visaDeduction
+      + (payroll.otherDeduction1 || 0) + (payroll.otherDeduction2 || 0) + (payroll.otherDeduction3 || 0);
 
     worksheet.addRow({
       serialNo: i + 1,
@@ -1092,6 +1149,10 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
       loanDeduction: payroll.loanDeduction,
       fineAmount: payroll.fineAmount,
       visaDeduction: payroll.visaDeduction || 0,
+      // NEW DEDUCTION FIELDS
+      otherDeduction1: payroll.otherDeduction1 || 0,
+      otherDeduction2: payroll.otherDeduction2 || 0,
+      otherDeduction3: payroll.otherDeduction3 || 0,
       totalEarnings: totalEarnings,
       totalDeductions: totalDeductions,
       net: payroll.net,
@@ -1207,10 +1268,12 @@ export const generatePayslipPDF = asyncHandler(async (req: Request, res: Respons
   // ✅ Use calculationDetails properly
   const absentDeduction = calculationDetails.absentDeduction || 0;
   const sundayBonus = calculationDetails.sundayBonus || 0;
+  const sundayRegularHours = calculationDetails.attendanceSummary?.sundayRegularHours || 0;
   const totalOvertimeHours = (calculationDetails.attendanceSummary?.totalOvertimeHours || 0) +
     (calculationDetails.attendanceSummary?.sundayOvertimeHours || 0);
   const totalEarnings = calculationDetails.totalEarnings + payroll.transport + payroll.specialOT + payroll.medical + payroll.bonus;
-  const totalDeductions = payroll.mess + payroll.salaryAdvance + payroll.loanDeduction + payroll.fineAmount + (payroll.visaDeduction || 0);
+  const totalDeductions = payroll.mess + payroll.salaryAdvance + payroll.loanDeduction + payroll.fineAmount + payroll.visaDeduction
+    + (payroll.otherDeduction1 || 0) + (payroll.otherDeduction2 || 0) + (payroll.otherDeduction3 || 0);
 
   const payslipData = {
     employeeName: `${payroll.employee.firstName} ${payroll.employee.lastName}`,
@@ -1230,6 +1293,7 @@ export const generatePayslipPDF = asyncHandler(async (req: Request, res: Respons
     sundayBonus: sundayBonus,
     absentDeduction: absentDeduction,
     regularHours: calculationDetails.attendanceSummary.totalRegularHours,
+    sundayRegularHours: sundayRegularHours,
     totalOvertimeHours: totalOvertimeHours,
     transport: payroll.transport,
     overtime: payroll.overtime,
@@ -1241,6 +1305,9 @@ export const generatePayslipPDF = asyncHandler(async (req: Request, res: Respons
     loanDeduction: payroll.loanDeduction,
     fineAmount: payroll.fineAmount,
     visaDeduction: payroll.visaDeduction || 0,
+    otherDeduction1: payroll.otherDeduction1 || 0,
+    otherDeduction2: payroll.otherDeduction2 || 0,
+    otherDeduction3: payroll.otherDeduction3 || 0,
     totalEarnings,
     totalDeductions,
     net: payroll.net,
@@ -1288,7 +1355,11 @@ export const generatePayslipPDF = asyncHandler(async (req: Request, res: Respons
   }
 });
 
-
+// Helper function to format hours
+// const formatHours = (hours: any): string => {
+//   const h = parseFloat(hours) || 0;
+//   return h.toFixed(2);
+// };
 
 // Helper function to generate HTML for payslip
 const generatePayslipHTML = (data: any): string => {
@@ -1359,6 +1430,9 @@ const generatePayslipHTML = (data: any): string => {
   const loanDeduction = Number(data.loanDeduction) || 0;
   const fineAmount = Number(data.fineAmount) || 0;
   const visaDeduction = Number(data.visaDeduction) || 0;
+  const otherDeduction1 = Number(data.otherDeduction1) || 0;
+  const otherDeduction2 = Number(data.otherDeduction2) || 0;
+  const otherDeduction3 = Number(data.otherDeduction3) || 0;
   const totalEarnings = Number(data.totalEarnings) || 0;
   const totalDeductions = Number(data.totalDeductions) || 0;
   const net = Number(data.net) || 0;
@@ -1368,14 +1442,18 @@ const generatePayslipHTML = (data: any): string => {
   const sundayWorkingDays = Number(attendanceSummary.sundayWorkingDays) || 0;
   const paidLeaveDays = Number(attendanceSummary.paidLeaveDays) || 0;
   const absentDays = Number(attendanceSummary.absentDays) || 0;
-  const totalRegularHours = attendanceSummary.totalRegularHours || '0';
+  const totalRegularHours = parseFloat(attendanceSummary.totalRegularHours) || 0;
+  const sundayRegularHours = parseFloat(attendanceSummary.sundayRegularHours) - parseFloat(attendanceSummary.sundayOvertimeHours) || 0;
   const totalMonthDays = attendanceSummary.totalMonthDays || 0;
   const totalSundays = attendanceSummary.totalSundays || 0;
 
   // Get separate overtime hours
-  const regularOvertimeHours = attendanceSummary.totalOvertimeHours || 0; // Mon-Sat OT
-  const sundayOvertimeHours = attendanceSummary.sundayOvertimeHours || 0; // Sunday OT
+  const regularOvertimeHours = parseFloat(attendanceSummary.totalOvertimeHours) || 0;
+  const sundayOvertimeHours = parseFloat(attendanceSummary.sundayOvertimeHours) || 0;
   const totalOvertimeHoursFromAttendance = regularOvertimeHours + sundayOvertimeHours;
+
+  // Calculate total all hours
+  const totalAllHours = totalRegularHours + sundayRegularHours + regularOvertimeHours + sundayOvertimeHours;
 
   // Calculate separate overtime amounts
   const regularOvertimeAmount = regularOvertimeHours * overtimeHourlyRate;
@@ -1591,7 +1669,6 @@ const generatePayslipHTML = (data: any): string => {
             letter-spacing: 0.3px;
         }
         
-        /* From OLD CODE - 3 boxes layout */
         .attendance-summary-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -1668,7 +1745,6 @@ const generatePayslipHTML = (data: any): string => {
             font-weight: 600;
         }
         
-        /* Prepared by section */
         .prepared-by-section {
             margin-top: 15px;
             padding-top: 10px;
@@ -1844,6 +1920,30 @@ const generatePayslipHTML = (data: any): string => {
                             <td class="amount"></td>
                         </tr>
                         ` : ''}
+                        ${otherDeduction1 > 0 ? `
+                        <tr>
+                            <td></td>
+                            <td class="amount"></td>
+                            <td>Other Deduction 1</td>
+                            <td class="amount">${otherDeduction1.toFixed(2)}</td>
+                        </tr>
+                        ` : ''}
+                        ${otherDeduction2 > 0 ? `
+                        <tr>
+                            <td></td>
+                            <td class="amount"></td>
+                            <td>Other Deduction 2</td>
+                            <td class="amount">${otherDeduction2.toFixed(2)}</td>
+                        </tr>
+                        ` : ''}
+                        ${otherDeduction3 > 0 ? `
+                        <tr>
+                            <td></td>
+                            <td class="amount"></td>
+                            <td>Other Deduction 3</td>
+                            <td class="amount">${otherDeduction3.toFixed(2)}</td>
+                        </tr>
+                        ` : ''}
                     </tbody>
                 </table>
                 
@@ -1907,11 +2007,34 @@ const generatePayslipHTML = (data: any): string => {
                 <!-- Third Row for Hours -->
                 <div class="attendance-summary-grid" style="margin-top: 8px;">
                     <div class="summary-card">
-                        <h4>Regular Hours</h4>
+                        <h4>Regular Hours (Mon-Sat)</h4>
                         <div class="summary-value">${formatHours(totalRegularHours)}</div>
                         <div class="summary-label">Hours</div>
                     </div>
                     
+                    ${sundayRegularHours > 0 ? `
+                    <div class="summary-card" style="background-color: #fff9e6; border-color: #ffc107;">
+                        <h4 style="color: #856404;">Sunday Normal Hours</h4>
+                        <div class="summary-value" style="color: #856404;">${formatHours(sundayRegularHours)}</div>
+                        <div class="summary-label" style="color: #856404;">Hours</div>
+                    </div>
+                    ` : `
+                    <div class="summary-card" style="opacity: 0.6;">
+                        <h4>Sunday Normal Hours</h4>
+                        <div class="summary-value">0.00</div>
+                        <div class="summary-label">Hours</div>
+                    </div>
+                    `}
+                    
+                    <div class="summary-card" style="background-color: #e8f4fd; border-color: #2c5aa0;">
+                        <h4 style="color: #2c5aa0;">Total Hours</h4>
+                        <div class="summary-value" style="color: #2c5aa0;">${formatHours(totalAllHours)}</div>
+                        <div class="summary-label" style="color: #2c5aa0;">All Hours</div>
+                    </div>
+                </div>
+                
+                <!-- Fourth Row for Overtime Hours -->
+                <div class="attendance-summary-grid" style="margin-top: 8px;">
                     ${regularOvertimeHours > 0 ? `
                     <div class="summary-card">
                         <h4>Overtime (Mon-Sat)</h4>
@@ -1921,7 +2044,7 @@ const generatePayslipHTML = (data: any): string => {
                     ` : `
                     <div class="summary-card" style="opacity: 0.6;">
                         <h4>Overtime (Mon-Sat)</h4>
-                        <div class="summary-value">0</div>
+                        <div class="summary-value">0.00</div>
                         <div class="summary-label">Hours</div>
                     </div>
                     `}
@@ -1935,30 +2058,36 @@ const generatePayslipHTML = (data: any): string => {
                     ` : `
                     <div class="summary-card" style="opacity: 0.6;">
                         <h4>Overtime (Sunday)</h4>
-                        <div class="summary-value">0</div>
+                        <div class="summary-value">0.00</div>
                         <div class="summary-label">Hours</div>
                     </div>
                     `}
-                </div>
-                
-                <!-- Fourth Row for Total Hours and OT Rate -->
-                <div class="attendance-summary-grid" style="margin-top: 8px;">
-                    <div class="summary-card" style="opacity: 0.7;">
-                        <h4>Total Hours</h4>
-                        <div class="summary-value">${formatHours(Number(totalRegularHours) + totalOvertimeHoursFromAttendance)}</div>
-                        <div class="summary-label">Hours</div>
-                    </div>
                     
                     <div class="summary-card">
                         <h4>Overtime Per Hour Rate</h4>
                         <div class="summary-value">${overtimeHourlyRate.toFixed(2)}</div>
                         <div class="summary-label">AED/hour</div>
                     </div>
-                    
+                </div>
+                
+                <!-- Fifth Row for Daily Rate -->
+                <div class="attendance-summary-grid" style="margin-top: 8px;">
                     <div class="summary-card">
                         <h4>Daily Rate</h4>
                         <div class="summary-value">${dailyRate.toFixed(2)}</div>
                         <div class="summary-label">AED/day</div>
+                    </div>
+                    
+                    <div class="summary-card" style="opacity: 0.6;">
+                        <h4></h4>
+                        <div class="summary-value"></div>
+                        <div class="summary-label"></div>
+                    </div>
+                    
+                    <div class="summary-card" style="opacity: 0.6;">
+                        <h4></h4>
+                        <div class="summary-value"></div>
+                        <div class="summary-label"></div>
                     </div>
                 </div>
             </div>

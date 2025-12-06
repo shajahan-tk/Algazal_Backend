@@ -1,5 +1,3 @@
-// src/models/projectModel.ts
-
 import { Document, Schema, model, Types, ObjectId } from "mongoose";
 import { IClient } from "./clientModel";
 
@@ -33,11 +31,9 @@ export interface IProject extends Document {
   progress: number;
   createdBy: Types.ObjectId;
   updatedBy?: Types.ObjectId;
-  // CHANGE: Replace single assignedTo with array of assignedEngineers
-  assignedEngineers?: Types.ObjectId[]; // Changed from assignedTo
+  assignedEngineers?: Types.ObjectId[];
   assignedWorkers?: Types.ObjectId[];
   assignedDrivers?: Types.ObjectId[];
-  // Rest of the fields remain the same
   completionDate?: Date;
   handoverDate?: Date;
   acceptanceDate?: Date;
@@ -47,6 +43,9 @@ export interface IProject extends Document {
   createdAt?: Date;
   updatedAt?: Date;
   attention?: string;
+  // ADD THESE NEW FIELDS:
+  invoiceDate?: Date;
+  invoiceRemarks?: string;
 }
 
 const projectSchema = new Schema<IProject>(
@@ -123,7 +122,6 @@ const projectSchema = new Schema<IProject>(
       type: Schema.Types.ObjectId,
       ref: "User",
     },
-    // CHANGE: Replace single assignedTo with array of assignedEngineers
     assignedEngineers: [{
       type: Schema.Types.ObjectId,
       ref: "User",
@@ -152,6 +150,17 @@ const projectSchema = new Schema<IProject>(
     workStartDate: { type: Date },
     workEndDate: { type: Date },
     attention: { type: String },
+    // ADD THESE NEW FIELDS:
+    invoiceDate: {
+      type: Date,
+      default: null
+    },
+    invoiceRemarks: {
+      type: String,
+      trim: true,
+      maxlength: [1000, "Invoice remarks cannot exceed 1000 characters"],
+      default: ""
+    },
   },
   { timestamps: true }
 );
@@ -160,5 +169,6 @@ projectSchema.index({ projectName: 1 });
 projectSchema.index({ client: 1 });
 projectSchema.index({ status: 1 });
 projectSchema.index({ progress: 1 });
+projectSchema.index({ invoiceDate: 1 }); // Add index for invoice date
 
 export const Project = model<IProject>("Project", projectSchema);
