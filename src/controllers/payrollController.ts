@@ -1095,8 +1095,40 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Payroll Report');
 
-  // Add title row at the top
-  worksheet.addRow([]); // Empty row for title
+  // Add headers with separate BASIC SALARY and ALLOWANCE columns
+  worksheet.columns = [
+    { header: 'S/NO', key: 'serialNo', width: 6 },
+    { header: 'NAME', key: 'name', width: 20 },
+    { header: 'Designation', key: 'designation', width: 15 },
+    { header: 'EMIRATES ID', key: 'emiratesId', width: 18 },
+    { header: 'LABOUR CARD', key: 'labourCard', width: 18 },
+    { header: 'LABOUR CARD PERSONAL NO', key: 'labourCardPersonalNo', width: 22 },
+    { header: 'PERIOD', key: 'period', width: 12 },
+    { header: 'BASIC SALARY', key: 'basicSalary', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'ALLOWANCE', key: 'allowance', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'TRANSPORT', key: 'transport', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'OVERTIME', key: 'overtime', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'SPECIAL OVERTIME', key: 'specialOT', width: 14, style: { numFmt: '#,##0.00' } },
+    { header: 'SUNDAY BONUS', key: 'sundayBonus', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'ABSENT DEDUCTION', key: 'absentDeduction', width: 14, style: { numFmt: '#,##0.00' } },
+    { header: 'MEDICAL', key: 'medical', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'BONUS', key: 'bonus', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'FOOD ALLOWANCE', key: 'mess', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'SALARY ADVANCE', key: 'salaryAdvance', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'LOAN DEDUCTION', key: 'loanDeduction', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'FINE AMOUNT', key: 'fineAmount', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'VISA DEDUCTION', key: 'visaDeduction', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'OTHER DEDUCTION 1', key: 'otherDeduction1', width: 14, style: { numFmt: '#,##0.00' } },
+    { header: 'OTHER DEDUCTION 2', key: 'otherDeduction2', width: 14, style: { numFmt: '#,##0.00' } },
+    { header: 'OTHER DEDUCTION 3', key: 'otherDeduction3', width: 14, style: { numFmt: '#,##0.00' } },
+    { header: 'TOTAL EARNINGS', key: 'totalEarnings', width: 14, style: { numFmt: '#,##0.00' } },
+    { header: 'TOTAL DEDUCTIONS', key: 'totalDeductions', width: 14, style: { numFmt: '#,##0.00' } },
+    { header: 'NET PAY', key: 'net', width: 14, style: { numFmt: '#,##0.00' } },
+    { header: 'REMARK', key: 'remark', width: 25 }
+  ];
+
+  // Insert title row at the top and push headers down
+  worksheet.spliceRows(1, 0, []);
 
   let titleText = 'PAYROLL REPORT';
 
@@ -1133,38 +1165,6 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   };
   titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
   worksheet.getRow(1).height = 30;
-
-  // Add headers with separate BASIC SALARY and ALLOWANCE columns
-  worksheet.columns = [
-    { header: 'S/NO', key: 'serialNo', width: 6 },
-    { header: 'NAME', key: 'name', width: 20 },
-    { header: 'Designation', key: 'designation', width: 15 },
-    { header: 'EMIRATES ID', key: 'emiratesId', width: 18 },
-    { header: 'LABOUR CARD', key: 'labourCard', width: 18 },
-    { header: 'LABOUR CARD PERSONAL NO', key: 'labourCardPersonalNo', width: 22 },
-    { header: 'PERIOD', key: 'period', width: 12 },
-    { header: 'BASIC SALARY', key: 'basicSalary', width: 12, style: { numFmt: '#,##0.00' } },
-    { header: 'ALLOWANCE', key: 'allowance', width: 12, style: { numFmt: '#,##0.00' } },
-    { header: 'TRANSPORT', key: 'transport', width: 12, style: { numFmt: '#,##0.00' } },
-    { header: 'OVERTIME', key: 'overtime', width: 12, style: { numFmt: '#,##0.00' } },
-    { header: 'SPECIAL OVERTIME', key: 'specialOT', width: 14, style: { numFmt: '#,##0.00' } },
-    { header: 'SUNDAY BONUS', key: 'sundayBonus', width: 12, style: { numFmt: '#,##0.00' } },
-    { header: 'ABSENT DEDUCTION', key: 'absentDeduction', width: 14, style: { numFmt: '#,##0.00' } },
-    { header: 'MEDICAL', key: 'medical', width: 12, style: { numFmt: '#,##0.00' } },
-    { header: 'BONUS', key: 'bonus', width: 12, style: { numFmt: '#,##0.00' } },
-    { header: 'FOOD ALLOWANCE', key: 'mess', width: 12, style: { numFmt: '#,##0.00' } },
-    { header: 'SALARY ADVANCE', key: 'salaryAdvance', width: 12, style: { numFmt: '#,##0.00' } },
-    { header: 'LOAN DEDUCTION', key: 'loanDeduction', width: 12, style: { numFmt: '#,##0.00' } },
-    { header: 'FINE AMOUNT', key: 'fineAmount', width: 12, style: { numFmt: '#,##0.00' } },
-    { header: 'VISA DEDUCTION', key: 'visaDeduction', width: 12, style: { numFmt: '#,##0.00' } },
-    { header: 'OTHER DEDUCTION 1', key: 'otherDeduction1', width: 14, style: { numFmt: '#,##0.00' } },
-    { header: 'OTHER DEDUCTION 2', key: 'otherDeduction2', width: 14, style: { numFmt: '#,##0.00' } },
-    { header: 'OTHER DEDUCTION 3', key: 'otherDeduction3', width: 14, style: { numFmt: '#,##0.00' } },
-    { header: 'TOTAL EARNINGS', key: 'totalEarnings', width: 14, style: { numFmt: '#,##0.00' } },
-    { header: 'TOTAL DEDUCTIONS', key: 'totalDeductions', width: 14, style: { numFmt: '#,##0.00' } },
-    { header: 'NET PAY', key: 'net', width: 14, style: { numFmt: '#,##0.00' } },
-    { header: 'REMARK', key: 'remark', width: 25 }
-  ];
 
   // Initialize totals
   let totalBasicSalary = 0;
