@@ -157,19 +157,97 @@ export const getVisaExpenses = asyncHandler(async (req: Request<{}, {}, {}, Visa
   const filter: any = {};
 
   try {
-    // Employee filter
-    if (req.query.employee) {
+    // Employee filter (exclude when search is being used)
+    if (req.query.employee && !req.query.search) {
       if (!Types.ObjectId.isValid(req.query.employee)) {
         throw new ApiError(400, "Invalid employee ID format");
       }
       filter.employee = new Types.ObjectId(req.query.employee);
     }
 
+    // Search functionality - similar to payroll controller
+    if (req.query.search && req.query.search.trim()) {
+      const searchTerm = req.query.search.trim();
+      const searchRegex = new RegExp(searchTerm, 'i');
+
+      // Search for employees by name first
+      const users = await User.find({
+        $or: [
+          { firstName: { $regex: searchRegex } },
+          { lastName: { $regex: searchRegex } }
+        ]
+      }).select('_id');
+
+      const userIds = users.map(user => user._id);
+
+      // Search across multiple fields including employee names
+      filter.$or = [
+        { employee: { $in: userIds } },
+        { passportNumber: { $regex: searchRegex } },
+        { emirateIdNumber: { $regex: searchRegex } },
+        { labourCardPersonalNumber: { $regex: searchRegex } },
+        { workPermitNumber: { $regex: searchRegex } },
+        { iBan: { $regex: searchRegex } },
+      ];
+
+      // If search term is a number, also search in total field
+      if (!isNaN(Number(searchTerm))) {
+        filter.$or.push({ total: Number(searchTerm) });
+      }
+
+      // If no users found and no other matches, return empty results
+      if (userIds.length === 0) {
+        const otherFieldsMatch = await VisaExpense.findOne({
+          $or: filter.$or.slice(1) // Exclude employee search
+        });
+
+        if (!otherFieldsMatch) {
+          return res.status(200).json(
+            new ApiResponse(
+              200,
+              {
+                visaExpenses: [],
+                pagination: {
+                  total: 0,
+                  page,
+                  limit,
+                  totalPages: 0,
+                  hasNextPage: false,
+                  hasPreviousPage: false,
+                  pageTotal: 0,
+                },
+                summary: {
+                  totalAmount: 0,
+                  averageAmount: 0,
+                  maxAmount: 0,
+                  minAmount: 0,
+                  totalRecords: 0
+                },
+                filters: {
+                  employee: req.query.employee,
+                  startDate: req.query.startDate,
+                  endDate: req.query.endDate,
+                  month: req.query.month,
+                  year: req.query.year,
+                  search: req.query.search,
+                  minTotal: req.query.minTotal,
+                  maxTotal: req.query.maxTotal,
+                  sortBy,
+                  sortOrder: req.query.sortOrder
+                }
+              },
+              "No visa expenses found matching the search criteria"
+            )
+          );
+        }
+      }
+    }
+
     // Date range filter (takes priority over month/year filter)
     if (req.query.startDate && req.query.endDate) {
       const startDate = new Date(req.query.startDate);
       const endDate = new Date(req.query.endDate);
-      
+
       if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
         throw new ApiError(400, "Invalid date format. Use YYYY-MM-DD format");
       }
@@ -221,7 +299,7 @@ export const getVisaExpenses = asyncHandler(async (req: Request<{}, {}, {}, Visa
     // Total amount range filter
     if (req.query.minTotal || req.query.maxTotal) {
       filter.total = {};
-      
+
       if (req.query.minTotal) {
         const minTotal = parseFloat(req.query.minTotal);
         if (isNaN(minTotal) || minTotal < 0) {
@@ -229,7 +307,7 @@ export const getVisaExpenses = asyncHandler(async (req: Request<{}, {}, {}, Visa
         }
         filter.total.$gte = minTotal;
       }
-      
+
       if (req.query.maxTotal) {
         const maxTotal = parseFloat(req.query.maxTotal);
         if (isNaN(maxTotal) || maxTotal < 0) {
@@ -245,25 +323,6 @@ export const getVisaExpenses = asyncHandler(async (req: Request<{}, {}, {}, Visa
         if (minTotal > maxTotal) {
           throw new ApiError(400, "Minimum total cannot be greater than maximum total");
         }
-      }
-    }
-
-    // Search functionality
-    if (req.query.search && req.query.search.trim()) {
-      const searchTerm = req.query.search.trim();
-      
-      // Search in multiple fields
-      filter.$or = [
-        { passportNumber: { $regex: searchTerm, $options: 'i' } },
-        { emirateIdNumber: { $regex: searchTerm, $options: 'i' } },
-        { labourCardPersonalNumber: { $regex: searchTerm, $options: 'i' } },
-        { workPermitNumber: { $regex: searchTerm, $options: 'i' } },
-        { iBan: { $regex: searchTerm, $options: 'i' } },
-      ];
-
-      // If search term is a number, also search in total field
-      if (!isNaN(Number(searchTerm))) {
-        filter.$or.push({ total: Number(searchTerm) });
       }
     }
 
@@ -355,7 +414,7 @@ export const getVisaExpenses = asyncHandler(async (req: Request<{}, {}, {}, Visa
     if (error instanceof ApiError) {
       throw error;
     }
-    
+
     // Handle MongoDB errors
     if (error instanceof Error) {
       if (error.message.includes('Cast to ObjectId failed')) {
@@ -363,11 +422,10 @@ export const getVisaExpenses = asyncHandler(async (req: Request<{}, {}, {}, Visa
       }
       throw new ApiError(500, `Database error: ${error.message}`);
     }
-    
+
     throw new ApiError(500, "An unexpected error occurred while fetching visa expenses");
   }
 });
-
 // Additional helper function to get visa expense statistics
 export const getVisaExpenseStats = asyncHandler(async (req: Request, res: Response) => {
   try {
@@ -490,11 +548,11 @@ export const updateVisaExpense = asyncHandler(async (req: Request, res: Response
 
   if (shouldRecalculateTotal) {
     // Get the current document
-    const currentExpense:any = await VisaExpense.findById(id);
+    const currentExpense: any = await VisaExpense.findById(id);
     if (!currentExpense) {
       throw new ApiError(404, "Visa expense not found");
     }
-    
+
 
     // Calculate new total based on updated values or existing values
     const total = expenseFields.reduce((sum, field) => {
@@ -560,7 +618,7 @@ export const exportVisaExpensesToExcel = asyncHandler(async (req: Request<{}, {}
     if (req.query.startDate && req.query.endDate) {
       const startDate = new Date(req.query.startDate);
       const endDate = new Date(req.query.endDate);
-      
+
       if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
         throw new ApiError(400, "Invalid date format. Use YYYY-MM-DD format");
       }
@@ -611,7 +669,7 @@ export const exportVisaExpensesToExcel = asyncHandler(async (req: Request<{}, {}
     // Total amount range filter
     if (req.query.minTotal || req.query.maxTotal) {
       filter.total = {};
-      
+
       if (req.query.minTotal) {
         const minTotal = parseFloat(req.query.minTotal);
         if (isNaN(minTotal) || minTotal < 0) {
@@ -619,7 +677,7 @@ export const exportVisaExpensesToExcel = asyncHandler(async (req: Request<{}, {}
         }
         filter.total.$gte = minTotal;
       }
-      
+
       if (req.query.maxTotal) {
         const maxTotal = parseFloat(req.query.maxTotal);
         if (isNaN(maxTotal) || maxTotal < 0) {
@@ -632,7 +690,7 @@ export const exportVisaExpensesToExcel = asyncHandler(async (req: Request<{}, {}
     // Search functionality
     if (req.query.search && req.query.search.trim()) {
       const searchTerm = req.query.search.trim();
-      
+
       filter.$or = [
         { passportNumber: { $regex: searchTerm, $options: 'i' } },
         { emirateIdNumber: { $regex: searchTerm, $options: 'i' } },
@@ -726,7 +784,7 @@ export const exportVisaExpensesToExcel = asyncHandler(async (req: Request<{}, {}
     visaExpenses.forEach((expense, index) => {
       const employee = expense.employee as any;
       const createdBy = expense.createdBy as any;
-      
+
       const rowData = {
         serialNumber: index + 1,
         name: `${employee.firstName} ${employee.lastName}`,
@@ -812,7 +870,7 @@ export const exportVisaExpensesToExcel = asyncHandler(async (req: Request<{}, {}
     // Add summary statistics if requested
     if (includeStats) {
       const summaryStartRow = visaExpenses.length + 3;
-      
+
       // Add summary title
       const summaryTitleCell = worksheet.getCell(`A${summaryStartRow}`);
       summaryTitleCell.value = "SUMMARY STATISTICS";
@@ -822,10 +880,10 @@ export const exportVisaExpensesToExcel = asyncHandler(async (req: Request<{}, {}
         pattern: "solid",
         fgColor: { argb: "FFFF9900" },
       };
-      
+
       // Merge cells for title
       worksheet.mergeCells(`A${summaryStartRow}:D${summaryStartRow}`);
-      
+
       // Add statistics
       const stats = [
         [`Total Records:`, visaExpenses.length],
@@ -833,13 +891,13 @@ export const exportVisaExpensesToExcel = asyncHandler(async (req: Request<{}, {}
         [`Average Amount:`, Math.round((totalAmount / visaExpenses.length) * 100) / 100],
         [`Export Date:`, new Date().toLocaleString()],
       ];
-      
+
       stats.forEach((stat, index) => {
         const row = summaryStartRow + index + 1;
         worksheet.getCell(`A${row}`).value = stat[0];
         worksheet.getCell(`A${row}`).font = { bold: true };
         worksheet.getCell(`B${row}`).value = stat[1];
-        
+
         if (typeof stat[1] === 'number' && index > 0) {
           worksheet.getCell(`B${row}`).numFmt = '#,##0.00';
         }
@@ -858,21 +916,21 @@ export const exportVisaExpensesToExcel = asyncHandler(async (req: Request<{}, {}
     // Generate filename with current date and filter info
     const dateStr = new Date().toISOString().split("T")[0];
     let filename = `visa_expenses_export_${dateStr}`;
-    
+
     if (req.query.employee) filename += '_employee_filtered';
     if (req.query.startDate && req.query.endDate) {
       filename += `_${req.query.startDate}_to_${req.query.endDate}`;
     } else if (req.query.month && req.query.year) {
       filename += `_${req.query.year}_${req.query.month.padStart(2, '0')}`;
     }
-    
+
     filename += `.${format}`;
 
     // Set response headers based on format
     if (format === 'csv') {
       res.setHeader("Content-Type", "text/csv");
       res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
-      
+
       // Write as CSV
       await workbook.csv.write(res);
     } else {
@@ -881,25 +939,25 @@ export const exportVisaExpensesToExcel = asyncHandler(async (req: Request<{}, {}
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
       );
       res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
-      
+
       // Write as Excel
       await workbook.xlsx.write(res);
     }
-    
+
     res.end();
 
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;
     }
-    
+
     if (error instanceof Error) {
       if (error.message.includes('Cast to ObjectId failed')) {
         throw new ApiError(400, "Invalid ID format provided");
       }
       throw new ApiError(500, `Export error: ${error.message}`);
     }
-    
+
     throw new ApiError(500, "An unexpected error occurred during export");
   }
 });

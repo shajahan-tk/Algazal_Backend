@@ -89,27 +89,52 @@ export const createEmployeeExpense = asyncHandler(
 
 export const getEmployeeExpenses = asyncHandler(
   async (req: Request, res: Response) => {
-    const { 
-      employee, 
-      designation, 
-      country, 
-      minSalary, 
+    const {
+      employee,
+      designation,
+      country,
+      minSalary,
       maxSalary,
       startDate,
       endDate,
       month,
       year,
-      page = 1, 
-      limit = 10 
+      search,
+      page = 1,
+      limit = 10
     } = req.query;
 
     const filter: any = {};
-    
-    // Basic filters
-    if (employee) filter.employee = employee;
-    if (designation) filter.designation = { $regex: designation as string, $options: "i" };
-    if (country) filter.country = { $regex: country as string, $options: "i" };
-    
+
+    // Handle search across multiple fields
+    if (search && typeof search === 'string' && search.trim() !== '') {
+      const searchRegex = new RegExp(search.trim(), 'i'); // Case-insensitive search
+
+      const users = await User.find({
+        $or: [
+          { firstName: { $regex: searchRegex } },
+          { lastName: { $regex: searchRegex } }
+        ]
+      }).select('_id');
+
+      const userIds = users.map(user => user._id);
+
+      // Search across multiple fields
+      filter.$or = [
+        { employee: { $in: userIds } },
+        { designation: { $regex: searchRegex } },
+        { country: { $regex: searchRegex } },
+        { labourCard: { $regex: searchRegex } },
+        { emirateIdNumber: { $regex: searchRegex } },
+        { passportNumber: { $regex: searchRegex } }
+      ];
+    } else {
+      // Only apply these filters if not searching by search term
+      if (employee) filter.employee = employee;
+      if (designation) filter.designation = { $regex: designation as string, $options: "i" };
+      if (country) filter.country = { $regex: country as string, $options: "i" };
+    }
+
     // Salary range filter
     if (minSalary || maxSalary) {
       filter.totalSalary = {};
@@ -166,6 +191,58 @@ export const getEmployeeExpenses = asyncHandler(
     }
 
     const skip = (Number(page) - 1) * Number(limit);
+
+    // If search returned no user matches and we have $or filter, return empty results
+    if (filter.$or && filter.$or.length > 0) {
+      const total = await EmployeeExpense.countDocuments(filter);
+
+      if (total === 0) {
+        return res.status(200).json(
+          new ApiResponse(
+            200,
+            {
+              expenses: [],
+              pagination: {
+                total: 0,
+                page: Number(page),
+                limit: Number(limit),
+                totalPages: 0,
+                hasNextPage: false,
+                hasPreviousPage: false,
+              },
+            },
+            "No employee expenses found matching the search criteria"
+          )
+        );
+      }
+
+      const expenses = await EmployeeExpense.find(filter)
+        .skip(skip)
+        .limit(Number(limit))
+        .sort({ createdAt: -1 })
+        .populate("employee", "firstName lastName email")
+        .populate("createdBy", "firstName lastName");
+
+      return res.status(200).json(
+        new ApiResponse(
+          200,
+          {
+            expenses,
+            pagination: {
+              total,
+              page: Number(page),
+              limit: Number(limit),
+              totalPages: Math.ceil(total / Number(limit)),
+              hasNextPage: Number(page) * Number(limit) < total,
+              hasPreviousPage: Number(page) > 1,
+            },
+          },
+          "Employee expenses retrieved successfully"
+        )
+      );
+    }
+
+    // Original logic for non-search queries
     const total = await EmployeeExpense.countDocuments(filter);
 
     const expenses = await EmployeeExpense.find(filter)
@@ -225,8 +302,8 @@ export const updateEmployeeExpense = asyncHandler(
 
     // Recalculate total salary if basicSalary or allowance is updated
     if (updateData.basicSalary || updateData.allowance) {
-      updateData.totalSalary = 
-        (updateData.basicSalary || expense.basicSalary) + 
+      updateData.totalSalary =
+        (updateData.basicSalary || expense.basicSalary) +
         (updateData.allowance || expense.allowance);
     }
 
@@ -263,7 +340,7 @@ export const exportEmployeeExpensesToExcel = asyncHandler(
   async (req: Request, res: Response) => {
     try {
       const { search, employee, designation, country, month, year, minSalary, maxSalary, startDate, endDate } = req.query;
-      
+
       const filter: any = {};
 
       // Search filter
@@ -301,7 +378,7 @@ export const exportEmployeeExpensesToExcel = asyncHandler(
         // Use month/year filtering
         const monthNum = parseInt(month as string);
         const yearNum = parseInt(year as string);
-        
+
         if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
           throw new ApiError(400, "Invalid month value (1-12)");
         }
@@ -311,11 +388,11 @@ export const exportEmployeeExpensesToExcel = asyncHandler(
 
         const startDateCalc = new Date(yearNum, monthNum - 1, 1);
         const endDateCalc = new Date(yearNum, monthNum, 0);
-        
+
         // Add time to make sure we capture the full day
         startDateCalc.setHours(0, 0, 0, 0);
         endDateCalc.setHours(23, 59, 59, 999);
-        
+
         filter.createdAt = {
           $gte: startDateCalc,
           $lte: endDateCalc
@@ -335,7 +412,7 @@ export const exportEmployeeExpensesToExcel = asyncHandler(
 
         const startDateCalc = new Date(yearNum, 0, 1, 0, 0, 0, 0);
         const endDateCalc = new Date(yearNum, 11, 31, 23, 59, 59, 999);
-        
+
         filter.createdAt = {
           $gte: startDateCalc,
           $lte: endDateCalc
@@ -343,14 +420,14 @@ export const exportEmployeeExpensesToExcel = asyncHandler(
       } else if (month && !year) {
         const monthNum = parseInt(month as string);
         const currentYear = new Date().getFullYear();
-        
+
         if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
           throw new ApiError(400, "Invalid month value (1-12)");
         }
 
         const startDateCalc = new Date(currentYear, monthNum - 1, 1, 0, 0, 0, 0);
         const endDateCalc = new Date(currentYear, monthNum, 0, 23, 59, 59, 999);
-        
+
         filter.createdAt = {
           $gte: startDateCalc,
           $lte: endDateCalc
@@ -405,42 +482,42 @@ export const exportEmployeeExpensesToExcel = asyncHandler(
         { header: "Employee", key: "employee", width: 25 },
         { header: "Designation", key: "designation", width: 20 },
         { header: "Country", key: "country", width: 15 },
-        { header: "Basic Salary", key: "basicSalary", width: 15, style: { numFmt: "#,##0.00" }},
-        { header: "Allowance", key: "allowance", width: 15, style: { numFmt: "#,##0.00" }},
-        { header: "Total Salary", key: "totalSalary", width: 15, style: { numFmt: "#,##0.00" }},
-        { header: "2 Year Salary", key: "twoYearSalary", width: 15, style: { numFmt: "#,##0.00" }},
-        { header: "Per Year Expenses", key: "perYearExpenses", width: 15, style: { numFmt: "#,##0.00" }},
-        { header: "Per Month Expenses", key: "perMonthExpenses", width: 15, style: { numFmt: "#,##0.00" }},
-        { header: "Per Day Expenses", key: "perDayExpenses", width: 15, style: { numFmt: "#,##0.00" }},
-        { header: "Total Expenses", key: "totalExpensesPerPerson", width: 15, style: { numFmt: "#,##0.00" }},
-        { header: "Visa Expenses", key: "visaExpenses", width: 15, style: { numFmt: "#,##0.00" }},
-        { header: "2 Year Uniform", key: "twoYearUniform", width: 15, style: { numFmt: "#,##0.00" }},
-        { header: "Shoes", key: "shoes", width: 15, style: { numFmt: "#,##0.00" }},
-        { header: "2 Year Accommodation", key: "twoYearAccommodation", width: 20, style: { numFmt: "#,##0.00" }},
-        { header: "SEWA Bills", key: "sewaBills", width: 15, style: { numFmt: "#,##0.00" }},
-        { header: "DEWA Bills", key: "dewaBills", width: 15, style: { numFmt: "#,##0.00" }},
-        { header: "Insurance", key: "insurance", width: 15, style: { numFmt: "#,##0.00" }},
-        { header: "Transport", key: "transport", width: 15, style: { numFmt: "#,##0.00" }},
-        { header: "Water", key: "water", width: 15, style: { numFmt: "#,##0.00" }},
-        { header: "3rd Party Liabilities", key: "thirdPartyLiabilities", width: 20, style: { numFmt: "#,##0.00" }},
-        { header: "Fairmont Certificate", key: "fairmontCertificate", width: 20, style: { numFmt: "#,##0.00" }},
-        { header: "Leave Salary", key: "leaveSalary", width: 15, style: { numFmt: "#,##0.00" }},
-        { header: "Ticket", key: "ticket", width: 15, style: { numFmt: "#,##0.00" }},
-        { header: "Gratuity", key: "gratuity", width: 15, style: { numFmt: "#,##0.00" }},
-        { 
-          header: "Custom Expenses", 
-          key: "customExpenses", 
+        { header: "Basic Salary", key: "basicSalary", width: 15, style: { numFmt: "#,##0.00" } },
+        { header: "Allowance", key: "allowance", width: 15, style: { numFmt: "#,##0.00" } },
+        { header: "Total Salary", key: "totalSalary", width: 15, style: { numFmt: "#,##0.00" } },
+        { header: "2 Year Salary", key: "twoYearSalary", width: 15, style: { numFmt: "#,##0.00" } },
+        { header: "Per Year Expenses", key: "perYearExpenses", width: 15, style: { numFmt: "#,##0.00" } },
+        { header: "Per Month Expenses", key: "perMonthExpenses", width: 15, style: { numFmt: "#,##0.00" } },
+        { header: "Per Day Expenses", key: "perDayExpenses", width: 15, style: { numFmt: "#,##0.00" } },
+        { header: "Total Expenses", key: "totalExpensesPerPerson", width: 15, style: { numFmt: "#,##0.00" } },
+        { header: "Visa Expenses", key: "visaExpenses", width: 15, style: { numFmt: "#,##0.00" } },
+        { header: "2 Year Uniform", key: "twoYearUniform", width: 15, style: { numFmt: "#,##0.00" } },
+        { header: "Shoes", key: "shoes", width: 15, style: { numFmt: "#,##0.00" } },
+        { header: "2 Year Accommodation", key: "twoYearAccommodation", width: 20, style: { numFmt: "#,##0.00" } },
+        { header: "SEWA Bills", key: "sewaBills", width: 15, style: { numFmt: "#,##0.00" } },
+        { header: "DEWA Bills", key: "dewaBills", width: 15, style: { numFmt: "#,##0.00" } },
+        { header: "Insurance", key: "insurance", width: 15, style: { numFmt: "#,##0.00" } },
+        { header: "Transport", key: "transport", width: 15, style: { numFmt: "#,##0.00" } },
+        { header: "Water", key: "water", width: 15, style: { numFmt: "#,##0.00" } },
+        { header: "3rd Party Liabilities", key: "thirdPartyLiabilities", width: 20, style: { numFmt: "#,##0.00" } },
+        { header: "Fairmont Certificate", key: "fairmontCertificate", width: 20, style: { numFmt: "#,##0.00" } },
+        { header: "Leave Salary", key: "leaveSalary", width: 15, style: { numFmt: "#,##0.00" } },
+        { header: "Ticket", key: "ticket", width: 15, style: { numFmt: "#,##0.00" } },
+        { header: "Gratuity", key: "gratuity", width: 15, style: { numFmt: "#,##0.00" } },
+        {
+          header: "Custom Expenses",
+          key: "customExpenses",
           width: 30,
           style: { alignment: { wrapText: true } }
         },
-        { header: "Created Date", key: "createdAt", width: 15, style: { numFmt: "dd-mm-yyyy" }}
+        { header: "Created Date", key: "createdAt", width: 15, style: { numFmt: "dd-mm-yyyy" } }
       ];
 
       // Add data rows
       expenses.forEach((expense, index) => {
         const rowData = {
           sno: index + 1,
-          employee: expense.employee 
+          employee: expense.employee
             ? `${expense.employee.firstName} ${expense.employee.lastName}`
             : 'N/A',
           designation: expense.designation,
