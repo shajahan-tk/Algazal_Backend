@@ -1066,11 +1066,12 @@ export const getPayslipData = asyncHandler(async (req: Request, res: Response) =
 });
 
 
-// Export payrolls to Excel
 export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Response) => {
-  const { month, year, search, employee, period, labourCard, startDate, endDate } = req.query;
+  const { month, year } = req.query;
 
   const filter: Record<string, any> = {};
+
+  // Only handle month and year filters
   if (month && year) {
     const startOfMonth = new Date(Number(year), Number(month) - 1, 1);
     const endOfMonth = new Date(Number(year), Number(month), 0, 23, 59, 59, 999);
@@ -1081,29 +1082,9 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     const endOfYear = new Date(Number(year), 11, 31, 23, 59, 59, 999);
     console.log('Exporting by year:', { year, startDate: startOfYear.toISOString(), endDate: endOfYear.toISOString() });
     filter.createdAt = { $gte: startOfYear, $lte: endOfYear };
-  } else if (startDate && endDate) {
-    filter.createdAt = { $gte: new Date(startDate as string), $lte: new Date(endDate as string) };
   }
 
-  if (period) filter.period = period as string;
-  if (employee) filter.employee = employee as string;
-  if (labourCard) filter.labourCard = labourCard as string;
-
-  let searchFilter = {};
-  if (search && search.toString().trim()) {
-    searchFilter = {
-      $or: [
-        { period: { $regex: search, $options: 'i' } },
-        { labourCard: { $regex: search, $options: 'i' } },
-        { labourCardPersonalNo: { $regex: search, $options: 'i' } },
-        { remark: { $regex: search, $options: 'i' } }
-      ]
-    };
-  }
-
-  const finalFilter = Object.keys(searchFilter).length > 0 ? { ...filter, ...searchFilter } : filter;
-
-  const payrolls = await Payroll.find(finalFilter)
+  const payrolls = await Payroll.find(filter)
     .sort({ period: -1, createdAt: -1 })
     .populate<{ employee: IUser }>({ path: 'employee', select: 'firstName lastName role emiratesId' });
 
@@ -1118,17 +1099,26 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   const titleRow = worksheet.addRow([]);
   let titleText = 'PAYROLL REPORT';
 
-  // Generate title based on filters
+  // Generate title based on filters - month parameter represents the PREVIOUS month
   if (month && year) {
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
       'July', 'August', 'September', 'October', 'November', 'December'];
-    titleText = `PAYROLL ${monthNames[Number(month) - 1].toUpperCase()} ${year}`;
+    // month=12 means November (month-1), month=1 means December of previous year
+    const actualMonthIndex = Number(month) - 2;
+    let displayYear = Number(year);
+    let displayMonth;
+
+    if (actualMonthIndex < 0) {
+      // If month=1, it's December of previous year
+      displayMonth = monthNames[11]; // December
+      displayYear = displayYear - 1;
+    } else {
+      displayMonth = monthNames[actualMonthIndex];
+    }
+
+    titleText = `PAYROLL ${displayMonth.toUpperCase()} ${displayYear}`;
   } else if (year) {
     titleText = `PAYROLL ${year}`;
-  } else if (startDate && endDate) {
-    const start = new Date(startDate as string);
-    const end = new Date(endDate as string);
-    titleText = `PAYROLL ${start.toLocaleDateString()} - ${end.toLocaleDateString()}`;
   }
 
   worksheet.mergeCells('A1:AB1'); // Merge across all columns
@@ -1330,7 +1320,7 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
 
       // Reduce font size for NAME column (column 2)
       if (colNumber === 2) {
-        cell.font = { size: 8 };
+        cell.font = { size: 9 };
       }
     });
   }
@@ -1505,7 +1495,19 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   let filename = 'payroll_report';
   if (month && year) {
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    filename += `_${monthNames[Number(month) - 1]}_${year}`;
+    // month=12 means November (month-1)
+    const actualMonthIndex = Number(month) - 2;
+    let displayYear = Number(year);
+    let displayMonth;
+
+    if (actualMonthIndex < 0) {
+      displayMonth = monthNames[11]; // Dec
+      displayYear = displayYear - 1;
+    } else {
+      displayMonth = monthNames[actualMonthIndex];
+    }
+
+    filename += `_${displayMonth}_${displayYear}`;
   } else if (year) {
     filename += `_${year}`;
   } else {
