@@ -24,21 +24,23 @@ interface ProjectYearlyData {
     estimationNumber: string;
     location: string;
     projectName: string;
-    quotationAmount: number;
+    quotationNetAmount: number;      // With VAT
+    quotationWithoutVat: number;     // Without VAT
+    vatAmount: number;               // VAT amount
     estimationAmount: number;
     commission: number;
     labourCosts: number;
     materialCosts: number;
     miscellaneousCosts: number;
     totalExpenses: number;
-    profitLoss: number;
+    profitLossWithoutVat: number;    // Profit calculation WITHOUT VAT
+    profitLossWithVat: number;       // Profit calculation WITH VAT
     workStartDate: string;
     workEndDate: string;
-    status: string;
     attentionPerson: string;
 }
 
-// Get Monthly Report with Project Profit
+// Get Monthly Report with Project Profit (Only projects with LPO)
 export const getMonthlyReport = asyncHandler(async (req: Request, res: Response) => {
     const { month, year, export: exportType } = req.query;
 
@@ -53,17 +55,36 @@ export const getMonthlyReport = asyncHandler(async (req: Request, res: Response)
         const startDate = new Date(selectedYear, selectedMonth - 1, 1);
         const endDate = new Date(selectedYear, selectedMonth, 0, 23, 59, 59);
 
-        // 1. PROFIT DATA (Budget - Material Expenses)
+        // Get projects that have LPOs
+        const projectsWithLPO = await LPO.aggregate([
+            {
+                $match: {
+                    lpoDate: { $gte: startDate, $lte: endDate }
+                }
+            },
+            {
+                $group: {
+                    _id: "$project"
+                }
+            }
+        ]);
+
+        const projectIdsWithLPO = projectsWithLPO.map(p => p._id);
+
+        // 1. PROFIT DATA (Budget - Material Expenses) - Only for projects with LPO
         const budgets = await Budget.find({
             "monthlyBudgets": {
                 $elemMatch: {
                     month: selectedMonth,
                     year: selectedYear
                 }
-            }
+            },
+            "project": { $in: projectIdsWithLPO } // Only projects with LPO
         }).populate("project", "projectName projectNumber");
 
-        let totalRevenue = 0;
+        let totalRevenueNet = 0;      // With VAT
+        let totalRevenueWithoutVat = 0; // Without VAT
+        let totalVatAmount = 0;       // VAT amount
         let totalExpenses = 0;
         const projectProfitData = [];
 
@@ -75,7 +96,31 @@ export const getMonthlyReport = asyncHandler(async (req: Request, res: Response)
 
             if (!monthlyBudgetAllocation) continue;
 
-            totalRevenue += monthlyBudgetAllocation.allocatedAmount;
+            // Get quotation for this project to get VAT details
+            const quotation: any = await Quotation.findOne({ project: budget.project });
+
+            let projectNetAmount = monthlyBudgetAllocation.allocatedAmount;
+            let projectWithoutVat = monthlyBudgetAllocation.allocatedAmount;
+            let projectVatAmount = 0;
+
+            if (quotation) {
+                // Assuming quotation has vatAmount field or we can calculate it
+                // If netAmount includes VAT and there's a vatRate field
+                if (quotation.netAmount && quotation.vatRate) {
+                    const vatRate = quotation.vatRate / 100;
+                    projectWithoutVat = quotation.netAmount / (1 + vatRate);
+                    projectVatAmount = quotation.netAmount - projectWithoutVat;
+                } else if (quotation.netAmount && quotation.withoutVatAmount) {
+                    // If quotation already has separate fields
+                    projectWithoutVat = quotation.withoutVatAmount;
+                    projectVatAmount = quotation.netAmount - quotation.withoutVatAmount;
+                }
+                projectNetAmount = quotation.netAmount || monthlyBudgetAllocation.allocatedAmount;
+            }
+
+            totalRevenueNet += projectNetAmount;
+            totalRevenueWithoutVat += projectWithoutVat;
+            totalVatAmount += projectVatAmount;
 
             const expenses = await Expense.find({
                 project: budget.project,
@@ -97,17 +142,26 @@ export const getMonthlyReport = asyncHandler(async (req: Request, res: Response)
 
             totalExpenses += monthlyMaterialExpense;
 
+            // Calculate profit both ways
+            const profitWithVat = projectNetAmount - monthlyMaterialExpense;
+            const profitWithoutVat = projectWithoutVat - monthlyMaterialExpense;
+
             projectProfitData.push({
                 projectName: project.projectName,
                 projectNumber: project.projectNumber,
-                monthlyBudget: monthlyBudgetAllocation.allocatedAmount,
+                monthlyBudgetNet: projectNetAmount,           // With VAT
+                monthlyBudgetWithoutVat: projectWithoutVat,   // Without VAT
+                vatAmount: projectVatAmount,                  // VAT amount
                 monthlyMaterialExpense,
-                profit: monthlyBudgetAllocation.allocatedAmount - monthlyMaterialExpense
+                profitWithVat,
+                profitWithoutVat
             });
         }
 
-        const profit = totalRevenue - totalExpenses;
-        const profitMargin = totalRevenue > 0 ? (profit / totalRevenue) * 100 : 0;
+        const profitNet = totalRevenueNet - totalExpenses;           // Profit with VAT
+        const profitWithoutVat = totalRevenueWithoutVat - totalExpenses; // Profit without VAT
+        const profitMarginNet = totalRevenueNet > 0 ? (profitNet / totalRevenueNet) * 100 : 0;
+        const profitMarginWithoutVat = totalRevenueWithoutVat > 0 ? (profitWithoutVat / totalRevenueWithoutVat) * 100 : 0;
 
         // 2. PAYROLL DATA
         const payrollCreationMonth = selectedMonth === 12 ? 1 : selectedMonth + 1;
@@ -130,22 +184,45 @@ export const getMonthlyReport = asyncHandler(async (req: Request, res: Response)
             return sum + regularOT + sundayOT;
         }, 0);
 
-        // 3. PROJECT DATA
+        // 3. PROJECT DATA - Only projects with LPO
         const totalProjects = await Project.countDocuments({
+            _id: { $in: projectIdsWithLPO }, // Only projects with LPO
             createdAt: { $gte: startDate, $lte: endDate }
         });
+
         const activeProjects = await Project.countDocuments({
+            _id: { $in: projectIdsWithLPO }, // Only projects with LPO
             createdAt: { $gte: startDate, $lte: endDate },
             status: { $nin: ['cancelled', 'project_closed'] }
         });
 
-        // 4. INVOICE DATA
+        // 4. INVOICE DATA - Only for projects with LPO
         const invoices = await Quotation.find({
-            createdAt: { $gte: startDate, $lte: endDate }
+            createdAt: { $gte: startDate, $lte: endDate },
+            project: { $in: projectIdsWithLPO } // Only for projects with LPO
         });
-        const totalInvoiceAmount = invoices.reduce((sum, inv) => sum + (inv.netAmount || 0), 0);
+
+        const totalInvoiceNetAmount = invoices.reduce((sum: number, inv: any) => sum + (inv.netAmount || 0), 0);
+        const totalInvoiceWithoutVat = invoices.reduce((sum: number, inv: any) => {
+            if (inv.withoutVatAmount) {
+                return sum + inv.withoutVatAmount;
+            }
+            // Calculate without VAT if not stored
+            if (inv.vatRate && inv.netAmount) {
+                const vatRate = inv.vatRate / 100;
+                return sum + (inv.netAmount / (1 + vatRate));
+            }
+            return sum + (inv.netAmount || 0);
+        }, 0);
+        const totalInvoiceVatAmount = invoices.reduce((sum, inv) => {
+            if (inv.vatAmount) {
+                return sum + inv.vatAmount;
+            }
+            return sum + (totalInvoiceNetAmount - totalInvoiceWithoutVat);
+        }, 0);
+
         const pendingInvoices = invoices.filter(inv => !inv.isApproved);
-        const pendingInvoiceAmount = pendingInvoices.reduce((sum, inv) => sum + (inv.netAmount || 0), 0);
+        const pendingInvoiceNetAmount = pendingInvoices.reduce((sum, inv) => sum + (inv.netAmount || 0), 0);
 
         const monthlyReport = {
             period: {
@@ -153,11 +230,15 @@ export const getMonthlyReport = asyncHandler(async (req: Request, res: Response)
                 year: selectedYear,
                 monthName: dayjs(`${selectedYear}-${selectedMonth}-01`).format('MMMM YYYY')
             },
-            profit: {
-                revenue: totalRevenue,
+            revenue: {
+                netAmount: totalRevenueNet,           // With VAT
+                withoutVat: totalRevenueWithoutVat,   // Without VAT (for calculations)
+                vatAmount: totalVatAmount,            // VAT amount
                 expenses: totalExpenses,
-                profit,
-                profitMargin,
+                profitNet,                           // Profit with VAT
+                profitWithoutVat,                    // Profit without VAT (for internal use)
+                profitMarginNet: profitMarginNet.toFixed(2),
+                profitMarginWithoutVat: profitMarginWithoutVat.toFixed(2),
                 projectsCount: budgets.length,
                 projectBreakdown: projectProfitData
             },
@@ -173,9 +254,11 @@ export const getMonthlyReport = asyncHandler(async (req: Request, res: Response)
             },
             invoices: {
                 total: invoices.length,
-                totalAmount: totalInvoiceAmount,
+                netAmount: totalInvoiceNetAmount,     // With VAT
+                withoutVat: totalInvoiceWithoutVat,   // Without VAT
+                vatAmount: totalInvoiceVatAmount,     // VAT amount
                 pending: pendingInvoices.length,
-                pendingAmount: pendingInvoiceAmount
+                pendingNetAmount: pendingInvoiceNetAmount
             }
         };
 
@@ -192,7 +275,7 @@ export const getMonthlyReport = asyncHandler(async (req: Request, res: Response)
     }
 });
 
-// Get Enhanced Yearly Report
+// Get Enhanced Yearly Report (Only projects with LPO)
 export const getYearlyReport = asyncHandler(async (req: Request, res: Response) => {
     const { year, export: exportType } = req.query;
 
@@ -208,8 +291,25 @@ export const getYearlyReport = asyncHandler(async (req: Request, res: Response) 
         const yearStart = new Date(selectedYear, 0, 1);
         const yearEnd = isCurrentYear ? new Date() : new Date(selectedYear, 11, 31, 23, 59, 59);
 
-        // Find all projects with activity in the selected year
+        // Get all projects that have LPOs in the selected year
+        const projectsWithLPO = await LPO.aggregate([
+            {
+                $match: {
+                    lpoDate: { $gte: yearStart, $lte: yearEnd }
+                }
+            },
+            {
+                $group: {
+                    _id: "$project"
+                }
+            }
+        ]);
+
+        const projectIdsWithLPO = projectsWithLPO.map(p => p._id);
+
+        // Find all projects with LPOs that have activity in the selected year
         const projectsWithActivity = await Project.find({
+            _id: { $in: projectIdsWithLPO }, // Only projects with LPOs
             $or: [
                 { workStartDate: { $gte: yearStart, $lte: yearEnd } },
                 { createdAt: { $gte: yearStart, $lte: yearEnd } }
@@ -220,7 +320,7 @@ export const getYearlyReport = asyncHandler(async (req: Request, res: Response) 
 
         for (const project of projectsWithActivity) {
             // Get Quotation
-            const quotation = await Quotation.findOne({ project: project._id });
+            const quotation: any = await Quotation.findOne({ project: project._id });
 
             // Get Estimation
             const estimation = await Estimation.findOne({ project: project._id });
@@ -273,10 +373,29 @@ export const getYearlyReport = asyncHandler(async (req: Request, res: Response) 
             }, 0);
 
             const totalExpenses = materialCosts + miscellaneousCosts + labourCosts;
-            const quotationAmount = quotation?.netAmount || 0;
+
+            // Quotation amounts with VAT separation
+            const quotationNetAmount = quotation?.netAmount || 0;
+            let quotationWithoutVat = quotation?.netAmount || 0;
+            let vatAmount = 0;
+
+            if (quotation) {
+                if (quotation.withoutVatAmount) {
+                    quotationWithoutVat = quotation.withoutVatAmount;
+                    vatAmount = quotationNetAmount - quotationWithoutVat;
+                } else if (quotation.vatRate && quotationNetAmount) {
+                    const vatRate = quotation.vatRate / 100;
+                    quotationWithoutVat = quotationNetAmount / (1 + vatRate);
+                    vatAmount = quotationNetAmount - quotationWithoutVat;
+                }
+            }
+
             const estimationAmount = estimation?.estimatedAmount || 0;
             const commission = estimation?.commissionAmount || 0;
-            const profitLoss = quotationAmount - totalExpenses - commission;
+
+            // Calculate profit both ways
+            const profitLossWithoutVat = quotationWithoutVat - totalExpenses - commission;  // Without VAT
+            const profitLossWithVat = quotationNetAmount - totalExpenses - commission;      // With VAT
 
             // Generate invoice number
             const invoiceNumber = `INV${project.projectNumber.slice(3, 20)}`;
@@ -299,34 +418,39 @@ export const getYearlyReport = asyncHandler(async (req: Request, res: Response) 
                 estimationNumber: estimation?.estimationNumber || 'N/A',
                 location: project.location || 'N/A',
                 projectName: project.projectName,
-                quotationAmount,
+                quotationNetAmount,
+                quotationWithoutVat,
+                vatAmount,
                 estimationAmount,
                 commission,
                 labourCosts,
                 materialCosts,
                 miscellaneousCosts,
                 totalExpenses,
-                profitLoss,
+                profitLossWithoutVat,    // For internal calculations
+                profitLossWithVat,       // For financial reporting
                 workStartDate: project.workStartDate
                     ? dayjs(project.workStartDate).format('DD/MM/YYYY')
                     : 'N/A',
                 workEndDate: project.workEndDate
                     ? dayjs(project.workEndDate).format('DD/MM/YYYY')
                     : 'N/A',
-                status: project.status,
                 attentionPerson: project.attention || 'N/A'
             });
         }
 
         // Calculate totals
-        const totalQuotationAmount = projectYearlyData.reduce((sum, p) => sum + p.quotationAmount, 0);
+        const totalQuotationNetAmount = projectYearlyData.reduce((sum, p) => sum + p.quotationNetAmount, 0);
+        const totalQuotationWithoutVat = projectYearlyData.reduce((sum, p) => sum + p.quotationWithoutVat, 0);
+        const totalVatAmount = projectYearlyData.reduce((sum, p) => sum + p.vatAmount, 0);
         const totalEstimationAmount = projectYearlyData.reduce((sum, p) => sum + p.estimationAmount, 0);
         const totalCommission = projectYearlyData.reduce((sum, p) => sum + p.commission, 0);
         const totalLabourCosts = projectYearlyData.reduce((sum, p) => sum + p.labourCosts, 0);
         const totalMaterialCosts = projectYearlyData.reduce((sum, p) => sum + p.materialCosts, 0);
         const totalMiscellaneousCosts = projectYearlyData.reduce((sum, p) => sum + p.miscellaneousCosts, 0);
         const totalExpensesSum = projectYearlyData.reduce((sum, p) => sum + p.totalExpenses, 0);
-        const totalProfitLoss = projectYearlyData.reduce((sum, p) => sum + p.profitLoss, 0);
+        const totalProfitLossWithoutVat = projectYearlyData.reduce((sum, p) => sum + p.profitLossWithoutVat, 0);
+        const totalProfitLossWithVat = projectYearlyData.reduce((sum, p) => sum + p.profitLossWithVat, 0);
 
         const yearlyReport = {
             year: selectedYear,
@@ -334,16 +458,22 @@ export const getYearlyReport = asyncHandler(async (req: Request, res: Response) 
             reportType: isCurrentYear ? 'Year to Date' : 'Full Year',
             summary: {
                 totalProjects: projectYearlyData.length,
-                totalQuotationAmount,
+                totalQuotationNetAmount,      // With VAT
+                totalQuotationWithoutVat,     // Without VAT
+                totalVatAmount,               // VAT amount
                 totalEstimationAmount,
                 totalCommission,
                 totalLabourCosts,
                 totalMaterialCosts,
                 totalMiscellaneousCosts,
                 totalExpenses: totalExpensesSum,
-                totalProfitLoss,
-                profitMargin: totalQuotationAmount > 0
-                    ? ((totalProfitLoss / totalQuotationAmount) * 100).toFixed(2) + '%'
+                totalProfitLossWithoutVat,    // Profit without VAT (for internal use)
+                totalProfitLossWithVat,       // Profit with VAT (for reporting)
+                profitMarginWithoutVat: totalQuotationWithoutVat > 0
+                    ? ((totalProfitLossWithoutVat / totalQuotationWithoutVat) * 100).toFixed(2) + '%'
+                    : '0%',
+                profitMarginWithVat: totalQuotationNetAmount > 0
+                    ? ((totalProfitLossWithVat / totalQuotationNetAmount) * 100).toFixed(2) + '%'
                     : '0%'
             },
             projects: projectYearlyData
@@ -362,7 +492,7 @@ export const getYearlyReport = asyncHandler(async (req: Request, res: Response) 
     }
 });
 
-// Generate Enhanced Monthly Report Excel
+// Generate Enhanced Monthly Report Excel with VAT separation
 const generateMonthlyReportExcel = async (data: any, res: Response) => {
     const workbook = new ExcelJS.Workbook();
 
@@ -370,9 +500,9 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
     const summarySheet = workbook.addWorksheet('Summary');
 
     // Title
-    summarySheet.mergeCells('A1:D1');
+    summarySheet.mergeCells('A1:E1');
     const titleCell = summarySheet.getCell('A1');
-    titleCell.value = `Monthly Report - ${data.period.monthName}`;
+    titleCell.value = `Monthly Report - ${data.period.monthName} (Projects with LPO Only)`;
     titleCell.font = { size: 18, bold: true, color: { argb: 'FF1F4E78' } };
     titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
     titleCell.fill = {
@@ -385,9 +515,9 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
     summarySheet.addRow([]);
 
     // Financial Summary Header
-    summarySheet.mergeCells('A3:D3');
+    summarySheet.mergeCells('A3:E3');
     const financialHeader = summarySheet.getCell('A3');
-    financialHeader.value = 'Financial Summary';
+    financialHeader.value = 'Financial Summary (With VAT Separation)';
     financialHeader.font = { size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
     financialHeader.alignment = { horizontal: 'left', vertical: 'middle' };
     financialHeader.fill = {
@@ -398,7 +528,7 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
     summarySheet.getRow(3).height = 25;
 
     // Table headers
-    const headerRow = summarySheet.addRow(['Category', 'Metric', 'Value', 'Unit']);
+    const headerRow = summarySheet.addRow(['Category', 'Metric', 'With VAT', 'Without VAT', 'VAT Amount']);
     headerRow.font = { bold: true, size: 11 };
     headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
     headerRow.fill = {
@@ -417,17 +547,13 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
         };
     });
 
-    // Financial data rows
+    // Financial data rows with VAT separation
     const financialData = [
-        ['Profit', 'Revenue', data.profit.revenue, 'AED'],
-        ['', 'Expenses', data.profit.expenses, 'AED'],
-        ['', 'Profit', data.profit.profit, 'AED'],
-        ['', 'Profit Margin', data.profit.profitMargin.toFixed(2), '%'],
-        ['Payroll', 'Total Payroll', data.payroll.totalPayroll, 'AED'],
-        ['', 'Employees', data.payroll.totalEmployees, 'Count'],
-        ['', 'Average Salary', data.payroll.averageSalary.toFixed(2), 'AED'],
-        ['Projects', 'Total', data.projects.total, 'Count'],
-        ['', 'Active', data.projects.active, 'Count']
+        ['Revenue', 'Amount', data.revenue.netAmount, data.revenue.withoutVat, data.revenue.vatAmount],
+        ['Profit', 'Amount', data.revenue.profitNet, data.revenue.profitWithoutVat, '-'],
+        ['Profit', 'Margin', data.revenue.profitMarginNet + '%', data.revenue.profitMarginWithoutVat + '%', '-'],
+        ['Invoices', 'Total Amount', data.invoices.netAmount, data.invoices.withoutVat, data.invoices.vatAmount],
+        ['', 'Pending Amount', data.invoices.pendingNetAmount, '-', '-']
     ];
 
     financialData.forEach((rowData, index) => {
@@ -436,7 +562,7 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
         row.alignment = { vertical: 'middle' };
 
         row.eachCell((cell, colNum) => {
-            if (colNum === 3 && typeof cell.value === 'number') {
+            if ([3, 4, 5].includes(colNum) && typeof cell.value === 'number') {
                 cell.numFmt = '#,##0.00';
                 cell.alignment = { horizontal: 'right', vertical: 'middle' };
             } else {
@@ -450,14 +576,22 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
                 right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
             };
 
-            if (rowData[1] === 'Profit') {
-                cell.fill = {
-                    type: 'pattern',
-                    pattern: 'solid',
-                    fgColor: { argb: data.profit.profit >= 0 ? 'FFE2EFDA' : 'FFFCE4D6' }
-                };
+            // Color coding for profit rows
+            if (rowData[1] === 'Amount' && rowData[0] === 'Profit') {
                 if (colNum === 3) {
-                    cell.font = { bold: true, color: { argb: data.profit.profit >= 0 ? 'FF375623' : 'FFC55A11' } };
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: data.revenue.profitNet >= 0 ? 'FFE2EFDA' : 'FFFCE4D6' }
+                    };
+                    cell.font = { bold: true, color: { argb: data.revenue.profitNet >= 0 ? 'FF375623' : 'FFC55A11' } };
+                } else if (colNum === 4) {
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: data.revenue.profitWithoutVat >= 0 ? 'FFE2EFDA' : 'FFFCE4D6' }
+                    };
+                    cell.font = { bold: true, color: { argb: data.revenue.profitWithoutVat >= 0 ? 'FF375623' : 'FFC55A11' } };
                 }
             }
         });
@@ -465,18 +599,19 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
 
     summarySheet.columns = [
         { width: 18 },
-        { width: 25 },
+        { width: 20 },
         { width: 18 },
-        { width: 10 }
+        { width: 18 },
+        { width: 15 }
     ];
 
-    // ============ SHEET 2: PROJECT BREAKDOWN ============
+    // ============ SHEET 2: PROJECT BREAKDOWN WITH VAT ============
     const projectSheet = workbook.addWorksheet('Project Breakdown');
 
     // Title
-    projectSheet.mergeCells('A1:E1');
+    projectSheet.mergeCells('A1:G1');
     const projectTitle = projectSheet.getCell('A1');
-    projectTitle.value = `Project Profit Breakdown - ${data.period.monthName}`;
+    projectTitle.value = `Project Profit Breakdown - ${data.period.monthName} (With VAT Separation)`;
     projectTitle.font = { size: 18, bold: true, color: { argb: 'FF1F4E78' } };
     projectTitle.alignment = { horizontal: 'center', vertical: 'middle' };
     projectTitle.fill = {
@@ -488,13 +623,15 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
 
     projectSheet.addRow([]);
 
-    // Headers
+    // Headers with VAT separation
     const projectHeaderRow = projectSheet.addRow([
         'Project Name',
         'Project Number',
-        'Monthly Budget',
+        'Budget (Net)',
+        'Budget (Without VAT)',
+        'VAT Amount',
         'Material Expense',
-        'Profit'
+        'Profit (Without VAT)'
     ]);
 
     projectHeaderRow.font = { bold: true, size: 11 };
@@ -517,28 +654,34 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
     });
 
     // Data rows
-    let totalBudget = 0;
+    let totalBudgetNet = 0;
+    let totalBudgetWithoutVat = 0;
+    let totalVatAmount = 0;
     let totalExpense = 0;
-    let totalProfit = 0;
+    let totalProfitWithoutVat = 0;
 
-    data.profit.projectBreakdown.forEach((project: any, index: number) => {
+    data.revenue.projectBreakdown.forEach((project: any, index: number) => {
         const row = projectSheet.addRow([
             project.projectName,
             project.projectNumber,
-            project.monthlyBudget,
+            project.monthlyBudgetNet,
+            project.monthlyBudgetWithoutVat,
+            project.vatAmount,
             project.monthlyMaterialExpense,
-            project.profit
+            project.profitWithoutVat  // Using without VAT for calculations
         ]);
 
-        totalBudget += project.monthlyBudget;
+        totalBudgetNet += project.monthlyBudgetNet;
+        totalBudgetWithoutVat += project.monthlyBudgetWithoutVat;
+        totalVatAmount += project.vatAmount;
         totalExpense += project.monthlyMaterialExpense;
-        totalProfit += project.profit;
+        totalProfitWithoutVat += project.profitWithoutVat;
 
         row.height = 20;
         row.alignment = { vertical: 'middle' };
 
         row.eachCell((cell, colNum) => {
-            if ([3, 4, 5].includes(colNum)) {
+            if ([3, 4, 5, 6, 7].includes(colNum)) {
                 cell.numFmt = '#,##0.00';
                 cell.alignment = { horizontal: 'right', vertical: 'middle' };
             } else {
@@ -559,16 +702,16 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
             };
         });
 
-        // Color profit cell
-        const profitCell = row.getCell(5);
-        if (project.profit > 0) {
+        // Color profit cell (using without VAT for calculations)
+        const profitCell = row.getCell(7);
+        if (project.profitWithoutVat > 0) {
             profitCell.fill = {
                 type: 'pattern',
                 pattern: 'solid',
                 fgColor: { argb: 'FFE2EFDA' }
             };
             profitCell.font = { bold: true, color: { argb: 'FF375623' } };
-        } else if (project.profit < 0) {
+        } else if (project.profitWithoutVat < 0) {
             profitCell.fill = {
                 type: 'pattern',
                 pattern: 'solid',
@@ -582,9 +725,11 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
     const totalRow = projectSheet.addRow([
         'TOTAL',
         '',
-        totalBudget,
+        totalBudgetNet,
+        totalBudgetWithoutVat,
+        totalVatAmount,
         totalExpense,
-        totalProfit
+        totalProfitWithoutVat
     ]);
 
     totalRow.height = 25;
@@ -597,7 +742,7 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
 
     totalRow.eachCell((cell, colNum) => {
         cell.alignment = { horizontal: colNum === 1 ? 'left' : 'right', vertical: 'middle' };
-        if ([3, 4, 5].includes(colNum)) {
+        if ([3, 4, 5, 6, 7].includes(colNum)) {
             cell.numFmt = '#,##0.00';
         }
         cell.border = {
@@ -609,14 +754,16 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
     });
 
     projectSheet.columns = [
-        { width: 35 },
+        { width: 30 },
         { width: 18 },
         { width: 18 },
         { width: 18 },
-        { width: 15 }
+        { width: 15 },
+        { width: 18 },
+        { width: 18 }
     ];
 
-    const fileName = `monthly-report-${data.period.month}-${data.period.year}.xlsx`;
+    const fileName = `monthly-report-${data.period.month}-${data.period.year}-with-vat.xlsx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
 
@@ -624,17 +771,17 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
     res.end();
 };
 
-// Generate Enhanced Yearly Report Excel
+// Generate Enhanced Yearly Report Excel with VAT separation
 const generateYearlyReportExcel = async (data: any, res: Response) => {
     const workbook = new ExcelJS.Workbook();
 
-    // ============ SHEET 1: SUMMARY ============
+    // ============ SHEET 1: SUMMARY WITH VAT ============
     const summarySheet = workbook.addWorksheet('Summary');
 
-    // Title - Using same style as monthly
-    summarySheet.mergeCells('A1:D1');
+    // Title
+    summarySheet.mergeCells('A1:E1');
     const titleCell = summarySheet.getCell('A1');
-    titleCell.value = `Yearly Report - ${data.year}`;
+    titleCell.value = `Yearly Report - ${data.year} (With VAT Separation)`;
     titleCell.font = { size: 18, bold: true, color: { argb: 'FF1F4E78' } };
     titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
     titleCell.fill = {
@@ -646,10 +793,10 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
 
     summarySheet.addRow([]);
 
-    // Financial Summary Header - Same blue as monthly
-    summarySheet.mergeCells('A3:D3');
+    // Financial Summary Header
+    summarySheet.mergeCells('A3:E3');
     const financialHeader = summarySheet.getCell('A3');
-    financialHeader.value = 'Financial Summary';
+    financialHeader.value = 'Financial Summary (With VAT Separation)';
     financialHeader.font = { size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
     financialHeader.alignment = { horizontal: 'left', vertical: 'middle' };
     financialHeader.fill = {
@@ -659,8 +806,8 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
     };
     summarySheet.getRow(3).height = 25;
 
-    // Table headers - Same style as monthly
-    const headerRow = summarySheet.addRow(['Category', 'Metric', 'Value', 'Unit']);
+    // Table headers with VAT columns
+    const headerRow = summarySheet.addRow(['Category', 'Metric', 'With VAT', 'Without VAT', 'VAT Amount']);
     headerRow.font = { bold: true, size: 11 };
     headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
     headerRow.fill = {
@@ -679,18 +826,16 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
         };
     });
 
-    // Financial data rows - Consistent with monthly report
+    // Financial data rows with VAT separation
     const financialData = [
-        ['Revenue', 'Quotation Amount', data.summary.totalQuotationAmount, 'AED'],
-        ['', 'Estimation Amount', data.summary.totalEstimationAmount, 'AED'],
-        ['', 'Total Commission', data.summary.totalCommission, 'AED'],
-        ['', 'Total Expenses', data.summary.totalExpenses, 'AED'],
-        ['Profit/Loss', 'Total Profit/Loss', data.summary.totalProfitLoss, 'AED'],
-        ['', 'Profit Margin', data.summary.profitMargin, ''],
-        ['Cost Breakdown', 'Labour Costs', data.summary.totalLabourCosts, 'AED'],
-        ['', 'Material Costs', data.summary.totalMaterialCosts, 'AED'],
-        ['', 'Miscellaneous Costs', data.summary.totalMiscellaneousCosts, 'AED'],
-        ['Projects', 'Total Projects', data.summary.totalProjects, 'Count']
+        ['Revenue', 'Quotation Amount', data.summary.totalQuotationNetAmount, data.summary.totalQuotationWithoutVat, data.summary.totalVatAmount],
+        ['Revenue', 'Estimation Amount', data.summary.totalEstimationAmount, data.summary.totalEstimationAmount, '-'],
+        ['Costs', 'Total Expenses', '-', data.summary.totalExpenses, '-'],
+        ['Costs', 'Total Commission', '-', data.summary.totalCommission, '-'],
+        ['Profit/Loss', 'With VAT', data.summary.totalProfitLossWithVat, '-', '-'],
+        ['Profit/Loss', 'Without VAT', '-', data.summary.totalProfitLossWithoutVat, '-'],
+        ['Profit/Loss', 'Margin With VAT', data.summary.profitMarginWithVat, '-', '-'],
+        ['Profit/Loss', 'Margin Without VAT', '-', data.summary.profitMarginWithoutVat, '-']
     ];
 
     financialData.forEach((rowData, index) => {
@@ -699,9 +844,11 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
         row.alignment = { vertical: 'middle' };
 
         row.eachCell((cell, colNum) => {
-            if (colNum === 3 && typeof cell.value === 'number') {
+            if ([3, 4, 5].includes(colNum) && typeof cell.value === 'number') {
                 cell.numFmt = '#,##0.00';
                 cell.alignment = { horizontal: 'right', vertical: 'middle' };
+            } else if (cell.value === '-') {
+                cell.alignment = { horizontal: 'center', vertical: 'middle' };
             } else {
                 cell.alignment = { horizontal: colNum === 1 ? 'left' : 'center', vertical: 'middle' };
             }
@@ -713,34 +860,40 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
                 right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
             };
 
-            // Color coding for profit/loss
-            if (rowData[1] === 'Total Profit/Loss') {
+            // Color coding for profit/loss rows
+            if (rowData[0] === 'Profit/Loss' && rowData[1] === 'With VAT' && colNum === 3) {
                 cell.fill = {
                     type: 'pattern',
                     pattern: 'solid',
-                    fgColor: { argb: data.summary.totalProfitLoss >= 0 ? 'FFE2EFDA' : 'FFFCE4D6' }
+                    fgColor: { argb: data.summary.totalProfitLossWithVat >= 0 ? 'FFE2EFDA' : 'FFFCE4D6' }
                 };
-                if (colNum === 3) {
-                    cell.font = { bold: true, color: { argb: data.summary.totalProfitLoss >= 0 ? 'FF375623' : 'FFC55A11' } };
-                }
+                cell.font = { bold: true, color: { argb: data.summary.totalProfitLossWithVat >= 0 ? 'FF375623' : 'FFC55A11' } };
+            } else if (rowData[0] === 'Profit/Loss' && rowData[1] === 'Without VAT' && colNum === 4) {
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: data.summary.totalProfitLossWithoutVat >= 0 ? 'FFE2EFDA' : 'FFFCE4D6' }
+                };
+                cell.font = { bold: true, color: { argb: data.summary.totalProfitLossWithoutVat >= 0 ? 'FF375623' : 'FFC55A11' } };
             }
         });
     });
 
     summarySheet.columns = [
         { width: 18 },
-        { width: 25 },
+        { width: 20 },
         { width: 18 },
-        { width: 10 }
+        { width: 18 },
+        { width: 15 }
     ];
 
-    // ============ SHEET 2: PROJECT DETAILS ============
+    // ============ SHEET 2: PROJECT DETAILS WITH VAT ============
     const detailsSheet = workbook.addWorksheet('Project Details');
 
-    // Title - Same style as monthly
-    detailsSheet.mergeCells('A1:W1');
+    // Title
+    detailsSheet.mergeCells('A1:X1');
     const detailsTitle = detailsSheet.getCell('A1');
-    detailsTitle.value = `Project Details - ${data.year}`;
+    detailsTitle.value = `Project Details - ${data.year} (With VAT Separation)`;
     detailsTitle.font = { size: 18, bold: true, color: { argb: 'FF1F4E78' } };
     detailsTitle.alignment = { horizontal: 'center', vertical: 'middle' };
     detailsTitle.fill = {
@@ -752,7 +905,7 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
 
     detailsSheet.addRow([]);
 
-    // Headers - Same blue as monthly
+    // Headers with VAT separation (Status field removed)
     const headers = [
         'Project Start Month',
         'Client Name',
@@ -765,17 +918,19 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
         'Estimation Number',
         'Location',
         'Project Name',
-        'Quotation Amount',
+        'Quotation Net Amount',      // With VAT
+        'Quotation Without VAT',     // Without VAT
+        'VAT Amount',
         'Estimation Amount',
         'Commission',
         'Labour Costs',
         'Material Costs',
         'Miscellaneous Costs',
         'Total Expenses',
-        'Profit/Loss',
+        'Profit/Loss With VAT',      // Profit with VAT
+        'Profit/Loss Without VAT',   // Profit without VAT (for calculations)
         'Work Start Date',
         'Work End Date',
-        'Status',
         'Attention Person'
     ];
 
@@ -799,7 +954,7 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
         };
     });
 
-    // Add data rows with alternating colors
+    // Add data rows with alternating colors (Status field removed)
     data.projects.forEach((project: ProjectYearlyData, index: number) => {
         const row = detailsSheet.addRow([
             project.projectStartMonth,
@@ -813,24 +968,26 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
             project.estimationNumber,
             project.location,
             project.projectName,
-            project.quotationAmount,
+            project.quotationNetAmount,
+            project.quotationWithoutVat,
+            project.vatAmount,
             project.estimationAmount,
             project.commission,
             project.labourCosts,
             project.materialCosts,
             project.miscellaneousCosts,
             project.totalExpenses,
-            project.profitLoss,
+            project.profitLossWithVat,
+            project.profitLossWithoutVat,  // For calculations
             project.workStartDate,
             project.workEndDate,
-            project.status,
             project.attentionPerson
         ]);
 
         row.height = 22;
         row.alignment = { vertical: 'middle', wrapText: true };
 
-        // Alternating row colors - same as monthly
+        // Alternating row colors
         const rowColor = index % 2 === 0 ? 'FFFFFFFF' : 'FFF2F2F2';
 
         row.eachCell((cell, colNum) => {
@@ -847,49 +1004,65 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
             };
 
             // Number formatting for currency columns
-            if ([12, 13, 14, 15, 16, 17, 18, 19].includes(colNum)) {
+            if ([12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22].includes(colNum)) {
                 cell.numFmt = '#,##0.00';
                 cell.alignment = { horizontal: 'right', vertical: 'middle' };
             }
         });
 
-        // Color code profit/loss cell - same as monthly
-        const profitCell = row.getCell(19);
-        if (project.profitLoss > 0) {
-            profitCell.fill = {
+        // Color code profit/loss cells
+        const profitWithVatCell = row.getCell(21);
+        if (project.profitLossWithVat > 0) {
+            profitWithVatCell.fill = {
                 type: 'pattern',
                 pattern: 'solid',
                 fgColor: { argb: 'FFE2EFDA' }
             };
-            profitCell.font = { bold: true, color: { argb: 'FF375623' } };
-        } else if (project.profitLoss < 0) {
-            profitCell.fill = {
+            profitWithVatCell.font = { bold: true, color: { argb: 'FF375623' } };
+        } else if (project.profitLossWithVat < 0) {
+            profitWithVatCell.fill = {
                 type: 'pattern',
                 pattern: 'solid',
                 fgColor: { argb: 'FFFCE4D6' }
             };
-            profitCell.font = { bold: true, color: { argb: 'FFC55A11' } };
+            profitWithVatCell.font = { bold: true, color: { argb: 'FFC55A11' } };
         }
 
-        // Subtle status coloring
-        const statusCell = row.getCell(22);
-        statusCell.font = { bold: true };
+        const profitWithoutVatCell = row.getCell(22);
+        if (project.profitLossWithoutVat > 0) {
+            profitWithoutVatCell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FFE2EFDA' }
+            };
+            profitWithoutVatCell.font = { bold: true, color: { argb: 'FF375623' } };
+        } else if (project.profitLossWithoutVat < 0) {
+            profitWithoutVatCell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FFFCE4D6' }
+            };
+            profitWithoutVatCell.font = { bold: true, color: { argb: 'FFC55A11' } };
+        }
     });
 
-    // Add totals row - same style as monthly
+    // Add totals row (Status field removed)
     detailsSheet.addRow([]);
     const totalsRow = detailsSheet.addRow([
         '', '', '', '', '', '', '', '', '', '',
         'TOTALS',
-        data.summary.totalQuotationAmount,
+        data.summary.totalQuotationNetAmount,
+        data.summary.totalQuotationWithoutVat,
+        data.summary.totalVatAmount,
         data.summary.totalEstimationAmount,
         data.summary.totalCommission,
         data.summary.totalLabourCosts,
         data.summary.totalMaterialCosts,
         data.summary.totalMiscellaneousCosts,
         data.summary.totalExpenses,
-        data.summary.totalProfitLoss,
-        '', '', '', ''
+        data.summary.totalProfitLossWithVat,
+        data.summary.totalProfitLossWithoutVat,  // For calculations
+        '', '', ''
     ]);
 
     totalsRow.height = 25;
@@ -902,7 +1075,7 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
     };
 
     totalsRow.eachCell((cell, colNum) => {
-        if ([12, 13, 14, 15, 16, 17, 18, 19].includes(colNum)) {
+        if ([12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22].includes(colNum)) {
             cell.numFmt = '#,##0.00';
         }
         cell.border = {
@@ -913,6 +1086,41 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
         };
     });
 
+    // Color profit totals
+    const profitWithVatTotalCell = totalsRow.getCell(21);
+    if (data.summary.totalProfitLossWithVat >= 0) {
+        profitWithVatTotalCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFC6E0B4' }
+        };
+        profitWithVatTotalCell.font = { bold: true, color: { argb: 'FF375623' } };
+    } else {
+        profitWithVatTotalCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFF8CBAD' }
+        };
+        profitWithVatTotalCell.font = { bold: true, color: { argb: 'FFC55A11' } };
+    }
+
+    const profitWithoutVatTotalCell = totalsRow.getCell(22);
+    if (data.summary.totalProfitLossWithoutVat >= 0) {
+        profitWithoutVatTotalCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFC6E0B4' }
+        };
+        profitWithoutVatTotalCell.font = { bold: true, color: { argb: 'FF375623' } };
+    } else {
+        profitWithoutVatTotalCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFF8CBAD' }
+        };
+        profitWithoutVatTotalCell.font = { bold: true, color: { argb: 'FFC55A11' } };
+    }
+
     // Auto-fit columns
     detailsSheet.columns.forEach((column: any, index: number) => {
         let maxLength = 0;
@@ -922,7 +1130,7 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
                 maxLength = columnLength;
             }
         });
-        column.width = Math.min(Math.max(maxLength + 2, 12), 40);
+        column.width = Math.min(Math.max(maxLength + 2, 12), 30);
     });
 
     // Freeze header rows
@@ -930,7 +1138,7 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
         { state: 'frozen', xSplit: 0, ySplit: 3 }
     ];
 
-    const fileName = `yearly-report-${data.year}.xlsx`;
+    const fileName = `yearly-report-${data.year}-with-vat.xlsx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
 
