@@ -13,14 +13,42 @@ import { Estimation } from "../../models/estimationModel";
 import { Client } from "../../models/clientModel";
 import { VisaExpense } from "../../models/visaExpenseModel";
 import { Budget } from "../../models/budgetModel";
+import { LPO } from "../../models/lpoModel";
 import dayjs from "dayjs";
 import mongoose from "mongoose";
 
 // Get overview statistics
 export const getOverviewStats = asyncHandler(async (req: Request, res: Response) => {
     try {
-        // Get total projects
-        const totalProjects = await Project.countDocuments();
+        // Get projects that have LPO (work confirmed)
+        const projectsWithLPO = await LPO.aggregate([
+            {
+                $group: {
+                    _id: "$project",
+                    lpoCount: { $sum: 1 }
+                }
+            },
+            {
+                $lookup: {
+                    from: "projects",
+                    localField: "_id",
+                    foreignField: "_id",
+                    as: "project"
+                }
+            },
+            {
+                $unwind: "$project"
+            },
+            {
+                $match: {
+                    "project.status": {
+                        $nin: ["draft", "estimation_prepared", "quotation_sent", "quotation_rejected", "cancelled"]
+                    }
+                }
+            }
+        ]);
+
+        const totalProjects = projectsWithLPO.length;
 
         // Get active staff (users who are active)
         const activeStaff = await User.countDocuments({
@@ -236,11 +264,28 @@ export const getFinancialSummary = asyncHandler(async (req: Request, res: Respon
     }
 
     try {
-        // Get quotations data
+        // Get projects with LPO for the date range
+        const projectsWithLPO = await LPO.aggregate([
+            {
+                $match: {
+                    lpoDate: { $gte: startDate, $lte: endDate }
+                }
+            },
+            {
+                $group: {
+                    _id: "$project"
+                }
+            }
+        ]);
+
+        const projectIdsWithLPO = projectsWithLPO.map(p => p._id);
+
+        // Get quotations data only for projects with LPO
         const quotationsData = await Quotation.aggregate([
             {
                 $match: {
-                    createdAt: { $gte: startDate, $lte: endDate }
+                    createdAt: { $gte: startDate, $lte: endDate },
+                    project: { $in: projectIdsWithLPO }
                 }
             },
             {
@@ -254,11 +299,12 @@ export const getFinancialSummary = asyncHandler(async (req: Request, res: Respon
             }
         ]);
 
-        // Get expenses data
+        // Get expenses data only for projects with LPO
         const expensesData = await Expense.aggregate([
             {
                 $match: {
-                    createdAt: { $gte: startDate, $lte: endDate }
+                    createdAt: { $gte: startDate, $lte: endDate },
+                    project: { $in: projectIdsWithLPO }
                 }
             },
             {
@@ -310,10 +356,23 @@ export const getFinancialSummary = asyncHandler(async (req: Request, res: Respon
     }
 });
 
-// Get project status distribution
+// Get project status distribution (only projects with LPO)
 export const getProjectStatus = asyncHandler(async (req: Request, res: Response) => {
     try {
         const projectStatus = await Project.aggregate([
+            {
+                $lookup: {
+                    from: "lpos",
+                    localField: "_id",
+                    foreignField: "project",
+                    as: "lpos"
+                }
+            },
+            {
+                $match: {
+                    "lpos.0": { $exists: true } // Only projects that have at least one LPO
+                }
+            },
             {
                 $group: {
                     _id: "$status",
@@ -452,10 +511,23 @@ export const getHRAlerts = asyncHandler(async (req: Request, res: Response) => {
     }
 });
 
-// Get top clients
+// Get top clients (only clients with projects that have LPOs)
 export const getTopClients = asyncHandler(async (req: Request, res: Response) => {
     try {
         const topClients = await Project.aggregate([
+            {
+                $lookup: {
+                    from: "lpos",
+                    localField: "_id",
+                    foreignField: "project",
+                    as: "lpos"
+                }
+            },
+            {
+                $match: {
+                    "lpos.0": { $exists: true } // Only projects with LPOs
+                }
+            },
             {
                 $group: {
                     _id: "$client",
@@ -548,7 +620,6 @@ export const getTopClients = asyncHandler(async (req: Request, res: Response) =>
         throw new ApiError(500, "Failed to fetch top clients");
     }
 });
-
 
 export const getPayrollData = asyncHandler(async (req: Request, res: Response) => {
     const { month, year } = req.query;
@@ -742,6 +813,7 @@ export const getPayrollData = asyncHandler(async (req: Request, res: Response) =
         throw new ApiError(500, "Failed to fetch payroll data");
     }
 });
+
 // Get invoice reports
 export const getInvoiceReports = asyncHandler(async (req: Request, res: Response) => {
     const { month, year } = req.query;
@@ -754,10 +826,27 @@ export const getInvoiceReports = asyncHandler(async (req: Request, res: Response
     const endDate = dayjs(`${year}-${month}-01`).endOf('month').toDate();
 
     try {
+        // Get projects with LPO for this period
+        const projectsWithLPO = await LPO.aggregate([
+            {
+                $match: {
+                    lpoDate: { $gte: startDate, $lte: endDate }
+                }
+            },
+            {
+                $group: {
+                    _id: "$project"
+                }
+            }
+        ]);
+
+        const projectIdsWithLPO = projectsWithLPO.map(p => p._id);
+
         const invoiceData = await Quotation.aggregate([
             {
                 $match: {
-                    createdAt: { $gte: startDate, $lte: endDate }
+                    createdAt: { $gte: startDate, $lte: endDate },
+                    project: { $in: projectIdsWithLPO }
                 }
             },
             {
@@ -795,7 +884,7 @@ export const getInvoiceReports = asyncHandler(async (req: Request, res: Response
     }
 });
 
-// Get project profit analytics
+// Get project profit analytics (only for projects with LPO)
 export const getProjectProfitAnalytics = asyncHandler(async (req: Request, res: Response) => {
     const { month, year } = req.query;
 
@@ -803,16 +892,28 @@ export const getProjectProfitAnalytics = asyncHandler(async (req: Request, res: 
     const selectedYear = year ? parseInt(year as string) : dayjs().year();
 
     try {
-        // Helper function to calculate profit for a date range (month)
+        // Helper function to calculate profit for a date range (month) - Only projects with LPO
         const calculateProfitForMonth = async (month: number, year: number) => {
-            // Find all budgets that have allocations for the selected month
+            // Get all projects that have LPOs
+            const projectsWithLPO = await LPO.aggregate([
+                {
+                    $group: {
+                        _id: "$project"
+                    }
+                }
+            ]);
+
+            const projectIdsWithLPO = projectsWithLPO.map(p => p._id);
+
+            // Find budgets for projects that have LPOs
             const budgets = await Budget.find({
                 "monthlyBudgets": {
                     $elemMatch: {
                         month: month,
                         year: year
                     }
-                }
+                },
+                "project": { $in: projectIdsWithLPO } // Only projects with LPO
             })
                 .populate("project", "projectName")
                 .populate("quotation", "netAmount");
@@ -881,7 +982,7 @@ export const getProjectProfitAnalytics = asyncHandler(async (req: Request, res: 
             prevMonthDate.year()
         );
 
-        // Calculate year-to-date (sum of all months from January to current selected month)
+        // Calculate year-to-date (sum of all months from January to current selected month) - Only projects with LPO
         let yearRevenue = 0;
         let yearExpenses = 0;
 
@@ -901,7 +1002,7 @@ export const getProjectProfitAnalytics = asyncHandler(async (req: Request, res: 
             profitMargin: yearProfitMargin
         };
 
-        // Calculate last year (same period)
+        // Calculate last year (same period) - Only projects with LPO
         let lastYearRevenue = 0;
         let lastYearExpenses = 0;
 
@@ -921,7 +1022,7 @@ export const getProjectProfitAnalytics = asyncHandler(async (req: Request, res: 
             profitMargin: lastYearProfitMargin
         };
 
-        // Get profit trend for last 6 months
+        // Get profit trend for last 6 months - Only projects with LPO
         const profitTrend = [];
         for (let i = 5; i >= 0; i--) {
             const monthDate = dayjs(`${selectedYear}-${selectedMonth}-01`).subtract(i, 'month');
@@ -938,14 +1039,25 @@ export const getProjectProfitAnalytics = asyncHandler(async (req: Request, res: 
             });
         }
 
-        // Get top 5 profitable projects for current month
+        // Get top 5 profitable projects for current month - Only projects with LPO
+        const projectsWithLPO = await LPO.aggregate([
+            {
+                $group: {
+                    _id: "$project"
+                }
+            }
+        ]);
+
+        const projectIdsWithLPO = projectsWithLPO.map(p => p._id);
+
         const budgets = await Budget.find({
             "monthlyBudgets": {
                 $elemMatch: {
                     month: selectedMonth,
                     year: selectedYear
                 }
-            }
+            },
+            "project": { $in: projectIdsWithLPO } // Only projects with LPO
         })
             .populate("project", "projectName")
             .populate({
@@ -1031,7 +1143,7 @@ export const getProjectProfitAnalytics = asyncHandler(async (req: Request, res: 
             }
         };
 
-        console.log('Profit Analytics Result:', {
+        console.log('Profit Analytics Result (Projects with LPO only):', {
             currentMonth: result.currentMonth,
             topProjects: result.topProfitableProjects.length
         });
@@ -1044,6 +1156,7 @@ export const getProjectProfitAnalytics = asyncHandler(async (req: Request, res: 
         throw new ApiError(500, "Failed to fetch project profit analytics");
     }
 });
+
 // Get estimation analytics
 export const getEstimationAnalytics = asyncHandler(async (req: Request, res: Response) => {
     const { month, year } = req.query;
@@ -1215,7 +1328,7 @@ export const getEstimationAnalytics = asyncHandler(async (req: Request, res: Res
     }
 });
 
-// Get dashboard summary (combined endpoint for faster loading)
+// Get dashboard summary (combined endpoint for faster loading) - Only projects with LPO
 export const getDashboardSummary = asyncHandler(async (req: Request, res: Response) => {
     try {
         const [
@@ -1254,7 +1367,17 @@ export const getDashboardSummary = asyncHandler(async (req: Request, res: Respon
 
 // Helper functions for getDashboardSummary
 async function getOverviewStatsData() {
-    const totalProjects = await Project.countDocuments();
+    // Get projects that have LPO (work confirmed)
+    const projectsWithLPO = await LPO.aggregate([
+        {
+            $group: {
+                _id: "$project"
+            }
+        }
+    ]);
+
+    const totalProjects = projectsWithLPO.length;
+
     const activeStaff = await User.countDocuments({
         isActive: true,
         role: { $nin: ['super_admin', 'admin', 'finance'] }
@@ -1331,6 +1454,19 @@ async function getOverviewStatsData() {
 async function getProjectStatusData() {
     const projectStatus = await Project.aggregate([
         {
+            $lookup: {
+                from: "lpos",
+                localField: "_id",
+                foreignField: "project",
+                as: "lpos"
+            }
+        },
+        {
+            $match: {
+                "lpos.0": { $exists: true } // Only projects that have at least one LPO
+            }
+        },
+        {
             $group: {
                 _id: "$status",
                 count: { $count: {} }
@@ -1405,6 +1541,19 @@ async function getHRAlertsData() {
 async function getTopClientsData() {
     const topClients = await Project.aggregate([
         {
+            $lookup: {
+                from: "lpos",
+                localField: "_id",
+                foreignField: "project",
+                as: "lpos"
+            }
+        },
+        {
+            $match: {
+                "lpos.0": { $exists: true } // Only projects with LPOs
+            }
+        },
+        {
             $group: {
                 _id: "$client",
                 projectCount: { $count: {} },
@@ -1473,12 +1622,24 @@ async function getProjectProfitAnalyticsData() {
     const currentMonth = dayjs().month() + 1;
     const currentYear = dayjs().year();
 
-    // Helper function to calculate profit for a month
+    // Helper function to calculate profit for a month (only for projects with LPO)
     const calculateProfit = async (month: number, year: number) => {
+        // Get projects that have LPOs
+        const projectsWithLPO = await LPO.aggregate([
+            {
+                $group: {
+                    _id: "$project"
+                }
+            }
+        ]);
+
+        const projectIdsWithLPO = projectsWithLPO.map(p => p._id);
+
         const budgets = await Budget.find({
             "monthlyBudgets": {
                 $elemMatch: { month, year }
-            }
+            },
+            "project": { $in: projectIdsWithLPO } // Only budgets for projects with LPO
         });
 
         if (!budgets.length) {
@@ -1543,6 +1704,7 @@ async function getProjectProfitAnalyticsData() {
         }
     };
 }
+
 async function getEstimationAnalyticsData() {
     const startOfMonth = dayjs().startOf('month').toDate();
     const endOfMonth = dayjs().endOf('month').toDate();
@@ -1588,12 +1750,29 @@ async function getEstimationAnalyticsData() {
 }
 
 async function calculateProfitForRange(startDate: Date, endDate: Date) {
+    // Get projects with LPO for this range
+    const projectsWithLPO = await LPO.aggregate([
+        {
+            $match: {
+                lpoDate: { $gte: startDate, $lte: endDate }
+            }
+        },
+        {
+            $group: {
+                _id: "$project"
+            }
+        }
+    ]);
+
+    const projectIdsWithLPO = projectsWithLPO.map(p => p._id);
+
     const [revenueResult, expenseResult] = await Promise.all([
         Quotation.aggregate([
             {
                 $match: {
                     createdAt: { $gte: startDate, $lte: endDate },
-                    isApproved: true
+                    isApproved: true,
+                    project: { $in: projectIdsWithLPO }
                 }
             },
             {
@@ -1606,7 +1785,8 @@ async function calculateProfitForRange(startDate: Date, endDate: Date) {
         Expense.aggregate([
             {
                 $match: {
-                    createdAt: { $gte: startDate, $lte: endDate }
+                    createdAt: { $gte: startDate, $lte: endDate },
+                    project: { $in: projectIdsWithLPO }
                 }
             },
             {
@@ -1637,4 +1817,3 @@ async function calculateProfitForRange(startDate: Date, endDate: Date) {
         profitMargin: revenue > 0 ? (profit / revenue) * 100 : 0
     };
 }
-
