@@ -1096,7 +1096,8 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   const worksheet = workbook.addWorksheet('Payroll Report');
 
   // Add title row at the top
-  const titleRow = worksheet.addRow([]);
+  worksheet.addRow([]); // Empty row for title
+
   let titleText = 'PAYROLL REPORT';
 
   // Generate title based on filters - month parameter represents the PREVIOUS month
@@ -1131,7 +1132,7 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     fgColor: { argb: 'FF2c5aa0' } // Same blue as headers
   };
   titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
-  titleRow.height = 30;
+  worksheet.getRow(1).height = 30;
 
   // Add headers with separate BASIC SALARY and ALLOWANCE columns
   worksheet.columns = [
