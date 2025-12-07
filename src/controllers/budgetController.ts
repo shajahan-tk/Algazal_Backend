@@ -9,6 +9,13 @@ import { Project } from "../models/projectModel";
 import { Quotation } from "../models/quotationModel";
 import { Types } from "mongoose";
 
+// Helper function to calculate budget amount without VAT
+const calculateBudgetAmount = (quotation: any): number => {
+    const netAmount = quotation.netAmount || 0;
+    const vatAmount = quotation.vatAmount || 0;
+    return netAmount - vatAmount;
+};
+
 // Create a budget for a project
 export const createBudget = asyncHandler(async (req: Request, res: Response) => {
     const { projectId } = req.params;
@@ -36,11 +43,14 @@ export const createBudget = asyncHandler(async (req: Request, res: Response) => 
         throw new ApiError(400, "Budget already exists for this project");
     }
 
+    // Calculate budget amount without VAT
+    const budgetAmount = calculateBudgetAmount(quotation);
+
     // Create budget with no monthly allocations initially
     const budget = await Budget.create({
         project: projectId,
         quotation: quotation._id,
-        totalQuotationAmount: quotation.netAmount,
+        totalQuotationAmount: budgetAmount, // Excluding VAT
         monthlyBudgets: [],
         createdBy: new Types.ObjectId(userId),
     });
@@ -56,7 +66,7 @@ export const getProjectBudget = asyncHandler(async (req: Request, res: Response)
 
     const budget = await Budget.findOne({ project: projectId })
         .populate("project", "projectName projectNumber")
-        .populate("quotation", "netAmount")
+        .populate("quotation", "netAmount vatAmount")
         .populate("createdBy", "firstName lastName");
 
     if (!budget) {
@@ -94,10 +104,13 @@ export const updateMonthlyBudgets = asyncHandler(async (req: Request, res: Respo
         throw new ApiError(404, "Budget not found for this project");
     }
 
-    // Validate that total allocation doesn't exceed quotation amount
+    // Calculate budget amount without VAT
+    const budgetAmount = calculateBudgetAmount(quotation);
+
+    // Validate that total allocation doesn't exceed budget amount (without VAT)
     const totalAllocation = monthlyBudgets.reduce((sum: number, month: IMonthlyBudget) => sum + month.allocatedAmount, 0);
-    if (totalAllocation > quotation?.netAmount!) {
-        throw new ApiError(400, `Total allocation (${totalAllocation}) exceeds the quotation amount (${quotation?.netAmount})`);
+    if (totalAllocation > budgetAmount) {
+        throw new ApiError(400, `Total allocation (${totalAllocation}) exceeds the budget amount (${budgetAmount})`);
     }
 
     // Process each monthly budget from the request

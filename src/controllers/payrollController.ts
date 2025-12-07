@@ -1114,6 +1114,35 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Payroll Report');
 
+  // Add title row at the top
+  const titleRow = worksheet.addRow([]);
+  let titleText = 'PAYROLL REPORT';
+
+  // Generate title based on filters
+  if (month && year) {
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'];
+    titleText = `PAYROLL ${monthNames[Number(month) - 1].toUpperCase()} ${year}`;
+  } else if (year) {
+    titleText = `PAYROLL ${year}`;
+  } else if (startDate && endDate) {
+    const start = new Date(startDate as string);
+    const end = new Date(endDate as string);
+    titleText = `PAYROLL ${start.toLocaleDateString()} - ${end.toLocaleDateString()}`;
+  }
+
+  worksheet.mergeCells('A1:AB1'); // Merge across all columns
+  const titleCell = worksheet.getCell('A1');
+  titleCell.value = titleText;
+  titleCell.font = { bold: true, size: 16, color: { argb: 'FFFFFFFF' } };
+  titleCell.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FF2c5aa0' } // Same blue as headers
+  };
+  titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  titleRow.height = 30;
+
   // Add headers with separate BASIC SALARY and ALLOWANCE columns
   worksheet.columns = [
     { header: 'S/NO', key: 'serialNo', width: 6 },
@@ -1457,8 +1486,8 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   footerCell.alignment = { vertical: 'middle', horizontal: 'center' };
   footerRow.height = 20;
 
-  // Style the header row
-  const headerRow = worksheet.getRow(1);
+  // Style the header row (now row 2 after title)
+  const headerRow = worksheet.getRow(2);
   headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
   headerRow.fill = {
     type: 'pattern',
