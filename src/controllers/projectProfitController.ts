@@ -158,14 +158,6 @@ export const getProjectProfitReport = asyncHandler(async (req: Request, res: Res
     });
   }
 
-  // Calculate TOTAL SUMMARY for the entire month (before filtering/pagination)
-  const totalMonthSummary = {
-    totalBudget: projectProfitData.reduce((sum, item) => sum + item.monthlyBudget, 0),
-    totalExpense: projectProfitData.reduce((sum, item) => sum + item.monthlyMaterialExpense, 0),
-    totalProfit: projectProfitData.reduce((sum, item) => sum + item.profit, 0),
-    totalProjects: projectProfitData.length
-  };
-
   // Apply search filter if search term is provided
   let filteredData = projectProfitData;
   if (search && typeof search === 'string' && search.trim() !== '') {
@@ -178,6 +170,15 @@ export const getProjectProfitReport = asyncHandler(async (req: Request, res: Res
     );
   }
 
+  // Calculate SUMMARY based on FILTERED data (after search, before pagination)
+  // This ensures summary reflects what the user is actually viewing
+  const summary = {
+    totalBudget: filteredData.reduce((sum, item) => sum + item.monthlyBudget, 0),
+    totalExpense: filteredData.reduce((sum, item) => sum + item.monthlyMaterialExpense, 0),
+    totalProfit: filteredData.reduce((sum, item) => sum + item.profit, 0),
+    totalProjects: filteredData.length
+  };
+
   // Apply pagination
   const total = filteredData.length;
   const totalPages = Math.ceil(total / limitNumber);
@@ -185,17 +186,9 @@ export const getProjectProfitReport = asyncHandler(async (req: Request, res: Res
   const endIndex = Math.min(startIndex + limitNumber, total);
   const paginatedData = filteredData.slice(startIndex, endIndex);
 
-  // Calculate CURRENT PAGE SUMMARY (optional - if you want both)
-  const currentPageSummary = {
-    pageBudget: paginatedData.reduce((sum, item) => sum + item.monthlyBudget, 0),
-    pageExpense: paginatedData.reduce((sum, item) => sum + item.monthlyMaterialExpense, 0),
-    pageProfit: paginatedData.reduce((sum, item) => sum + item.profit, 0),
-    pageProjects: paginatedData.length
-  };
-
   // If export is requested, generate Excel file (without pagination)
   if (exportType === 'excel') {
-    return generateExcelReport(filteredData, selectedMonth, selectedYear, totalMonthSummary, res);
+    return generateExcelReport(filteredData, selectedMonth, selectedYear, summary, res);
   }
 
   return res.status(200).json(
@@ -206,13 +199,11 @@ export const getProjectProfitReport = asyncHandler(async (req: Request, res: Res
       limit: limitNumber,
       totalPages,
       summary: {
-        // Return the ENTIRE MONTH summary
-        totalBudget: totalMonthSummary.totalBudget,
-        totalExpense: totalMonthSummary.totalExpense,
-        totalProfit: totalMonthSummary.totalProfit,
-        totalProjects: totalMonthSummary.totalProjects,
-        // Also include page summary if needed
-        pageSummary: currentPageSummary
+        // Summary is based on ALL filtered results, not just the current page
+        totalBudget: summary.totalBudget,
+        totalExpense: summary.totalExpense,
+        totalProfit: summary.totalProfit,
+        totalProjects: summary.totalProjects
       }
     }, "Project profit report fetched successfully")
   );
