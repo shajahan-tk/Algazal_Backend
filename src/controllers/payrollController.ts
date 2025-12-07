@@ -1116,9 +1116,9 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
       displayMonth = monthNames[actualMonthIndex];
     }
 
-    titleText = `PAYROLL ${displayMonth.toUpperCase()} ${displayYear}`;
+    titleText = `PAYROLL - ${displayMonth.toUpperCase()} ${displayYear}`;
   } else if (year) {
-    titleText = `PAYROLL ${year}`;
+    titleText = `PAYROLL - ${year}`;
   }
 
   worksheet.mergeCells('A1:AB1'); // Merge across all columns
