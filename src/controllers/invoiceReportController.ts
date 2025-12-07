@@ -16,10 +16,9 @@ export interface InvoiceReportData {
     projectDescription: string;
     clientName: string;
     grnNumber?: string;
-    quotationAmount: number;
-    vatAmount: number;
-    netAmount: number;
-    amountWithoutVAT: number;
+    netAmount: number;           // AMOUNT WITH VAT (Final amount)
+    vatAmount: number;           // VAT Amount
+    amountWithoutVAT: number;    // NET Amount - VAT Amount
     invoiceRemarks?: string;
     grnUpdatedDate?: string;
     lpoNumber: string;
@@ -34,7 +33,7 @@ export interface InvoiceReportData {
     invoiceDate?: string;
     paymentTermsDays: number;
     dueDate?: string;
-    isExpired: boolean; // NEW: Track if payment is expired
+    isExpired: boolean;
 }
 
 const extractPaymentDays = (termsAndConditions: string[]): number => {
@@ -153,9 +152,10 @@ export const getInvoiceReport = asyncHandler(async (req: Request, res: Response)
                 totalPages: 0,
                 summary: {
                     totalProjects: 0,
-                    totalQuotationAmount: 0,
-                    totalNetAmount: 0,
-                    totalDueAmount: 0,
+                    totalNetAmount: 0,           // Total NET Amount (with VAT)
+                    totalAmountWithoutVAT: 0,    // Total Amount (without VAT)
+                    totalVATAmount: 0,           // Total VAT Amount
+                    totalDueAmount: 0,           // Total Due Amount (expired NET amounts)
                     expiredProjects: 0,
                     activeProjects: 0,
                     projectsWithRemarks: 0
@@ -165,9 +165,10 @@ export const getInvoiceReport = asyncHandler(async (req: Request, res: Response)
     }
 
     const invoiceReportData: InvoiceReportData[] = [];
-    let totalQuotationAmount = 0;
-    let totalNetAmount = 0;
-    let totalDueAmount = 0;
+    let totalNetAmount = 0;           // Total NET Amount (with VAT)
+    let totalAmountWithoutVAT = 0;    // Total Amount (without VAT)
+    let totalVATAmount = 0;           // Total VAT Amount
+    let totalDueAmount = 0;           // Total Due Amount
     let expiredProjects = 0;
     let activeProjects = 0;
     let projectsWithRemarks = 0;
@@ -176,9 +177,9 @@ export const getInvoiceReport = asyncHandler(async (req: Request, res: Response)
         const clientName = project.client?.clientName || "N/A";
 
         const quotation = await Quotation.findOne({ project: project._id });
-        const netAmount = quotation?.netAmount || 0;
-        const vatAmount = quotation?.vatAmount || 0;
-        const amountWithoutVAT = netAmount - vatAmount;
+        const netAmount = quotation?.netAmount || 0;           // AMOUNT WITH VAT
+        const vatAmount = quotation?.vatAmount || 0;           // VAT Amount
+        const amountWithoutVAT = netAmount - vatAmount;        // NET Amount - VAT Amount
 
         const lpo = await LPO.findOne({ project: project._id });
         const lpoNumber = lpo?.lpoNumber || "N/A";
@@ -197,7 +198,7 @@ export const getInvoiceReport = asyncHandler(async (req: Request, res: Response)
         // Calculate due amount (if expired, add to due amount)
         let dueAmount = 0;
         if (daysLeftInfo.isExpired) {
-            dueAmount = netAmount;
+            dueAmount = netAmount;  // Use NET Amount (with VAT) for due amount
             totalDueAmount += dueAmount;
             expiredProjects++;
         } else {
@@ -210,8 +211,9 @@ export const getInvoiceReport = asyncHandler(async (req: Request, res: Response)
         }
 
         // Add to totals
-        totalQuotationAmount += amountWithoutVAT;
         totalNetAmount += netAmount;
+        totalAmountWithoutVAT += amountWithoutVAT;
+        totalVATAmount += vatAmount;
 
         invoiceReportData.push({
             projectId: project._id.toString(),
@@ -220,10 +222,9 @@ export const getInvoiceReport = asyncHandler(async (req: Request, res: Response)
             projectDescription: project.projectDescription || "No description",
             clientName,
             grnNumber: project.grnNumber,
-            quotationAmount: amountWithoutVAT,
-            vatAmount: vatAmount,
-            netAmount: netAmount,
-            amountWithoutVAT: amountWithoutVAT,
+            netAmount: netAmount,                     // AMOUNT WITH VAT
+            vatAmount: vatAmount,                     // VAT Amount
+            amountWithoutVAT: amountWithoutVAT,       // NET Amount - VAT Amount
             invoiceRemarks: project.invoiceRemarks || "",
             grnUpdatedDate: project.invoiceDate ? project.invoiceDate.toISOString().split('T')[0] : undefined,
             lpoNumber,
@@ -257,8 +258,9 @@ export const getInvoiceReport = asyncHandler(async (req: Request, res: Response)
     }
 
     // Recalculate summary for filtered data
-    const filteredTotalQuotationAmount = filteredData.reduce((sum, item) => sum + item.amountWithoutVAT, 0);
     const filteredTotalNetAmount = filteredData.reduce((sum, item) => sum + item.netAmount, 0);
+    const filteredTotalAmountWithoutVAT = filteredData.reduce((sum, item) => sum + item.amountWithoutVAT, 0);
+    const filteredTotalVATAmount = filteredData.reduce((sum, item) => sum + item.vatAmount, 0);
     const filteredTotalDueAmount = filteredData.reduce((sum, item) => sum + (item.isExpired ? item.netAmount : 0), 0);
     const filteredExpiredProjects = filteredData.filter(item => item.isExpired).length;
     const filteredActiveProjects = filteredData.length - filteredExpiredProjects;
@@ -274,9 +276,10 @@ export const getInvoiceReport = asyncHandler(async (req: Request, res: Response)
 
     const summary = {
         totalProjects: total,
-        totalQuotationAmount: filteredTotalQuotationAmount,
-        totalNetAmount: filteredTotalNetAmount,
-        totalDueAmount: filteredTotalDueAmount,
+        totalNetAmount: filteredTotalNetAmount,           // Total NET Amount (with VAT)
+        totalAmountWithoutVAT: filteredTotalAmountWithoutVAT,  // Total Amount (without VAT)
+        totalVATAmount: filteredTotalVATAmount,           // Total VAT Amount
+        totalDueAmount: filteredTotalDueAmount,           // Total Due Amount (expired NET amounts)
         expiredProjects: filteredExpiredProjects,
         activeProjects: filteredActiveProjects,
         projectsWithRemarks: filteredProjectsWithRemarks
@@ -308,14 +311,14 @@ const generateInvoiceExcelReport = async (
         const worksheet = workbook.addWorksheet('Invoice Report');
 
         // Add title
-        worksheet.mergeCells('A1:T1');
+        worksheet.mergeCells('A1:U1');
         worksheet.getCell('A1').value = `Invoice Report - Completed Projects (100% Progress)`;
         worksheet.getCell('A1').font = { size: 16, bold: true };
         worksheet.getCell('A1').alignment = { horizontal: 'center' };
 
         // Add summary section
-        worksheet.mergeCells('A3:D3');
-        worksheet.getCell('A3').value = 'REPORT SUMMARY';
+        worksheet.mergeCells('A3:E3');
+        worksheet.getCell('A3').value = 'FINANCIAL SUMMARY';
         worksheet.getCell('A3').font = { bold: true, size: 12 };
         worksheet.getCell('A3').fill = {
             type: 'pattern',
@@ -324,29 +327,36 @@ const generateInvoiceExcelReport = async (
         };
         worksheet.getCell('A3').font = { color: { argb: 'FFFFFFFF' }, bold: true };
 
-        // Summary data
+        // Summary data with clear labels
         const summaryData = [
-            ['Total Projects:', summary.totalProjects],
-            ['Total Quotation Amount (excl. VAT):', summary.totalQuotationAmount],
-            ['Total NET Amount:', summary.totalNetAmount],
-            ['Total Due Amount:', summary.totalDueAmount],
-            ['Expired Projects:', summary.expiredProjects],
-            ['Active Projects:', summary.activeProjects],
-            ['Projects with Remarks:', summary.projectsWithRemarks]
+            ['Total Projects:', summary.totalProjects, '', '', ''],
+            ['Total NET Amount (with VAT):', summary.totalNetAmount, '', 'VAT Amount:', summary.totalVATAmount],
+            ['Total Amount (without VAT):', summary.totalAmountWithoutVAT, '', 'Due Amount:', summary.totalDueAmount],
+            ['Expired Projects:', summary.expiredProjects, '', 'Active Projects:', summary.activeProjects],
+            ['Projects with Remarks:', summary.projectsWithRemarks, '', 'VAT Rate:', '5%']
         ];
 
-        summaryData.forEach(([label, value], index) => {
+        summaryData.forEach(([label1, value1, spacer, label2, value2], index) => {
             const row = 4 + index;
-            worksheet.getCell(`A${row}`).value = label;
-            worksheet.getCell(`B${row}`).value = value;
+            worksheet.getCell(`A${row}`).value = label1;
+            worksheet.getCell(`B${row}`).value = value1;
 
-            if (typeof value === 'number') {
+            if (typeof value1 === 'number') {
                 worksheet.getCell(`B${row}`).numFmt = '#,##0.00';
+            }
+
+            if (label2 && value2 !== undefined) {
+                worksheet.getCell(`D${row}`).value = label2;
+                worksheet.getCell(`E${row}`).value = value2;
+
+                if (typeof value2 === 'number') {
+                    worksheet.getCell(`E${row}`).numFmt = '#,##0.00';
+                }
             }
         });
 
         // Style summary cells
-        for (let i = 3; i <= 10; i++) {
+        for (let i = 3; i <= 8; i++) {
             const row = worksheet.getRow(i);
             row.height = 25;
             if (i > 3) {
@@ -355,20 +365,35 @@ const generateInvoiceExcelReport = async (
                     pattern: 'solid',
                     fgColor: { argb: 'FFF2F2F2' }
                 };
+                if (row.getCell(4).value) {
+                    row.getCell(4).fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FFF2F2F2' }
+                    };
+                }
             }
         }
 
-        // Add headers
+        // Highlight due amount row
+        worksheet.getCell('E6').font = { bold: true, color: { argb: 'FFFF0000' } };
+        worksheet.getCell('E6').fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFFFE4B5' }
+        };
+
+        // Add headers with clear labels
         const headers = [
             'Project Number',
             'Project Name',
             'Client Name',
             'Invoice Date',
             'GRN Number',
-            'Quotation Amount (AED)',
+            'NET Amount (AED)',        // WITH VAT
+            'Amount (AED)',            // WITHOUT VAT (NET - VAT)
             'VAT Amount (AED)',
-            'NET Amount (AED)',
-            'Due Amount (AED)',
+            'Due Amount (AED)',        // If expired
             'Invoice Remarks',
             'Payment Terms (Days)',
             'Due Date',
@@ -379,7 +404,8 @@ const generateInvoiceExcelReport = async (
             'Work End Date',
             'Project Status',
             'Remaining Days',
-            'Days Status'
+            'Days Status',
+            'VAT %'
         ];
 
         const headerRow = worksheet.addRow(headers);
@@ -400,6 +426,8 @@ const generateInvoiceExcelReport = async (
         // Add data rows
         data.forEach((item, index) => {
             const dueAmount = item.isExpired ? item.netAmount : 0;
+            const vatPercentage = item.netAmount > 0 ?
+                Math.round((item.vatAmount / (item.netAmount - item.vatAmount)) * 100) : 0;
 
             const row = worksheet.addRow([
                 item.projectNumber,
@@ -407,10 +435,10 @@ const generateInvoiceExcelReport = async (
                 item.clientName,
                 item.invoiceDate || 'Not set',
                 item.grnNumber || 'N/A',
-                item.amountWithoutVAT,
-                item.vatAmount,
-                item.netAmount,
-                dueAmount,
+                item.netAmount,                     // WITH VAT
+                item.amountWithoutVAT,              // WITHOUT VAT (NET - VAT)
+                item.vatAmount,                     // VAT Amount
+                dueAmount,                          // Due Amount if expired
                 item.invoiceRemarks || 'No remarks',
                 item.paymentTermsDays,
                 item.dueDate || 'N/A',
@@ -421,7 +449,8 @@ const generateInvoiceExcelReport = async (
                 item.workEndDate || 'N/A',
                 item.projectStatus,
                 Math.abs(item.remainingPaymentDays),
-                item.isExpired ? 'Expired' : 'Active'
+                item.isExpired ? 'Expired' : 'Active',
+                `${vatPercentage}%`
             ]);
 
             // Style the row
@@ -432,10 +461,16 @@ const generateInvoiceExcelReport = async (
                 right: { style: 'thin' }
             };
 
+            // Format currency cells
+            [6, 7, 8, 9].forEach(colIndex => {
+                const cell = row.getCell(colIndex);
+                cell.numFmt = '#,##0.00';
+            });
+
             // Color code based on status
             if (item.isExpired) {
-                // Red for expired
-                [8, 9, 12, 19, 20].forEach(colIndex => {
+                // Red for expired projects
+                [9, 12, 19].forEach(colIndex => {
                     const cell = row.getCell(colIndex);
                     cell.fill = {
                         type: 'pattern',
@@ -444,6 +479,16 @@ const generateInvoiceExcelReport = async (
                     };
                     cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
                 });
+
+                // Highlight due amount cell
+                const dueAmountCell = row.getCell(9);
+                dueAmountCell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFFF0000' }
+                };
+                dueAmountCell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+
             } else if (item.remainingPaymentDays <= 7) {
                 // Yellow for due within 7 days
                 const paymentStatusCell = row.getCell(13);
@@ -465,17 +510,20 @@ const generateInvoiceExcelReport = async (
                 remarksCell.alignment = { wrapText: true };
             }
 
-            // Format currency cells
-            [6, 7, 8, 9].forEach(colIndex => {
-                const cell = row.getCell(colIndex);
-                cell.numFmt = '#,##0.00';
-            });
-
             // Format date cells
             [4, 12, 15, 16].forEach(colIndex => {
                 const cell = row.getCell(colIndex);
                 cell.numFmt = 'dd/mm/yyyy';
             });
+
+            // Highlight NET Amount (with VAT) - slightly different background
+            const netAmountCell = row.getCell(6);
+            netAmountCell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FFE6F3FF' }
+            };
+            netAmountCell.font = { bold: true };
         });
 
         // Set column widths
@@ -485,9 +533,9 @@ const generateInvoiceExcelReport = async (
             20,  // Client Name
             15,  // Invoice Date
             15,  // GRN Number
-            20,  // Quotation Amount
+            18,  // NET Amount (with VAT)
+            18,  // Amount (without VAT)
             15,  // VAT Amount
-            15,  // NET Amount
             15,  // Due Amount
             30,  // Invoice Remarks
             15,  // Payment Terms
@@ -499,25 +547,13 @@ const generateInvoiceExcelReport = async (
             15,  // Work End Date
             20,  // Project Status
             15,  // Remaining Days
-            15   // Days Status
+            15,  // Days Status
+            10   // VAT %
         ];
 
         columnWidths.forEach((width, index) => {
             worksheet.getColumn(index + 1).width = width;
         });
-
-        // Add total due amount at the bottom
-        const totalRow = data.length + 15;
-        worksheet.getCell(`A${totalRow}`).value = 'TOTAL DUE AMOUNT:';
-        worksheet.getCell(`A${totalRow}`).font = { bold: true };
-        worksheet.getCell(`B${totalRow}`).value = summary.totalDueAmount;
-        worksheet.getCell(`B${totalRow}`).numFmt = '#,##0.00';
-        worksheet.getCell(`B${totalRow}`).font = { bold: true, color: { argb: 'FFFF0000' } };
-        worksheet.getCell(`B${totalRow}`).fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFFFE4B5' }
-        };
 
         // Set response headers
         const fileName = `invoice-report-${new Date().toISOString().split('T')[0]}.xlsx`;
