@@ -138,9 +138,7 @@ export const createKanbanTask = asyncHandler(async (req: Request, res: Response)
         }
 
         // Check if the assigned user is an engineer
-        if (!isEngineer(assignedUser)) {
-            throw new ApiError(400, "Task can only be assigned to engineers");
-        }
+
     }
 
     const task = await KanbanTask.create({
@@ -198,10 +196,6 @@ export const updateKanbanTask = asyncHandler(async (req: Request, res: Response)
             throw new ApiError(404, "Assigned user not found");
         }
 
-        // Check if the assigned user is an engineer
-        if (!isEngineer(assignedUser)) {
-            throw new ApiError(400, "Task can only be assigned to engineers");
-        }
     }
 
     const updateData: any = {};
