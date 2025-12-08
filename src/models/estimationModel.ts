@@ -28,27 +28,25 @@ export interface IEstimation extends Document {
   estimationNumber: string;
   workStartDate: Date;
   workEndDate: Date;
+  workDays: number; // ADDED: Number of working days
+  dailyStartTime: string; // ADDED: Daily start time (HH:mm)
+  dailyEndTime: string; // ADDED: Daily end time (HH:mm)
   validUntil: Date;
   paymentDueBy: number;
-
   subject?: string;
   materials: IEstimationItem[];
   labour: ILabourItem[];
   termsAndConditions: ITermsITem[];
-
   estimatedAmount: number;
   quotationAmount?: number;
   commissionAmount?: number;
   profit?: number;
-
   preparedBy: Types.ObjectId | IUser;
   checkedBy?: Types.ObjectId | IUser;
   approvedBy?: Types.ObjectId | IUser;
-
   isChecked: boolean;
   isApproved: boolean;
   approvalComment?: string;
-
   createdAt: Date;
   updatedAt: Date;
 }
@@ -98,6 +96,34 @@ const estimationSchema = new Schema<IEstimation>(
         },
         message: "Work end date must be after start date",
       },
+    },
+    workDays: {
+      type: Number,
+      required: true,
+      min: 1,
+      default: 1,
+    },
+    dailyStartTime: {
+      type: String,
+      required: true,
+      default: "09:00",
+      validate: {
+        validator: function (v: string) {
+          return /^([01]\d|2[0-3]):([0-5]\d)$/.test(v);
+        },
+        message: "Invalid time format. Use HH:mm format (e.g., 09:00)"
+      }
+    },
+    dailyEndTime: {
+      type: String,
+      required: true,
+      default: "18:00",
+      validate: {
+        validator: function (v: string) {
+          return /^([01]\d|2[0-3]):([0-5]\d)$/.test(v);
+        },
+        message: "Invalid time format. Use HH:mm format (e.g., 18:00)"
+      }
     },
     validUntil: {
       type: Date,

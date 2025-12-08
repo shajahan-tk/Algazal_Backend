@@ -266,17 +266,13 @@ export const approveEstimation = asyncHandler(
       await mailer.sendEmail({
         to: process.env.NOTIFICATION_INBOX || "info@alghazalgroup.com",
         bcc: uniqueRecipients.map((r) => r.email).join(","),
-        subject: `Estimation ${isApproved ? "Approved" : "Rejected"}: ${
-          estimation.estimationNumber
-        }`,
+        subject: `Estimation ${isApproved ? "Approved" : "Rejected"}: ${estimation.estimationNumber
+          }`,
         templateParams: templateParams, // Just pass the templateParams without content
-        text: `Dear Team,\n\nEstimation ${
-          estimation.estimationNumber
-        } for project ${templateParams.projectName} has been ${
-          isApproved ? "approved" : "rejected"
-        } by ${templateParams.checkerName}.\n\nView project: ${
-          templateParams.actionUrl
-        }\n\nBest regards,\nTECHNICAL SERVICE TEAM`,
+        text: `Dear Team,\n\nEstimation ${estimation.estimationNumber
+          } for project ${templateParams.projectName} has been ${isApproved ? "approved" : "rejected"
+          } by ${templateParams.checkerName}.\n\nView project: ${templateParams.actionUrl
+          }\n\nBest regards,\nTECHNICAL SERVICE TEAM`,
         headers: {
           "X-Priority": "1",
           Importance: "high",
@@ -706,17 +702,17 @@ export const generateEstimationPdf = asyncHandler(
       (sum, item) => sum + safeGetNumber(item.total),
       0
     ) || 0;
-    
+
     const labourTotal = estimation.labour?.reduce(
       (sum, item) => sum + safeGetNumber(item.total),
       0
     ) || 0;
-    
+
     const termsTotal = estimation.termsAndConditions?.reduce(
       (sum, item) => sum + safeGetNumber(item.total),
       0
     ) || 0;
-    
+
     const estimatedAmount = materialsTotal + labourTotal + termsTotal;
     const netAmount = safeGetNumber(estimation?.quotationAmount);
     const commissionAmount = safeGetNumber(estimation?.commissionAmount);
@@ -727,7 +723,7 @@ export const generateEstimationPdf = asyncHandler(
     // Calculate profit/loss percentage based on actual profit
     const calculateProfitPercentage = () => {
       if (estimatedAmount === 0) return 0;
-      const percentage = (actualProfit/netAmount) * 100;
+      const percentage = (actualProfit / netAmount) * 100;
       return parseFloat(percentage.toFixed(2));
     };
 
@@ -744,8 +740,8 @@ export const generateEstimationPdf = asyncHandler(
     const clientEmail = estimation.project?.client?.email || "N/A";
     const clientMobile = estimation.project?.client?.mobileNumber || "";
     const clientTelephone = estimation.project?.client?.telephoneNumber || "";
-    
-    const clientPhone = clientMobile || clientTelephone 
+
+    const clientPhone = clientMobile || clientTelephone
       ? `${clientMobile}${clientMobile && clientTelephone ? ' / ' : ''}${clientTelephone}`
       : "N/A";
 
@@ -1131,9 +1127,9 @@ export const generateEstimationPdf = asyncHandler(
                 </tr>
               </thead>
               <tbody>
-                ${(estimation.materials || []).length > 0 
-                  ? estimation.materials.map(
-                    (material) => `
+                ${(estimation.materials || []).length > 0
+        ? estimation.materials.map(
+          (material) => `
                   <tr>
                     <td>${safeGet(material.description)}</td>
                     <td>${safeGet(material.uom)}</td>
@@ -1142,8 +1138,8 @@ export const generateEstimationPdf = asyncHandler(
                     <td class="text-right amount">${safeGetNumber(material.total).toFixed(2)}</td>
                   </tr>
                 `).join("")
-                  : `<tr><td colspan="5" class="empty-state">No materials listed</td></tr>`
-                }
+        : `<tr><td colspan="5" class="empty-state">No materials listed</td></tr>`
+      }
                 <tr class="total-row">
                   <td colspan="4" class="text-right"><strong>TOTAL MATERIALS</strong></td>
                   <td class="text-right amount"><strong>${materialsTotal.toFixed(2)}</strong></td>
@@ -1164,9 +1160,9 @@ export const generateEstimationPdf = asyncHandler(
                 </tr>
               </thead>
               <tbody>
-                ${(estimation.labour || []).length > 0 
-                  ? estimation.labour.map(
-                    (labour) => `
+                ${(estimation.labour || []).length > 0
+        ? estimation.labour.map(
+          (labour) => `
                   <tr>
                     <td>${safeGet(labour.designation)}</td>
                     <td class="text-right amount">${safeGetNumber(labour.days).toFixed(2)}</td>
@@ -1174,8 +1170,8 @@ export const generateEstimationPdf = asyncHandler(
                     <td class="text-right amount">${safeGetNumber(labour.total).toFixed(2)}</td>
                   </tr>
                 `).join("")
-                  : `<tr><td colspan="4" class="empty-state">No labor charges listed</td></tr>`
-                }
+        : `<tr><td colspan="4" class="empty-state">No labor charges listed</td></tr>`
+      }
                 <tr class="total-row">
                   <td colspan="3" class="text-right"><strong>TOTAL LABOR</strong></td>
                   <td class="text-right amount"><strong>${labourTotal.toFixed(2)}</strong></td>
@@ -1196,9 +1192,9 @@ export const generateEstimationPdf = asyncHandler(
                 </tr>
               </thead>
               <tbody>
-                ${(estimation.termsAndConditions || []).length > 0 
-                  ? estimation.termsAndConditions.map(
-                    (term) => `
+                ${(estimation.termsAndConditions || []).length > 0
+        ? estimation.termsAndConditions.map(
+          (term) => `
                   <tr>
                     <td>${safeGet(term.description)}</td>
                     <td class="text-right amount">${safeGetNumber(term.quantity).toFixed(2)}</td>
@@ -1206,8 +1202,8 @@ export const generateEstimationPdf = asyncHandler(
                     <td class="text-right amount">${safeGetNumber(term.total).toFixed(2)}</td>
                   </tr>
                 `).join("")
-                  : `<tr><td colspan="4" class="empty-state">No miscellaneous charges listed</td></tr>`
-                }
+        : `<tr><td colspan="4" class="empty-state">No miscellaneous charges listed</td></tr>`
+      }
                 <tr class="total-row">
                   <td colspan="3" class="text-right"><strong>TOTAL MISCELLANEOUS</strong></td>
                   <td class="text-right amount"><strong>${termsTotal.toFixed(2)}</strong></td>
@@ -1323,6 +1319,1116 @@ export const generateEstimationPdf = asyncHandler(
         "Content-Disposition",
         `attachment; filename=estimation-${safeGet(estimation.estimationNumber, "unknown")}.pdf`
       );
+      res.send(pdfBuffer);
+    } finally {
+      await browser.close();
+    }
+  }
+);
+
+
+export const generateEstimationPdf = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    const estimation = await Estimation.findById(id)
+      .populate<PopulatedEstimation>({
+        path: "project",
+        select: "projectName client location building apartmentNumber",
+        populate: {
+          path: "client",
+          select: "clientName clientAddress email mobileNumber telephoneNumber",
+        },
+      })
+      .populate("preparedBy", "firstName signatureImage")
+      .populate("checkedBy", "firstName signatureImage")
+      .populate("approvedBy", "firstName signatureImage");
+
+    if (!estimation) {
+      throw new ApiError(404, "Estimation not found");
+    }
+
+    // Safe data access functions
+    const safeGet = (value: any, defaultValue = "N/A") => {
+      return value !== null && value !== undefined && value !== "" ? value : defaultValue;
+    };
+
+    const safeGetNumber = (value: any, defaultValue = 0) => {
+      return value !== null && value !== undefined ? Number(value) : defaultValue;
+    };
+
+    // Type guard to check if populated fields are IUser objects
+    const isPopulatedUser = (
+      user: any
+    ): user is Pick<IUser, "firstName" | "signatureImage"> => {
+      return user && typeof user === "object" && "firstName" in user;
+    };
+
+    // Get user data with proper typing
+    const preparedBy = isPopulatedUser(estimation.preparedBy)
+      ? estimation.preparedBy
+      : null;
+    const checkedBy = isPopulatedUser(estimation.checkedBy)
+      ? estimation.checkedBy
+      : null;
+    const approvedBy = isPopulatedUser(estimation.approvedBy)
+      ? estimation.approvedBy
+      : null;
+
+    // Calculate totals with safe defaults
+    const materialsTotal = estimation.materials?.reduce(
+      (sum, item) => sum + safeGetNumber(item.total),
+      0
+    ) || 0;
+
+    const labourTotal = estimation.labour?.reduce(
+      (sum, item) => sum + safeGetNumber(item.total),
+      0
+    ) || 0;
+
+    const termsTotal = estimation.termsAndConditions?.reduce(
+      (sum, item) => sum + safeGetNumber(item.total),
+      0
+    ) || 0;
+
+    const estimatedAmount = materialsTotal + labourTotal + termsTotal;
+    const netAmount = safeGetNumber(estimation?.quotationAmount);
+    const commissionAmount = safeGetNumber(estimation?.commissionAmount);
+
+    // Get the actual profit value (can be negative)
+    const actualProfit = estimation.profit || 0;
+
+    // Calculate profit/loss percentage based on actual profit
+    const calculateProfitPercentage = () => {
+      if (netAmount === 0) return 0;
+      const percentage = (actualProfit / netAmount) * 100;
+      return parseFloat(percentage.toFixed(2));
+    };
+
+    const profitPercentage = calculateProfitPercentage();
+    const isProfit = actualProfit > 0;
+    const isLoss = actualProfit < 0;
+
+    // Safe access to nested properties
+    const clientName = estimation.project?.client?.clientName || "N/A";
+    const clientAddress = estimation.project?.client?.clientAddress || "N/A";
+    const projectLocation = estimation.project?.location || "N/A";
+    const projectBuilding = estimation.project?.building || "N/A";
+    const apartmentNumber = estimation.project?.apartmentNumber || "N/A";
+    const clientEmail = estimation.project?.client?.email || "N/A";
+    const clientMobile = estimation.project?.client?.mobileNumber || "";
+    const clientTelephone = estimation.project?.client?.telephoneNumber || "";
+
+    const clientPhone = clientMobile || clientTelephone
+      ? `${clientMobile}${clientMobile && clientTelephone ? ' / ' : ''}${clientTelephone}`
+      : "N/A";
+
+    // Current date for document
+    const currentDate = new Date();
+    const formattedCurrentDate = currentDate.toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    });
+
+    // Prepare HTML content
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Estimation - ${safeGet(estimation.estimationNumber)}</title>
+      <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Source+Code+Pro:wght@400;500;600&display=swap');
+        
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+        }
+        
+        body {
+          font-family: 'Inter', sans-serif;
+          color: #1f2937;
+          background: #ffffff;
+          line-height: 1.4;
+          font-size: 9.5pt;
+          padding: 15mm;
+        }
+        
+        /* Header Styles */
+        .header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          margin-bottom: 25px;
+          padding-bottom: 20px;
+          border-bottom: 2px solid #e5e7eb;
+        }
+        
+        .company-info {
+          flex: 1;
+        }
+        
+        .company-logo {
+          width: 180px;
+          margin-bottom: 10px;
+        }
+        
+        .company-name {
+          font-size: 22px;
+          font-weight: 700;
+          color: #1e40af;
+          margin-bottom: 5px;
+        }
+        
+        .company-tagline {
+          font-size: 11px;
+          color: #6b7280;
+          margin-bottom: 3px;
+        }
+        
+        .document-title {
+          text-align: right;
+        }
+        
+        .document-title h1 {
+          font-size: 32px;
+          font-weight: 800;
+          color: #111827;
+          margin-bottom: 8px;
+          background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+        }
+        
+        .document-number {
+          font-size: 14px;
+          font-weight: 600;
+          color: #4b5563;
+          background: #f3f4f6;
+          padding: 8px 16px;
+          border-radius: 6px;
+          display: inline-block;
+        }
+        
+        .document-date {
+          font-size: 11px;
+          color: #6b7280;
+          margin-top: 5px;
+        }
+        
+        /* Client & Estimation Info */
+        .info-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 25px;
+          margin-bottom: 30px;
+        }
+        
+        .info-card {
+          background: linear-gradient(to bottom, #ffffff, #f9fafb);
+          border: 1px solid #e5e7eb;
+          border-radius: 8px;
+          padding: 20px;
+          position: relative;
+          overflow: hidden;
+        }
+        
+        .info-card::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 4px;
+          height: 100%;
+          background: linear-gradient(to bottom, #3b82f6, #1e40af);
+        }
+        
+        .card-header {
+          display: flex;
+          align-items: center;
+          margin-bottom: 15px;
+        }
+        
+        .card-icon {
+          width: 28px;
+          height: 28px;
+          background: linear-gradient(135deg, #3b82f6, #1e40af);
+          border-radius: 6px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-right: 10px;
+          color: white;
+          font-weight: 600;
+          font-size: 12px;
+        }
+        
+        .card-title {
+          font-size: 14px;
+          font-weight: 700;
+          color: #111827;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+        
+        .info-item {
+          display: flex;
+          justify-content: space-between;
+          padding: 8px 0;
+          border-bottom: 1px dashed #e5e7eb;
+        }
+        
+        .info-item:last-child {
+          border-bottom: none;
+        }
+        
+        .info-label {
+          font-size: 10px;
+          color: #6b7280;
+          font-weight: 500;
+          min-width: 120px;
+        }
+        
+        .info-value {
+          font-size: 10.5px;
+          color: #111827;
+          font-weight: 500;
+          text-align: right;
+          flex: 1;
+        }
+        
+        /* Work Schedule */
+        .work-schedule {
+          background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+          border-radius: 10px;
+          padding: 20px;
+          margin: 25px 0;
+          border: 1px solid #d1d5db;
+        }
+        
+        .work-schedule h3 {
+          font-size: 15px;
+          font-weight: 700;
+          color: #1e40af;
+          margin-bottom: 15px;
+          display: flex;
+          align-items: center;
+        }
+        
+        .work-schedule h3::before {
+          content: '📅';
+          margin-right: 8px;
+          font-size: 18px;
+        }
+        
+        .schedule-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 12px;
+        }
+        
+        .schedule-item {
+          background: white;
+          padding: 12px;
+          border-radius: 6px;
+          border: 1px solid #e5e7eb;
+          text-align: center;
+        }
+        
+        .schedule-label {
+          font-size: 10px;
+          color: #6b7280;
+          margin-bottom: 4px;
+          font-weight: 500;
+        }
+        
+        .schedule-value {
+          font-size: 13px;
+          font-weight: 700;
+          color: #111827;
+        }
+        
+        /* Tables */
+        .section-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin: 30px 0 15px;
+          padding-bottom: 10px;
+          border-bottom: 2px solid #3b82f6;
+        }
+        
+        .section-title {
+          font-size: 16px;
+          font-weight: 700;
+          color: #111827;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+        
+        .section-subtitle {
+          font-size: 11px;
+          color: #6b7280;
+          font-weight: 500;
+        }
+        
+        .table-container {
+          margin-bottom: 25px;
+          border-radius: 8px;
+          overflow: hidden;
+          border: 1px solid #e5e7eb;
+        }
+        
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 9.5pt;
+        }
+        
+        thead {
+          background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+        }
+        
+        thead th {
+          color: white;
+          font-weight: 600;
+          text-transform: uppercase;
+          font-size: 9.5pt;
+          letter-spacing: 0.3px;
+          padding: 12px 15px;
+          text-align: left;
+          border-right: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        thead th:last-child {
+          border-right: none;
+        }
+        
+        tbody tr {
+          border-bottom: 1px solid #e5e7eb;
+        }
+        
+        tbody tr:nth-child(even) {
+          background-color: #f9fafb;
+        }
+        
+        tbody tr:hover {
+          background-color: #f3f4f6;
+        }
+        
+        tbody td {
+          padding: 10px 15px;
+          font-size: 9.5pt;
+          color: #374151;
+        }
+        
+        .text-right {
+          text-align: right;
+        }
+        
+        .text-center {
+          text-align: center;
+        }
+        
+        .amount {
+          font-family: 'Source Code Pro', monospace;
+          font-weight: 500;
+          color: #111827;
+        }
+        
+        /* Summary Section */
+        .summary-section {
+          background: linear-gradient(to bottom, #f8fafc, #f1f5f9);
+          border-radius: 10px;
+          padding: 25px;
+          margin: 30px 0;
+          border: 1px solid #e2e8f0;
+        }
+        
+        .summary-title {
+          font-size: 16px;
+          font-weight: 700;
+          color: #1e40af;
+          margin-bottom: 20px;
+          text-align: center;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+        }
+        
+        .summary-table {
+          width: 60%;
+          margin: 0 auto;
+          border-collapse: separate;
+          border-spacing: 0;
+        }
+        
+        .summary-table tr {
+          border: none;
+        }
+        
+        .summary-table td {
+          padding: 12px 20px;
+          border-bottom: 1px solid #e5e7eb;
+          font-size: 10.5pt;
+        }
+        
+        .summary-table tr:last-child td {
+          border-bottom: none;
+        }
+        
+        .summary-label {
+          font-weight: 600;
+          color: #4b5563;
+        }
+        
+        .summary-value {
+          font-family: 'Source Code Pro', monospace;
+          font-weight: 600;
+          text-align: right;
+        }
+        
+        .total-row {
+          background-color: #f3f4f6;
+          font-weight: 700;
+        }
+        
+        .profit-loss-row {
+          background: ${isProfit ? 'linear-gradient(to right, #d1fae5, #a7f3d0)' : 'linear-gradient(to right, #fee2e2, #fecaca)'};
+          color: ${isProfit ? '#065f46' : '#7f1d1d'};
+          font-weight: 800;
+          font-size: 11pt;
+        }
+        
+        .percentage-badge {
+          display: inline-block;
+          padding: 3px 10px;
+          border-radius: 20px;
+          font-size: 9px;
+          font-weight: 700;
+          margin-left: 8px;
+          background: ${isProfit ? '#10b981' : '#ef4444'};
+          color: white;
+          vertical-align: middle;
+        }
+        
+        /* Signatures */
+        .signatures-section {
+          margin: 40px 0;
+          padding-top: 25px;
+          border-top: 2px dashed #d1d5db;
+        }
+        
+        .signatures-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 20px;
+          text-align: center;
+        }
+        
+        .signature-box {
+          padding: 20px;
+          background: white;
+          border-radius: 8px;
+          border: 1px solid #e5e7eb;
+          position: relative;
+        }
+        
+        .signature-box::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 3px;
+          background: linear-gradient(to right, #3b82f6, #1e40af);
+          border-radius: 8px 8px 0 0;
+        }
+        
+        .signature-role {
+          font-size: 11px;
+          color: #6b7280;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin-bottom: 25px;
+        }
+        
+        .signature-line {
+          width: 80%;
+          height: 1px;
+          background: #d1d5db;
+          margin: 15px auto;
+          position: relative;
+        }
+        
+        .signature-line::after {
+          content: '';
+          position: absolute;
+          top: -2px;
+          left: 0;
+          right: 0;
+          height: 5px;
+          border-top: 1px solid #d1d5db;
+          border-bottom: 1px solid #d1d5db;
+        }
+        
+        .signature-name {
+          font-size: 13px;
+          font-weight: 700;
+          color: #111827;
+          margin-top: 10px;
+        }
+        
+        .signature-date {
+          font-size: 9px;
+          color: #9ca3af;
+          margin-top: 5px;
+        }
+        
+        /* Footer */
+        .footer {
+          margin-top: 40px;
+          padding: 20px;
+          background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+          border-radius: 8px;
+          color: white;
+          text-align: center;
+        }
+        
+        .footer h4 {
+          font-size: 16px;
+          font-weight: 700;
+          margin-bottom: 10px;
+        }
+        
+        .footer p {
+          font-size: 10px;
+          opacity: 0.9;
+          margin-bottom: 5px;
+        }
+        
+        .company-details {
+          font-size: 11px;
+          font-weight: 600;
+          margin-top: 8px;
+        }
+        
+        /* Status Indicators */
+        .status-badge {
+          display: inline-block;
+          padding: 3px 10px;
+          border-radius: 12px;
+          font-size: 9px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
+          margin-left: 8px;
+        }
+        
+        .status-valid {
+          background: #10b981;
+          color: white;
+        }
+        
+        .status-expired {
+          background: #ef4444;
+          color: white;
+        }
+        
+        .status-approved {
+          background: #3b82f6;
+          color: white;
+        }
+        
+        .status-pending {
+          background: #f59e0b;
+          color: white;
+        }
+        
+        /* Notes */
+        .notes-section {
+          background: #fef3c7;
+          border-left: 4px solid #f59e0b;
+          border-radius: 6px;
+          padding: 18px;
+          margin-top: 25px;
+          font-size: 9.5pt;
+        }
+        
+        .notes-title {
+          font-size: 12px;
+          font-weight: 700;
+          color: #92400e;
+          margin-bottom: 10px;
+          display: flex;
+          align-items: center;
+        }
+        
+        .notes-title::before {
+          content: '📝';
+          margin-right: 8px;
+        }
+        
+        .notes-content p {
+          margin-bottom: 5px;
+          color: #78350f;
+        }
+        
+        .notes-content strong {
+          color: #92400e;
+        }
+        
+        /* Page Break Control */
+        .page-break {
+          page-break-before: always;
+        }
+        
+        /* Print Styles */
+        @media print {
+          body {
+            padding: 0;
+            font-size: 9pt;
+          }
+          
+          .no-print {
+            display: none;
+          }
+          
+          .table-container {
+            break-inside: avoid;
+          }
+        }
+        
+        /* Empty States */
+        .empty-row {
+          text-align: center;
+          color: #9ca3af;
+          font-style: italic;
+          padding: 20px;
+          background: #f9fafb;
+        }
+        
+        /* Utility Classes */
+        .mt-1 { margin-top: 4px; }
+        .mt-2 { margin-top: 8px; }
+        .mt-3 { margin-top: 12px; }
+        .mt-4 { margin-top: 16px; }
+        .mt-5 { margin-top: 20px; }
+        
+        .mb-1 { margin-bottom: 4px; }
+        .mb-2 { margin-bottom: 8px; }
+        .mb-3 { margin-bottom: 12px; }
+        .mb-4 { margin-bottom: 16px; }
+        .mb-5 { margin-bottom: 20px; }
+      </style>
+    </head>
+    <body>
+      <!-- Header Section -->
+      <div class="header">
+        <div class="company-info">
+          <img src="https://agats.s3.ap-south-1.amazonaws.com/logo/logo.jpeg" alt="Company Logo" class="company-logo">
+          <div class="company-name">Alghazal Alabyad Technical Services</div>
+          <div class="company-tagline">Professional Technical Solutions & Services</div>
+          <div class="company-tagline">Dubai, United Arab Emirates</div>
+          <div class="company-tagline">TRN: 123456789123456</div>
+        </div>
+        
+        <div class="document-title">
+          <h1>ESTIMATION</h1>
+          <div class="document-number">#${safeGet(estimation.estimationNumber)}</div>
+          <div class="document-date">Date: ${formattedCurrentDate}</div>
+        </div>
+      </div>
+      
+      <!-- Client & Estimation Info -->
+      <div class="info-grid">
+        <div class="info-card">
+          <div class="card-header">
+            <div class="card-icon">C</div>
+            <div class="card-title">Client Information</div>
+          </div>
+          <div class="info-content">
+            <div class="info-item">
+              <span class="info-label">Client Name:</span>
+              <span class="info-value">${clientName}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Address:</span>
+              <span class="info-value">${clientAddress}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Project Location:</span>
+              <span class="info-value">${projectLocation}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Building:</span>
+              <span class="info-value">${projectBuilding}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Apartment:</span>
+              <span class="info-value">${apartmentNumber}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Email:</span>
+              <span class="info-value">${clientEmail}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Phone:</span>
+              <span class="info-value">${clientPhone}</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="info-card">
+          <div class="card-header">
+            <div class="card-icon">E</div>
+            <div class="card-title">Estimation Details</div>
+          </div>
+          <div class="info-content">
+            <div class="info-item">
+              <span class="info-label">Estimation No:</span>
+              <span class="info-value">${safeGet(estimation.estimationNumber)}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Subject:</span>
+              <span class="info-value">${safeGet(estimation.subject)}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Valid Until:</span>
+              <span class="info-value">
+                ${formatDateForPDF(estimation.validUntil)}
+                <span class="status-badge ${new Date(estimation.validUntil) > new Date() ? 'status-valid' : 'status-expired'}">
+                  ${new Date(estimation.validUntil) > new Date() ? 'VALID' : 'EXPIRED'}
+                </span>
+              </span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Payment Terms:</span>
+              <span class="info-value">${safeGet(estimation.paymentDueBy, "N/A")} ${estimation.paymentDueBy ? "Days" : ""}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Prepared By:</span>
+              <span class="info-value">${preparedBy?.firstName || "N/A"}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Status:</span>
+              <span class="info-value">
+                ${estimation.isApproved ? 'APPROVED' : estimation.isChecked ? 'CHECKED' : 'DRAFT'}
+                <span class="status-badge status-${estimation.isApproved ? 'approved' : estimation.isChecked ? 'pending' : 'pending'}">
+                  ${estimation.isApproved ? 'APPROVED' : estimation.isChecked ? 'CHECKED' : 'DRAFT'}
+                </span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Work Schedule -->
+      <div class="work-schedule">
+        <h3>Work Schedule & Timeline</h3>
+        <div class="schedule-grid">
+          <div class="schedule-item">
+            <div class="schedule-label">Work Start Date</div>
+            <div class="schedule-value">${formatDateForPDF(estimation.workStartDate)}</div>
+          </div>
+          <div class="schedule-item">
+            <div class="schedule-label">Work End Date</div>
+            <div class="schedule-value">${formatDateForPDF(estimation.workEndDate)}</div>
+          </div>
+          <div class="schedule-item">
+            <div class="schedule-label">Work Duration</div>
+            <div class="schedule-value">${safeGet(estimation.workDays)} Days</div>
+          </div>
+          <div class="schedule-item">
+            <div class="schedule-label">Daily Start Time</div>
+            <div class="schedule-value">${formatTimeForPDF(safeGet(estimation.dailyStartTime, "09:00"))}</div>
+          </div>
+          <div class="schedule-item">
+            <div class="schedule-label">Daily End Time</div>
+            <div class="schedule-value">${formatTimeForPDF(safeGet(estimation.dailyEndTime, "18:00"))}</div>
+          </div>
+          <div class="schedule-item">
+            <div class="schedule-label">Daily Working Hours</div>
+            <div class="schedule-value">
+              ${(() => {
+        try {
+          if (!estimation.dailyStartTime || !estimation.dailyEndTime) return "N/A";
+          const start = new Date(`2000-01-01T${estimation.dailyStartTime}`);
+          const end = new Date(`2000-01-01T${estimation.dailyEndTime}`);
+          const diffMs = end.getTime() - start.getTime();
+          const diffHours = diffMs / (1000 * 60 * 60);
+          return diffHours.toFixed(1) + " Hours";
+        } catch {
+          return "N/A";
+        }
+      })()}
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Materials Section -->
+      <div class="section-header">
+        <div>
+          <div class="section-title">Materials Breakdown</div>
+          <div class="section-subtitle">Detailed list of required materials and costs</div>
+        </div>
+      </div>
+      
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>No.</th>
+              <th>Item Description</th>
+              <th>Unit</th>
+              <th class="text-right">Quantity</th>
+              <th class="text-right">Unit Price (AED)</th>
+              <th class="text-right">Total Amount (AED)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(estimation.materials || []).length > 0
+        ? estimation.materials.map((material, index) => `
+                <tr>
+                  <td class="text-center">${index + 1}</td>
+                  <td>${safeGet(material.description)}</td>
+                  <td>${safeGet(material.uom)}</td>
+                  <td class="text-right amount">${safeGetNumber(material.quantity).toFixed(2)}</td>
+                  <td class="text-right amount">${safeGetNumber(material.unitPrice).toFixed(2)}</td>
+                  <td class="text-right amount">${safeGetNumber(material.total).toFixed(2)}</td>
+                </tr>
+              `).join("")
+        : `<tr><td colspan="6" class="empty-row">No materials listed</td></tr>`
+      }
+            <tr class="total-row">
+              <td colspan="5" class="text-right"><strong>TOTAL MATERIALS</strong></td>
+              <td class="text-right amount"><strong>AED ${materialsTotal.toFixed(2)}</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      
+      <!-- Labour Charges Section -->
+      <div class="section-header">
+        <div>
+          <div class="section-title">Labour Charges</div>
+          <div class="section-subtitle">Manpower requirements and costs</div>
+        </div>
+      </div>
+      
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>No.</th>
+              <th>Designation / Role</th>
+              <th class="text-right">Days</th>
+              <th class="text-right">Daily Rate (AED)</th>
+              <th class="text-right">Total Amount (AED)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(estimation.labour || []).length > 0
+        ? estimation.labour.map((labour, index) => `
+                <tr>
+                  <td class="text-center">${index + 1}</td>
+                  <td>${safeGet(labour.designation)}</td>
+                  <td class="text-right amount">${safeGetNumber(labour.days).toFixed(2)}</td>
+                  <td class="text-right amount">${safeGetNumber(labour.price).toFixed(2)}</td>
+                  <td class="text-right amount">${safeGetNumber(labour.total).toFixed(2)}</td>
+                </tr>
+              `).join("")
+        : `<tr><td colspan="5" class="empty-row">No labour charges listed</td></tr>`
+      }
+            <tr class="total-row">
+              <td colspan="4" class="text-right"><strong>TOTAL LABOUR</strong></td>
+              <td class="text-right amount"><strong>AED ${labourTotal.toFixed(2)}</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      
+      <!-- Miscellaneous Charges Section -->
+      <div class="section-header">
+        <div>
+          <div class="section-title">Miscellaneous Charges</div>
+          <div class="section-subtitle">Additional terms, conditions and other costs</div>
+        </div>
+      </div>
+      
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>No.</th>
+              <th>Description</th>
+              <th class="text-right">Quantity</th>
+              <th class="text-right">Unit Price (AED)</th>
+              <th class="text-right">Total Amount (AED)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(estimation.termsAndConditions || []).length > 0
+        ? estimation.termsAndConditions.map((term, index) => `
+                <tr>
+                  <td class="text-center">${index + 1}</td>
+                  <td>${safeGet(term.description)}</td>
+                  <td class="text-right amount">${safeGetNumber(term.quantity).toFixed(2)}</td>
+                  <td class="text-right amount">${safeGetNumber(term.unitPrice).toFixed(2)}</td>
+                  <td class="text-right amount">${safeGetNumber(term.total).toFixed(2)}</td>
+                </tr>
+              `).join("")
+        : `<tr><td colspan="5" class="empty-row">No miscellaneous charges listed</td></tr>`
+      }
+            <tr class="total-row">
+              <td colspan="4" class="text-right"><strong>TOTAL MISCELLANEOUS</strong></td>
+              <td class="text-right amount"><strong>AED ${termsTotal.toFixed(2)}</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      
+      <!-- Financial Summary -->
+      <div class="summary-section">
+        <div class="summary-title">Financial Summary</div>
+        <table class="summary-table">
+          <tr>
+            <td class="summary-label">Estimated Cost</td>
+            <td class="summary-value">AED ${estimatedAmount.toFixed(2)}</td>
+          </tr>
+          <tr>
+            <td class="summary-label">Quotation Amount</td>
+            <td class="summary-value">AED ${netAmount.toFixed(2)}</td>
+          </tr>
+          <tr>
+            <td class="summary-label">Commission Amount</td>
+            <td class="summary-value">AED ${commissionAmount.toFixed(2)}</td>
+          </tr>
+          <tr class="profit-loss-row">
+            <td class="summary-label">${isProfit ? 'PROFIT' : 'LOSS'}</td>
+            <td class="summary-value">
+              ${isProfit ? 'AED +' : 'AED -'} ${Math.abs(actualProfit).toFixed(2)}
+              <span class="percentage-badge">${profitPercentage}%</span>
+            </td>
+          </tr>
+        </table>
+      </div>
+      
+      <!-- Signatures -->
+      <div class="signatures-section">
+        <div class="signatures-grid">
+          <div class="signature-box">
+            <div class="signature-role">Prepared By</div>
+            <div class="signature-line"></div>
+            <div class="signature-name">${preparedBy?.firstName || "N/A"}</div>
+            <div class="signature-date">Date: ${formattedCurrentDate}</div>
+          </div>
+          
+          <div class="signature-box">
+            <div class="signature-role">Checked By</div>
+            <div class="signature-line"></div>
+            <div class="signature-name">${checkedBy?.firstName || "N/A"}</div>
+            <div class="signature-date">Date: ${formattedCurrentDate}</div>
+          </div>
+          
+          <div class="signature-box">
+            <div class="signature-role">Approved By</div>
+            <div class="signature-line"></div>
+            <div class="signature-name">${approvedBy?.firstName || "N/A"}</div>
+            <div class="signature-date">Date: ${formattedCurrentDate}</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Notes -->
+      <div class="notes-section">
+        <div class="notes-title">Terms & Conditions</div>
+        <div class="notes-content">
+          <p>• This estimation is valid until <strong>${formatDateForPDF(estimation.validUntil)}</strong>.</p>
+          <p>• Payment terms: Net <strong>${estimation.paymentDueBy || "30"} days</strong> from date of invoice.</p>
+          <p>• All amounts are in <strong>AED (UAE Dirhams)</strong> and exclusive of 5% VAT.</p>
+          <p>• Work schedule: Daily from <strong>${formatTimeForPDF(safeGet(estimation.dailyStartTime, "09:00"))} to ${formatTimeForPDF(safeGet(estimation.dailyEndTime, "18:00"))}</strong> for <strong>${safeGet(estimation.workDays)} working days</strong>.</p>
+          <p>• Prices are subject to change based on market conditions and material availability.</p>
+          <p>• Any changes to scope must be approved in writing before implementation.</p>
+        </div>
+      </div>
+      
+      <!-- Footer -->
+      <div class="footer">
+        <h4>Thank You For Your Business</h4>
+        <p>We appreciate the opportunity to serve you and look forward to working together.</p>
+        <div class="company-details">Alghazal Alabyad Technical Services LLC | Dubai, UAE</div>
+        <div class="company-details">Tel: +971 4 123 4567 | Email: info@alghazalalabyad.com | www.alghazalalabyad.com</div>
+      </div>
+    </body>
+    </html>
+  `;
+
+    // Generate PDF with better settings
+    const browser = await puppeteer.launch({
+      headless: "new",
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--disable-software-rasterizer",
+        "--font-render-hinting=none",
+        "--disable-font-subpixel-positioning",
+      ],
+    });
+
+    try {
+      const page = await browser.newPage();
+
+      // Set viewport for A4
+      await page.setViewport({
+        width: 1240,
+        height: 1754, // A4 at 96 DPI
+        deviceScaleFactor: 2,
+      });
+
+      // Set content with proper wait
+      await page.setContent(htmlContent, {
+        waitUntil: ["networkidle0"],
+        timeout: 60000,
+      });
+
+      // Wait for fonts to load
+      await page.evaluate(async () => {
+        await document.fonts.ready;
+      });
+
+      // Wait for images to load
+      await page.waitForSelector('img[src]');
+
+      // Generate PDF
+      const pdfBuffer = await page.pdf({
+        format: 'A4',
+        printBackground: true,
+        preferCSSPageSize: true,
+        margin: {
+          top: '15mm',
+          right: '15mm',
+          bottom: '15mm',
+          left: '15mm'
+        },
+        scale: 0.95,
+        displayHeaderFooter: false,
+        timeout: 60000,
+      });
+
+      // Set response headers
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="Estimation_${safeGet(estimation.estimationNumber, "unknown")}_${formattedCurrentDate.replace(/[ ,]/g, '_')}.pdf"`
+      );
+      res.setHeader("Content-Length", pdfBuffer.length);
+
       res.send(pdfBuffer);
     } finally {
       await browser.close();
