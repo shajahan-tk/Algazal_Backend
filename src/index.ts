@@ -36,6 +36,8 @@ import restrictionRouter from "./routes/restrictionRoutes";
 import invoiceReportRouter from "./routes/invoiceReportRoutes";
 import invoiceRouter from "./routes/invoiceRoutes";
 import budgetRouter from "./routes/budgetRoutes";
+import kanbanRouter from "./routes/kanbanRoutes";
+
 import { connectDb } from "./config/db";
 import { seedSuperAdmin } from "./utils/seeder";
 
@@ -110,6 +112,7 @@ app.use("/api/budget", budgetRouter);
 app.use("/api/utils", utilsRouter);
 app.use("/api/invoice-reports", invoiceReportRouter);
 app.use("/api/invoice", invoiceRouter);
+app.use("/api/kanban", kanbanRouter);
 app.use(errorHandler as ErrorRequestHandler);
 
 app.use((req: Request, res: Response, next: NextFunction) => {
