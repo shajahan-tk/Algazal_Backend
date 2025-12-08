@@ -292,30 +292,7 @@ export const deleteKanbanTask = asyncHandler(async (req: Request, res: Response)
 // Get all engineers for assignment dropdown
 export const getEngineers = asyncHandler(async (req: Request, res: Response) => {
     const engineers = await User.find({
-        role: {
-            $in: [
-                'engineer',
-                'civil_engineer',
-                'mep_engineer',
-                'electrical_supervisor',
-                'mep_supervisor',
-                'supervisor',
-                'senior_plumber',
-                'plumber',
-                'electrician',
-                'ac_technician',
-                'aluminium_fabricator',
-                'carpenter',
-                'painter',
-                'mason',
-                'plasterer',
-                'ac_assistant',
-                'building_labourer',
-                'helper',
-                'cleaner',
-                'worker'
-            ]
-        },
+
         isActive: true
     }).select("firstName lastName email profileImage role");
 
