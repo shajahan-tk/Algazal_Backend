@@ -1091,7 +1091,7 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   }
 
   const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet('Payroll Report');
+  const worksheet: any = workbook.addWorksheet('Payroll Report');
 
   // Define columns with text wrapping in headers
   const columns = [
