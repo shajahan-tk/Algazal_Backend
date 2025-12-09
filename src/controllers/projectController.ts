@@ -2223,7 +2223,6 @@ export const getWorkDuration = asyncHandler(
   }
 );
 
-
 export const exportProjectsToExcel = asyncHandler(async (req: Request, res: Response) => {
   const { search } = req.query;
 
@@ -2279,32 +2278,76 @@ export const exportProjectsToExcel = asyncHandler(async (req: Request, res: Resp
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Projects');
 
-  // Define columns - Added Quotation Amount column
-  worksheet.columns = [
-    { header: 'Project Number', key: 'projectNumber', width: 15 },
-    { header: 'Project Name', key: 'projectName', width: 30 },
-    { header: 'Client', key: 'clientName', width: 25 },
-    { header: 'Location', key: 'location', width: 20 },
-    { header: 'Building', key: 'building', width: 15 },
-    { header: 'Apartment', key: 'apartmentNumber', width: 12 },
-    { header: 'Status', key: 'status', width: 15 },
-    { header: 'Progress (%)', key: 'progress', width: 12 },
-    { header: 'Quotation Amount (AED)', key: 'quotationAmount', width: 20 },
-    { header: 'Assigned Engineers', key: 'assignedEngineers', width: 25 },
-    { header: 'Created Date', key: 'createdAt', width: 15 },
-    { header: 'Description', key: 'projectDescription', width: 40 }
-  ];
-
-  // Add header style
-  worksheet.getRow(1).font = { bold: true };
-  worksheet.getRow(1).fill = {
+  // Add title with blue background (matching payroll Excel)
+  worksheet.mergeCells('A1:M1');
+  const titleCell = worksheet.getCell('A1');
+  titleCell.value = 'PROJECTS LIST';
+  titleCell.font = { bold: true, size: 16, color: { argb: 'FFFFFFFF' } };
+  titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  titleCell.fill = {
     type: 'pattern',
     pattern: 'solid',
-    fgColor: { argb: 'FFE6E6FA' }
+    fgColor: { argb: 'FF2c5aa0' } // Same blue as payroll Excel
   };
+  worksheet.getRow(1).height = 30;
+
+  // Add summary info row
+  worksheet.mergeCells('A2:M2');
+  const summaryCell = worksheet.getCell('A2');
+  summaryCell.value = `Total Projects: ${projects.length} | Total Quotation Amount: ${quotations.reduce((sum, q) => sum + (q.netAmount || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} AED`;
+  summaryCell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  summaryCell.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FF4472C4' } // Different shade of blue
+  };
+  summaryCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  worksheet.getRow(2).height = 25;
+
+  // Add empty row
+  worksheet.addRow([]);
+
+  // Define columns - Added Quotation Amount column with S/NO
+  const columns = [
+    { header: 'S/NO', key: 'serialNumber', width: 8 },
+    { header: 'PROJECT NUMBER', key: 'projectNumber', width: 15 },
+    { header: 'PROJECT NAME', key: 'projectName', width: 30 },
+    { header: 'CLIENT NAME', key: 'clientName', width: 25 },
+    { header: 'LOCATION', key: 'location', width: 20 },
+    { header: 'BUILDING', key: 'building', width: 15 },
+    { header: 'APARTMENT', key: 'apartmentNumber', width: 12 },
+    { header: 'STATUS', key: 'status', width: 15 },
+    { header: 'PROGRESS (%)', key: 'progress', width: 12 },
+    { header: 'QUOTATION AMOUNT (AED)', key: 'quotationAmount', width: 20 },
+    { header: 'ASSIGNED ENGINEERS', key: 'assignedEngineers', width: 25 },
+    { header: 'CREATED DATE', key: 'createdAt', width: 15 },
+    { header: 'DESCRIPTION', key: 'projectDescription', width: 40 }
+  ];
+
+  worksheet.columns = columns;
+
+  // Add header row (row 4 after title and summary)
+  const headerRow = worksheet.getRow(4);
+  headerRow.eachCell((cell) => {
+    cell.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF2c5aa0' } // Same blue as title
+    };
+    cell.border = {
+      top: { style: 'thin', color: { argb: 'FF000000' } },
+      left: { style: 'thin', color: { argb: 'FF000000' } },
+      bottom: { style: 'thin', color: { argb: 'FF000000' } },
+      right: { style: 'thin', color: { argb: 'FF000000' } }
+    };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+  });
+  worksheet.getRow(4).height = 25;
 
   // Add data rows
-  projects.forEach((project: any) => {
+  let totalQuotationAmount = 0;
+  projects.forEach((project: any, index: number) => {
     const clientName = typeof project.client === 'object' ? project.client.clientName : 'N/A';
     const assignedEngineers = Array.isArray(project.assignedEngineers)
       ? project.assignedEngineers.map((eng: any) =>
@@ -2314,8 +2357,10 @@ export const exportProjectsToExcel = asyncHandler(async (req: Request, res: Resp
 
     // Get quotation amount for this project
     const quotationAmount = quotationMap.get(project._id.toString()) || 0;
+    totalQuotationAmount += quotationAmount;
 
-    worksheet.addRow({
+    const row = worksheet.addRow({
+      serialNumber: index + 1,
       projectNumber: project.projectNumber,
       projectName: project.projectName,
       clientName: clientName,
@@ -2329,35 +2374,232 @@ export const exportProjectsToExcel = asyncHandler(async (req: Request, res: Resp
       createdAt: project.createdAt.toLocaleDateString('en-US'),
       projectDescription: project.projectDescription || ''
     });
-  });
 
-  // Format the quotation amount column as currency
-  worksheet.getColumn('quotationAmount').numFmt = '#,##0.00" AED"';
+    row.height = 20;
 
-  // Add total row for quotation amounts
-  const lastRow = worksheet.lastRow?.number || 0;
-  if (lastRow > 1) {
-    worksheet.addRow([]); // Empty row
+    // Apply alternating row colors and borders
+    row.eachCell((cell, colNum) => {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: index % 2 === 0 ? 'FFFFFFFF' : 'FFF2F2F2' }
+      };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+        left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+        bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+        right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
+      };
 
-    const totalRow = worksheet.addRow({
-      projectNumber: 'TOTAL',
-      quotationAmount: {
-        formula: `SUM(I2:I${lastRow})`,
-        result: quotations.reduce((sum, q) => sum + (q.netAmount || 0), 0)
+      // Center align serial number
+      if (colNum === 1) {
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      }
+
+      // Format quotation amount as number
+      if (colNum === 10) {
+        cell.numFmt = '#,##0.00';
+        cell.alignment = { horizontal: 'right', vertical: 'middle' };
+      }
+
+      // Color code progress
+      if (colNum === 9) {
+        if (project.progress >= 100) {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE2EFDA' }
+          };
+          cell.font = { bold: true, color: { argb: 'FF375623' } };
+        } else if (project.progress >= 50) {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFFFF9E6' }
+          };
+          cell.font = { bold: true, color: { argb: 'FF856404' } };
+        }
+      }
+
+      // Color code status
+      if (colNum === 8) {
+        const status = project.status?.toLowerCase() || '';
+        if (status.includes('completed') || status.includes('closed') || status.includes('received')) {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE2EFDA' }
+          };
+          cell.font = { bold: true, color: { argb: 'FF375623' } };
+        } else if (status.includes('cancelled') || status.includes('rejected')) {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFFCE4D6' }
+          };
+          cell.font = { bold: true, color: { argb: 'FFC55A11' } };
+        } else if (status.includes('progress') || status.includes('started')) {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE8F4FD' }
+          };
+          cell.font = { bold: true, color: { argb: 'FF2c5aa0' } };
+        }
       }
     });
+  });
 
-    totalRow.font = { bold: true };
-    totalRow.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFF0F8FF' }
+  // Add totals row (yellow background like payroll Excel)
+  const totalsRowNumber = projects.length + 5;
+  const totalsRow = worksheet.addRow([
+    '',
+    'TOTALS',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    totalQuotationAmount,
+    '',
+    '',
+    ''
+  ]);
+
+  totalsRow.height = 25;
+  totalsRow.font = { bold: true, size: 11 };
+  totalsRow.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FFFFEB3B' } // Yellow like payroll Excel
+  };
+
+  totalsRow.eachCell((cell, colNum) => {
+    if (colNum === 10) {
+      cell.numFmt = '#,##0.00';
+      cell.alignment = { horizontal: 'right', vertical: 'middle' };
+    } else if (colNum === 2) {
+      cell.alignment = { horizontal: 'right', vertical: 'middle' };
+    }
+
+    cell.border = {
+      top: { style: 'medium', color: { argb: 'FF000000' } },
+      left: { style: 'thin', color: { argb: 'FF000000' } },
+      bottom: { style: 'medium', color: { argb: 'FF000000' } },
+      right: { style: 'thin', color: { argb: 'FF000000' } }
     };
-  }
+  });
+
+  // Add signature section (matching payroll Excel)
+  const signatureStartRow = totalsRowNumber + 2;
+
+  // Row 1: Prepared By: Meena S
+  const preparedRow = signatureStartRow;
+  worksheet.mergeCells(`A${preparedRow}:B${preparedRow}`);
+  worksheet.mergeCells(`C${preparedRow}:D${preparedRow}`);
+
+  const preparedKeyCell = worksheet.getCell(`A${preparedRow}`);
+  preparedKeyCell.value = 'Prepared By:';
+  preparedKeyCell.font = { bold: true, size: 11 };
+  preparedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
+  preparedKeyCell.border = {
+    top: { style: 'medium' },
+    left: { style: 'medium' },
+    bottom: { style: 'thin' },
+    right: { style: 'thin' }
+  };
+
+  const preparedValueCell = worksheet.getCell(`C${preparedRow}`);
+  preparedValueCell.value = 'Meena S';
+  preparedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+  preparedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+  preparedValueCell.border = {
+    top: { style: 'medium' },
+    left: { style: 'thin' },
+    bottom: { style: 'thin' },
+    right: { style: 'medium' }
+  };
+
+  // Row 2: Verified By: Syed Ibrahim
+  const verifiedRow = signatureStartRow + 1;
+  worksheet.mergeCells(`A${verifiedRow}:B${verifiedRow}`);
+  worksheet.mergeCells(`C${verifiedRow}:D${verifiedRow}`);
+
+  const verifiedKeyCell = worksheet.getCell(`A${verifiedRow}`);
+  verifiedKeyCell.value = 'Verified By:';
+  verifiedKeyCell.font = { bold: true, size: 11 };
+  verifiedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
+  verifiedKeyCell.border = {
+    top: { style: 'thin' },
+    left: { style: 'medium' },
+    bottom: { style: 'thin' },
+    right: { style: 'thin' }
+  };
+
+  const verifiedValueCell = worksheet.getCell(`C${verifiedRow}`);
+  verifiedValueCell.value = 'Syed Ibrahim';
+  verifiedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+  verifiedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+  verifiedValueCell.border = {
+    top: { style: 'thin' },
+    left: { style: 'thin' },
+    bottom: { style: 'thin' },
+    right: { style: 'medium' }
+  };
+
+  // Row 3: Approved By: Layla Juma Ibrahim Obaid Alsuwaidi
+  const approvedRow = signatureStartRow + 2;
+  worksheet.mergeCells(`A${approvedRow}:B${approvedRow}`);
+  worksheet.mergeCells(`C${approvedRow}:D${approvedRow}`);
+
+  const approvedKeyCell = worksheet.getCell(`A${approvedRow}`);
+  approvedKeyCell.value = 'Approved By:';
+  approvedKeyCell.font = { bold: true, size: 11 };
+  approvedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
+  approvedKeyCell.border = {
+    top: { style: 'thin' },
+    left: { style: 'medium' },
+    bottom: { style: 'medium' },
+    right: { style: 'thin' }
+  };
+
+  const approvedValueCell = worksheet.getCell(`C${approvedRow}`);
+  approvedValueCell.value = 'Layla Juma Ibrahim Obaid Alsuwaidi';
+  approvedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+  approvedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+  approvedValueCell.border = {
+    top: { style: 'thin' },
+    left: { style: 'thin' },
+    bottom: { style: 'medium' },
+    right: { style: 'medium' }
+  };
+
+  // Set row heights for signature section
+  worksheet.getRow(preparedRow).height = 25;
+  worksheet.getRow(verifiedRow).height = 25;
+  worksheet.getRow(approvedRow).height = 25;
+
+  // Add empty row
+  worksheet.addRow([]);
+
+  // Add footer text (matching payroll Excel)
+  const footerRow = worksheet.addRow({});
+  worksheet.mergeCells(`A${footerRow.number}:M${footerRow.number}`);
+  const footerCell = worksheet.getCell(`A${footerRow.number}`);
+  footerCell.value = 'This report is generated using AGATS software';
+  footerCell.font = { italic: true, size: 10, color: { argb: 'FF808080' } };
+  footerCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  footerRow.height = 20;
+
+  // Generate filename
+  const dateStr = new Date().toISOString().split('T')[0];
+  const filename = `projects_list_${dateStr}.xlsx`;
 
   // Set response headers
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', `attachment; filename=projects_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+  res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
 
   // Send the workbook
   await workbook.xlsx.write(res);

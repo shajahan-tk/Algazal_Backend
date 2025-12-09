@@ -104,16 +104,11 @@ export const getMonthlyReport = asyncHandler(async (req: Request, res: Response)
             let projectVatAmount = 0;
 
             if (quotation) {
-                // Assuming quotation has vatAmount field or we can calculate it
-                // If netAmount includes VAT and there's a vatRate field
-                if (quotation.netAmount && quotation.vatRate) {
-                    const vatRate = quotation.vatRate / 100;
-                    projectWithoutVat = quotation.netAmount / (1 + vatRate);
-                    projectVatAmount = quotation.netAmount - projectWithoutVat;
-                } else if (quotation.netAmount && quotation.withoutVatAmount) {
-                    // If quotation already has separate fields
-                    projectWithoutVat = quotation.withoutVatAmount;
-                    projectVatAmount = quotation.netAmount - quotation.withoutVatAmount;
+                // Correct calculation based on Quotation model
+                // Quotation has: subtotal, discountAmount, vatPercentage, vatAmount, netAmount
+                if (quotation.netAmount && quotation.vatAmount) {
+                    projectWithoutVat = quotation.netAmount - quotation.vatAmount;
+                    projectVatAmount = quotation.vatAmount;
                 }
                 projectNetAmount = quotation.netAmount || monthlyBudgetAllocation.allocatedAmount;
             }
@@ -122,14 +117,16 @@ export const getMonthlyReport = asyncHandler(async (req: Request, res: Response)
             totalRevenueWithoutVat += projectWithoutVat;
             totalVatAmount += projectVatAmount;
 
+            // Get expenses for this project in the month
             const expenses = await Expense.find({
                 project: budget.project,
-                "materials.date": {
-                    $gte: startDate,
-                    $lte: endDate
-                }
+                $or: [
+                    { "materials.date": { $gte: startDate, $lte: endDate } },
+                    { "miscellaneous.date": { $gte: startDate, $lte: endDate } }
+                ]
             });
 
+            // Calculate material costs for the month
             const monthlyMaterialExpense = expenses.reduce((total, expense) => {
                 const materialCostForMonth = expense.materials
                     .filter(material => {
@@ -137,7 +134,16 @@ export const getMonthlyReport = asyncHandler(async (req: Request, res: Response)
                         return materialDate >= startDate && materialDate <= endDate;
                     })
                     .reduce((sum, material) => sum + material.amount, 0);
-                return total + materialCostForMonth;
+
+                // Also include miscellaneous costs for the month
+                const miscCostForMonth = expense.miscellaneous
+                    .filter(misc => {
+                        const miscDate = new Date(misc.date);
+                        return miscDate >= startDate && miscDate <= endDate;
+                    })
+                    .reduce((sum, misc) => sum + misc.total, 0);
+
+                return total + materialCostForMonth + miscCostForMonth;
             }, 0);
 
             totalExpenses += monthlyMaterialExpense;
@@ -163,7 +169,7 @@ export const getMonthlyReport = asyncHandler(async (req: Request, res: Response)
         const profitMarginNet = totalRevenueNet > 0 ? (profitNet / totalRevenueNet) * 100 : 0;
         const profitMarginWithoutVat = totalRevenueWithoutVat > 0 ? (profitWithoutVat / totalRevenueWithoutVat) * 100 : 0;
 
-        // 2. PAYROLL DATA
+        // 2. PAYROLL DATA - Adjusted to use correct payroll calculation
         const payrollCreationMonth = selectedMonth === 12 ? 1 : selectedMonth + 1;
         const payrollCreationYear = selectedMonth === 12 ? selectedYear + 1 : selectedYear;
         const payrollStartDate = dayjs(`${payrollCreationYear}-${String(payrollCreationMonth).padStart(2, '0')}-01`)
@@ -173,15 +179,22 @@ export const getMonthlyReport = asyncHandler(async (req: Request, res: Response)
 
         const payrolls = await Payroll.find({
             createdAt: { $gte: payrollStartDate, $lte: payrollEndDate }
-        }).populate('employee', 'firstName lastName');
+        }).populate('employee', 'firstName lastName role');
 
+        // Calculate payroll totals correctly
         const totalPayroll = payrolls.reduce((sum, p) => sum + (p.net || 0), 0);
         const totalEmployees = payrolls.length;
         const averageSalary = totalEmployees > 0 ? totalPayroll / totalEmployees : 0;
+
+        // Calculate overtime hours correctly
         const totalOvertimeHours = payrolls.reduce((sum, p) => {
-            const regularOT = p.calculationDetails?.attendanceSummary?.totalOvertimeHours || 0;
-            const sundayOT = p.calculationDetails?.attendanceSummary?.sundayOvertimeHours || 0;
-            return sum + regularOT + sundayOT;
+            const calculationDetails = p.calculationDetails as any;
+            if (calculationDetails?.attendanceSummary) {
+                const regularOT = calculationDetails.attendanceSummary.totalOvertimeHours || 0;
+                const sundayOT = calculationDetails.attendanceSummary.sundayOvertimeHours || 0;
+                return sum + regularOT + sundayOT;
+            }
+            return sum;
         }, 0);
 
         // 3. PROJECT DATA - Only projects with LPO
@@ -197,6 +210,7 @@ export const getMonthlyReport = asyncHandler(async (req: Request, res: Response)
         });
 
         // 4. INVOICE DATA - Only for projects with LPO
+        // Note: Using Quotation as invoice data since there's no separate Invoice model
         const invoices = await Quotation.find({
             createdAt: { $gte: startDate, $lte: endDate },
             project: { $in: projectIdsWithLPO } // Only for projects with LPO
@@ -204,22 +218,13 @@ export const getMonthlyReport = asyncHandler(async (req: Request, res: Response)
 
         const totalInvoiceNetAmount = invoices.reduce((sum: number, inv: any) => sum + (inv.netAmount || 0), 0);
         const totalInvoiceWithoutVat = invoices.reduce((sum: number, inv: any) => {
-            if (inv.withoutVatAmount) {
-                return sum + inv.withoutVatAmount;
-            }
-            // Calculate without VAT if not stored
-            if (inv.vatRate && inv.netAmount) {
-                const vatRate = inv.vatRate / 100;
-                return sum + (inv.netAmount / (1 + vatRate));
+            // Calculate without VAT from quotation data
+            if (inv.netAmount && inv.vatAmount) {
+                return sum + (inv.netAmount - inv.vatAmount);
             }
             return sum + (inv.netAmount || 0);
         }, 0);
-        const totalInvoiceVatAmount = invoices.reduce((sum, inv) => {
-            if (inv.vatAmount) {
-                return sum + inv.vatAmount;
-            }
-            return sum + (totalInvoiceNetAmount - totalInvoiceWithoutVat);
-        }, 0);
+        const totalInvoiceVatAmount = invoices.reduce((sum, inv) => sum + (inv.vatAmount || 0), 0);
 
         const pendingInvoices = invoices.filter(inv => !inv.isApproved);
         const pendingInvoiceNetAmount = pendingInvoices.reduce((sum, inv) => sum + (inv.netAmount || 0), 0);
@@ -359,14 +364,14 @@ export const getYearlyReport = asyncHandler(async (req: Request, res: Response) 
                 return total + yearMiscCost;
             }, 0);
 
-            // Calculate labour costs (only workers and drivers assigned to project)
+            // Calculate labour costs (from expenses)
             const labourCosts = expenses.reduce((total, expense) => {
                 const workersCost = expense.laborDetails.workers.reduce(
-                    (sum, worker) => sum + worker.totalSalary,
+                    (sum, worker) => sum + (worker.totalSalary || 0),
                     0
                 );
                 const driversCost = expense.laborDetails.drivers.reduce(
-                    (sum, driver) => sum + driver.totalSalary,
+                    (sum, driver) => sum + (driver.totalSalary || 0),
                     0
                 );
                 return total + workersCost + driversCost;
@@ -380,13 +385,9 @@ export const getYearlyReport = asyncHandler(async (req: Request, res: Response) 
             let vatAmount = 0;
 
             if (quotation) {
-                if (quotation.withoutVatAmount) {
-                    quotationWithoutVat = quotation.withoutVatAmount;
-                    vatAmount = quotationNetAmount - quotationWithoutVat;
-                } else if (quotation.vatRate && quotationNetAmount) {
-                    const vatRate = quotation.vatRate / 100;
-                    quotationWithoutVat = quotationNetAmount / (1 + vatRate);
-                    vatAmount = quotationNetAmount - quotationWithoutVat;
+                if (quotation.vatAmount && quotation.netAmount) {
+                    vatAmount = quotation.vatAmount;
+                    quotationWithoutVat = quotation.netAmount - vatAmount;
                 }
             }
 
@@ -397,14 +398,17 @@ export const getYearlyReport = asyncHandler(async (req: Request, res: Response) 
             const profitLossWithoutVat = quotationWithoutVat - totalExpenses - commission;  // Without VAT
             const profitLossWithVat = quotationNetAmount - totalExpenses - commission;      // With VAT
 
-            // Generate invoice number
-            const invoiceNumber = `INV${project.projectNumber.slice(3, 20)}`;
+            // Generate invoice number from project number
+            const invoiceNumber = project.projectNumber ? `INV${project.projectNumber.slice(-6)}` : 'N/A';
+
+            // Get project client name
+            const clientName = (project.client as any)?.clientName || 'N/A';
 
             projectYearlyData.push({
                 projectStartMonth: project.workStartDate
                     ? dayjs(project.workStartDate).format('MMMM YYYY')
                     : 'N/A',
-                clientName: (project.client as any)?.clientName || 'N/A',
+                clientName: clientName,
                 quotationDate: quotation?.date
                     ? dayjs(quotation.date).format('DD/MM/YYYY')
                     : 'N/A',
@@ -492,26 +496,27 @@ export const getYearlyReport = asyncHandler(async (req: Request, res: Response) 
     }
 });
 
-// Generate Enhanced Monthly Report Excel with VAT separation
+// Generate Enhanced Monthly Report Excel with VAT separation - UPDATED UI
 const generateMonthlyReportExcel = async (data: any, res: Response) => {
     const workbook = new ExcelJS.Workbook();
 
     // ============ SHEET 1: SUMMARY ============
     const summarySheet = workbook.addWorksheet('Summary');
 
-    // Title
+    // Title with blue background (matching payroll Excel)
     summarySheet.mergeCells('A1:E1');
     const titleCell = summarySheet.getCell('A1');
-    titleCell.value = `Monthly Report - ${data.period.monthName} (Projects with LPO Only)`;
-    titleCell.font = { size: 18, bold: true, color: { argb: 'FF1F4E78' } };
+    titleCell.value = `MONTHLY REPORT - ${data.period.monthName} (PROJECTS WITH LPO ONLY)`;
+    titleCell.font = { size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
     titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
     titleCell.fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FFE7E6E6' }
+        fgColor: { argb: 'FF2c5aa0' } // Same blue as payroll Excel
     };
-    summarySheet.getRow(1).height = 35;
+    summarySheet.getRow(1).height = 30;
 
+    // Add empty row
     summarySheet.addRow([]);
 
     // Financial Summary Header
@@ -519,7 +524,7 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
     const financialHeader = summarySheet.getCell('A3');
     financialHeader.value = 'Financial Summary (With VAT Separation)';
     financialHeader.font = { size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
-    financialHeader.alignment = { horizontal: 'left', vertical: 'middle' };
+    financialHeader.alignment = { horizontal: 'center', vertical: 'middle' };
     financialHeader.fill = {
         type: 'pattern',
         pattern: 'solid',
@@ -527,17 +532,18 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
     };
     summarySheet.getRow(3).height = 25;
 
-    // Table headers
+    // Table headers with blue background
     const headerRow = summarySheet.addRow(['Category', 'Metric', 'With VAT', 'Without VAT', 'VAT Amount']);
-    headerRow.font = { bold: true, size: 11 };
+    headerRow.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
     headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
     headerRow.fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FFD9E1F2' }
+        fgColor: { argb: 'FF2c5aa0' } // Same blue as title
     };
     headerRow.height = 22;
 
+    // Apply border to header
     headerRow.eachCell((cell) => {
         cell.border = {
             top: { style: 'thin', color: { argb: 'FF000000' } },
@@ -562,18 +568,29 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
         row.alignment = { vertical: 'middle' };
 
         row.eachCell((cell, colNum) => {
+            // Format numbers
             if ([3, 4, 5].includes(colNum) && typeof cell.value === 'number') {
                 cell.numFmt = '#,##0.00';
                 cell.alignment = { horizontal: 'right', vertical: 'middle' };
+            } else if (cell.value === '-') {
+                cell.alignment = { horizontal: 'center', vertical: 'middle' };
             } else {
                 cell.alignment = { horizontal: colNum === 1 ? 'left' : 'center', vertical: 'middle' };
             }
 
+            // Apply border
             cell.border = {
                 top: { style: 'thin', color: { argb: 'FFD0D0D0' } },
                 left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
                 bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } },
                 right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
+            };
+
+            // Alternate row colors
+            cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: index % 2 === 0 ? 'FFFFFFFF' : 'FFF2F2F2' }
             };
 
             // Color coding for profit rows
@@ -597,34 +614,171 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
         });
     });
 
+    // Add totals row (yellow background like payroll Excel)
+    summarySheet.addRow([]);
+    const totalRow = summarySheet.addRow([
+        'TOTALS',
+        '',
+        data.revenue.netAmount,
+        data.revenue.withoutVat,
+        data.revenue.vatAmount
+    ]);
+
+    totalRow.font = { bold: true, size: 11 };
+    totalRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFFFEB3B' } // Yellow like payroll Excel
+    };
+    totalRow.height = 22;
+
+    totalRow.eachCell((cell, colNum) => {
+        if (colNum === 1) {
+            cell.alignment = { horizontal: 'right', vertical: 'middle' };
+        } else if ([3, 4, 5].includes(colNum)) {
+            cell.numFmt = '#,##0.00';
+            cell.alignment = { horizontal: 'right', vertical: 'middle' };
+        }
+
+        cell.border = {
+            top: { style: 'medium', color: { argb: 'FF000000' } },
+            left: { style: 'thin', color: { argb: 'FF000000' } },
+            bottom: { style: 'medium', color: { argb: 'FF000000' } },
+            right: { style: 'thin', color: { argb: 'FF000000' } }
+        };
+    });
+
+    // Set column widths
     summarySheet.columns = [
         { width: 18 },
         { width: 20 },
-        { width: 18 },
+        { width: 15 },
         { width: 18 },
         { width: 15 }
     ];
 
+    // Add signature section (matching payroll Excel)
+    const signatureStartRow = summarySheet.lastRow!.number + 2;
+
+    // Row 1: Prepared By: Meena S
+    const preparedRow = signatureStartRow;
+    summarySheet.mergeCells(`A${preparedRow}:B${preparedRow}`);
+    summarySheet.mergeCells(`C${preparedRow}:D${preparedRow}`);
+
+    const preparedKeyCell = summarySheet.getCell(`A${preparedRow}`);
+    preparedKeyCell.value = 'Prepared By:';
+    preparedKeyCell.font = { bold: true, size: 11 };
+    preparedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
+    preparedKeyCell.border = {
+        top: { style: 'medium' },
+        left: { style: 'medium' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+    };
+
+    const preparedValueCell = summarySheet.getCell(`C${preparedRow}`);
+    preparedValueCell.value = 'Meena S';
+    preparedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+    preparedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    preparedValueCell.border = {
+        top: { style: 'medium' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'medium' }
+    };
+
+    // Row 2: Verified By: Syed Ibrahim
+    const verifiedRow = signatureStartRow + 1;
+    summarySheet.mergeCells(`A${verifiedRow}:B${verifiedRow}`);
+    summarySheet.mergeCells(`C${verifiedRow}:D${verifiedRow}`);
+
+    const verifiedKeyCell = summarySheet.getCell(`A${verifiedRow}`);
+    verifiedKeyCell.value = 'Verified By:';
+    verifiedKeyCell.font = { bold: true, size: 11 };
+    verifiedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
+    verifiedKeyCell.border = {
+        top: { style: 'thin' },
+        left: { style: 'medium' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+    };
+
+    const verifiedValueCell = summarySheet.getCell(`C${verifiedRow}`);
+    verifiedValueCell.value = 'Syed Ibrahim';
+    verifiedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+    verifiedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    verifiedValueCell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'medium' }
+    };
+
+    // Row 3: Approved By: Layla Juma Ibrahim Obaid Alsuwaidi
+    const approvedRow = signatureStartRow + 2;
+    summarySheet.mergeCells(`A${approvedRow}:B${approvedRow}`);
+    summarySheet.mergeCells(`C${approvedRow}:D${approvedRow}`);
+
+    const approvedKeyCell = summarySheet.getCell(`A${approvedRow}`);
+    approvedKeyCell.value = 'Approved By:';
+    approvedKeyCell.font = { bold: true, size: 11 };
+    approvedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
+    approvedKeyCell.border = {
+        top: { style: 'thin' },
+        left: { style: 'medium' },
+        bottom: { style: 'medium' },
+        right: { style: 'thin' }
+    };
+
+    const approvedValueCell = summarySheet.getCell(`C${approvedRow}`);
+    approvedValueCell.value = 'Layla Juma Ibrahim Obaid Alsuwaidi';
+    approvedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+    approvedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    approvedValueCell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'medium' },
+        right: { style: 'medium' }
+    };
+
+    // Set row heights for signature section
+    summarySheet.getRow(preparedRow).height = 25;
+    summarySheet.getRow(verifiedRow).height = 25;
+    summarySheet.getRow(approvedRow).height = 25;
+
+    // Add empty row
+    summarySheet.addRow([]);
+
+    // Add footer text (matching payroll Excel)
+    const footerRow = summarySheet.addRow({});
+    summarySheet.mergeCells(`A${footerRow.number}:E${footerRow.number}`);
+    const footerCell = summarySheet.getCell(`A${footerRow.number}`);
+    footerCell.value = 'This report is generated using AGATS software';
+    footerCell.font = { italic: true, size: 10, color: { argb: 'FF808080' } };
+    footerCell.alignment = { vertical: 'middle', horizontal: 'center' };
+    footerRow.height = 20;
+
     // ============ SHEET 2: PROJECT BREAKDOWN WITH VAT ============
     const projectSheet = workbook.addWorksheet('Project Breakdown');
 
-    // Title
-    projectSheet.mergeCells('A1:G1');
+    // Title with blue background
+    projectSheet.mergeCells('A1:H1');
     const projectTitle = projectSheet.getCell('A1');
-    projectTitle.value = `Project Profit Breakdown - ${data.period.monthName} (With VAT Separation)`;
-    projectTitle.font = { size: 18, bold: true, color: { argb: 'FF1F4E78' } };
+    projectTitle.value = `PROJECT PROFIT BREAKDOWN - ${data.period.monthName} (WITH VAT SEPARATION)`;
+    projectTitle.font = { size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
     projectTitle.alignment = { horizontal: 'center', vertical: 'middle' };
     projectTitle.fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FFE7E6E6' }
+        fgColor: { argb: 'FF2c5aa0' } // Same blue as payroll Excel
     };
-    projectSheet.getRow(1).height = 35;
+    projectSheet.getRow(1).height = 30;
 
     projectSheet.addRow([]);
 
-    // Headers with VAT separation
+    // Headers with blue background
     const projectHeaderRow = projectSheet.addRow([
+        'S/NO',
         'Project Name',
         'Project Number',
         'Budget (Net)',
@@ -634,17 +788,16 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
         'Profit (Without VAT)'
     ]);
 
-    projectHeaderRow.font = { bold: true, size: 11 };
+    projectHeaderRow.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
     projectHeaderRow.alignment = { horizontal: 'center', vertical: 'middle' };
     projectHeaderRow.fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FF4472C4' }
+        fgColor: { argb: 'FF2c5aa0' } // Same blue as title
     };
     projectHeaderRow.height = 25;
 
     projectHeaderRow.eachCell((cell) => {
-        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
         cell.border = {
             top: { style: 'thin', color: { argb: 'FF000000' } },
             left: { style: 'thin', color: { argb: 'FF000000' } },
@@ -662,13 +815,14 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
 
     data.revenue.projectBreakdown.forEach((project: any, index: number) => {
         const row = projectSheet.addRow([
+            index + 1,
             project.projectName,
             project.projectNumber,
             project.monthlyBudgetNet,
             project.monthlyBudgetWithoutVat,
             project.vatAmount,
             project.monthlyMaterialExpense,
-            project.profitWithoutVat  // Using without VAT for calculations
+            project.profitWithoutVat
         ]);
 
         totalBudgetNet += project.monthlyBudgetNet;
@@ -681,13 +835,16 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
         row.alignment = { vertical: 'middle' };
 
         row.eachCell((cell, colNum) => {
-            if ([3, 4, 5, 6, 7].includes(colNum)) {
+            if ([4, 5, 6, 7, 8].includes(colNum)) {
                 cell.numFmt = '#,##0.00';
                 cell.alignment = { horizontal: 'right', vertical: 'middle' };
+            } else if (colNum === 1) {
+                cell.alignment = { horizontal: 'center', vertical: 'middle' };
             } else {
                 cell.alignment = { horizontal: 'left', vertical: 'middle' };
             }
 
+            // Alternate row colors
             cell.fill = {
                 type: 'pattern',
                 pattern: 'solid',
@@ -702,8 +859,8 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
             };
         });
 
-        // Color profit cell (using without VAT for calculations)
-        const profitCell = row.getCell(7);
+        // Color profit cell
+        const profitCell = row.getCell(8);
         if (project.profitWithoutVat > 0) {
             profitCell.fill = {
                 type: 'pattern',
@@ -721,9 +878,10 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
         }
     });
 
-    // Total row
-    const totalRow = projectSheet.addRow([
-        'TOTAL',
+    // Add totals row (yellow background)
+    const totalRowProject = projectSheet.addRow([
+        '',
+        'TOTALS',
         '',
         totalBudgetNet,
         totalBudgetWithoutVat,
@@ -732,19 +890,22 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
         totalProfitWithoutVat
     ]);
 
-    totalRow.height = 25;
-    totalRow.font = { bold: true, size: 11 };
-    totalRow.fill = {
+    totalRowProject.height = 25;
+    totalRowProject.font = { bold: true, size: 11 };
+    totalRowProject.fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FFD9E1F2' }
+        fgColor: { argb: 'FFFFEB3B' } // Yellow like payroll Excel
     };
 
-    totalRow.eachCell((cell, colNum) => {
-        cell.alignment = { horizontal: colNum === 1 ? 'left' : 'right', vertical: 'middle' };
-        if ([3, 4, 5, 6, 7].includes(colNum)) {
+    totalRowProject.eachCell((cell, colNum) => {
+        if ([4, 5, 6, 7, 8].includes(colNum)) {
             cell.numFmt = '#,##0.00';
+            cell.alignment = { horizontal: 'right', vertical: 'middle' };
+        } else if (colNum === 2) {
+            cell.alignment = { horizontal: 'right', vertical: 'middle' };
         }
+
         cell.border = {
             top: { style: 'medium', color: { argb: 'FF000000' } },
             left: { style: 'thin', color: { argb: 'FF000000' } },
@@ -754,14 +915,116 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
     });
 
     projectSheet.columns = [
-        { width: 30 },
-        { width: 18 },
-        { width: 18 },
-        { width: 18 },
-        { width: 15 },
-        { width: 18 },
-        { width: 18 }
+        { width: 8 },    // S/NO
+        { width: 30 },   // Project Name
+        { width: 18 },   // Project Number
+        { width: 15 },   // Budget (Net)
+        { width: 18 },   // Budget (Without VAT)
+        { width: 15 },   // VAT Amount
+        { width: 15 },   // Material Expense
+        { width: 15 }    // Profit (Without VAT)
     ];
+
+    // Add signature section to project sheet too
+    const projectSignatureStartRow = projectSheet.lastRow!.number + 2;
+
+    // Prepared By
+    const projectPreparedRow = projectSignatureStartRow;
+    projectSheet.mergeCells(`A${projectPreparedRow}:B${projectPreparedRow}`);
+    projectSheet.mergeCells(`C${projectPreparedRow}:D${projectPreparedRow}`);
+
+    const projectPreparedKeyCell = projectSheet.getCell(`A${projectPreparedRow}`);
+    projectPreparedKeyCell.value = 'Prepared By:';
+    projectPreparedKeyCell.font = { bold: true, size: 11 };
+    projectPreparedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
+    projectPreparedKeyCell.border = {
+        top: { style: 'medium' },
+        left: { style: 'medium' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+    };
+
+    const projectPreparedValueCell = projectSheet.getCell(`C${projectPreparedRow}`);
+    projectPreparedValueCell.value = 'Meena S';
+    projectPreparedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+    projectPreparedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    projectPreparedValueCell.border = {
+        top: { style: 'medium' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'medium' }
+    };
+
+    // Verified By
+    const projectVerifiedRow = projectSignatureStartRow + 1;
+    projectSheet.mergeCells(`A${projectVerifiedRow}:B${projectVerifiedRow}`);
+    projectSheet.mergeCells(`C${projectVerifiedRow}:D${projectVerifiedRow}`);
+
+    const projectVerifiedKeyCell = projectSheet.getCell(`A${projectVerifiedRow}`);
+    projectVerifiedKeyCell.value = 'Verified By:';
+    projectVerifiedKeyCell.font = { bold: true, size: 11 };
+    projectVerifiedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
+    projectVerifiedKeyCell.border = {
+        top: { style: 'thin' },
+        left: { style: 'medium' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+    };
+
+    const projectVerifiedValueCell = projectSheet.getCell(`C${projectVerifiedRow}`);
+    projectVerifiedValueCell.value = 'Syed Ibrahim';
+    projectVerifiedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+    projectVerifiedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    projectVerifiedValueCell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'medium' }
+    };
+
+    // Approved By
+    const projectApprovedRow = projectSignatureStartRow + 2;
+    projectSheet.mergeCells(`A${projectApprovedRow}:B${projectApprovedRow}`);
+    projectSheet.mergeCells(`C${projectApprovedRow}:D${projectApprovedRow}`);
+
+    const projectApprovedKeyCell = projectSheet.getCell(`A${projectApprovedRow}`);
+    projectApprovedKeyCell.value = 'Approved By:';
+    projectApprovedKeyCell.font = { bold: true, size: 11 };
+    projectApprovedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
+    projectApprovedKeyCell.border = {
+        top: { style: 'thin' },
+        left: { style: 'medium' },
+        bottom: { style: 'medium' },
+        right: { style: 'thin' }
+    };
+
+    const projectApprovedValueCell = projectSheet.getCell(`C${projectApprovedRow}`);
+    projectApprovedValueCell.value = 'Layla Juma Ibrahim Obaid Alsuwaidi';
+    projectApprovedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+    projectApprovedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    projectApprovedValueCell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'medium' },
+        right: { style: 'medium' }
+    };
+
+    // Set row heights
+    projectSheet.getRow(projectPreparedRow).height = 25;
+    projectSheet.getRow(projectVerifiedRow).height = 25;
+    projectSheet.getRow(projectApprovedRow).height = 25;
+
+    // Add empty row
+    projectSheet.addRow([]);
+
+    // Add footer
+    const projectFooterRow = projectSheet.addRow({});
+    projectSheet.mergeCells(`A${projectFooterRow.number}:H${projectFooterRow.number}`);
+    const projectFooterCell = projectSheet.getCell(`A${projectFooterRow.number}`);
+    projectFooterCell.value = 'This report is generated using AGATS software';
+    projectFooterCell.font = { italic: true, size: 10, color: { argb: 'FF808080' } };
+    projectFooterCell.alignment = { vertical: 'middle', horizontal: 'center' };
+    projectFooterRow.height = 20;
 
     const fileName = `monthly-report-${data.period.month}-${data.period.year}-with-vat.xlsx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -771,25 +1034,25 @@ const generateMonthlyReportExcel = async (data: any, res: Response) => {
     res.end();
 };
 
-// Generate Enhanced Yearly Report Excel with VAT separation
+// Generate Enhanced Yearly Report Excel with VAT separation - UPDATED UI
 const generateYearlyReportExcel = async (data: any, res: Response) => {
     const workbook = new ExcelJS.Workbook();
 
     // ============ SHEET 1: SUMMARY WITH VAT ============
     const summarySheet = workbook.addWorksheet('Summary');
 
-    // Title
+    // Title with blue background
     summarySheet.mergeCells('A1:E1');
     const titleCell = summarySheet.getCell('A1');
-    titleCell.value = `Yearly Report - ${data.year} (With VAT Separation)`;
-    titleCell.font = { size: 18, bold: true, color: { argb: 'FF1F4E78' } };
+    titleCell.value = `YEARLY REPORT - ${data.year} (WITH VAT SEPARATION)`;
+    titleCell.font = { size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
     titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
     titleCell.fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FFE7E6E6' }
+        fgColor: { argb: 'FF2c5aa0' } // Same blue as payroll Excel
     };
-    summarySheet.getRow(1).height = 35;
+    summarySheet.getRow(1).height = 30;
 
     summarySheet.addRow([]);
 
@@ -798,7 +1061,7 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
     const financialHeader = summarySheet.getCell('A3');
     financialHeader.value = 'Financial Summary (With VAT Separation)';
     financialHeader.font = { size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
-    financialHeader.alignment = { horizontal: 'left', vertical: 'middle' };
+    financialHeader.alignment = { horizontal: 'center', vertical: 'middle' };
     financialHeader.fill = {
         type: 'pattern',
         pattern: 'solid',
@@ -806,14 +1069,14 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
     };
     summarySheet.getRow(3).height = 25;
 
-    // Table headers with VAT columns
+    // Table headers with blue background
     const headerRow = summarySheet.addRow(['Category', 'Metric', 'With VAT', 'Without VAT', 'VAT Amount']);
-    headerRow.font = { bold: true, size: 11 };
+    headerRow.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
     headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
     headerRow.fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FFD9E1F2' }
+        fgColor: { argb: 'FF2c5aa0' } // Same blue as title
     };
     headerRow.height = 22;
 
@@ -853,11 +1116,19 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
                 cell.alignment = { horizontal: colNum === 1 ? 'left' : 'center', vertical: 'middle' };
             }
 
+            // Apply border
             cell.border = {
                 top: { style: 'thin', color: { argb: 'FFD0D0D0' } },
                 left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
                 bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } },
                 right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
+            };
+
+            // Alternate row colors
+            cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: index % 2 === 0 ? 'FFFFFFFF' : 'FFF2F2F2' }
             };
 
             // Color coding for profit/loss rows
@@ -879,6 +1150,40 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
         });
     });
 
+    // Add totals row (yellow background)
+    summarySheet.addRow([]);
+    const totalRow = summarySheet.addRow([
+        'TOTALS',
+        '',
+        data.summary.totalQuotationNetAmount,
+        data.summary.totalQuotationWithoutVat,
+        data.summary.totalVatAmount
+    ]);
+
+    totalRow.font = { bold: true, size: 11 };
+    totalRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFFFEB3B' } // Yellow like payroll Excel
+    };
+    totalRow.height = 22;
+
+    totalRow.eachCell((cell, colNum) => {
+        if (colNum === 1) {
+            cell.alignment = { horizontal: 'right', vertical: 'middle' };
+        } else if ([3, 4, 5].includes(colNum)) {
+            cell.numFmt = '#,##0.00';
+            cell.alignment = { horizontal: 'right', vertical: 'middle' };
+        }
+
+        cell.border = {
+            top: { style: 'medium', color: { argb: 'FF000000' } },
+            left: { style: 'thin', color: { argb: 'FF000000' } },
+            bottom: { style: 'medium', color: { argb: 'FF000000' } },
+            right: { style: 'thin', color: { argb: 'FF000000' } }
+        };
+    });
+
     summarySheet.columns = [
         { width: 18 },
         { width: 20 },
@@ -887,26 +1192,128 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
         { width: 15 }
     ];
 
+    // Add signature section
+    const signatureStartRow = summarySheet.lastRow!.number + 2;
+
+    // Prepared By
+    const preparedRow = signatureStartRow;
+    summarySheet.mergeCells(`A${preparedRow}:B${preparedRow}`);
+    summarySheet.mergeCells(`C${preparedRow}:D${preparedRow}`);
+
+    const preparedKeyCell = summarySheet.getCell(`A${preparedRow}`);
+    preparedKeyCell.value = 'Prepared By:';
+    preparedKeyCell.font = { bold: true, size: 11 };
+    preparedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
+    preparedKeyCell.border = {
+        top: { style: 'medium' },
+        left: { style: 'medium' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+    };
+
+    const preparedValueCell = summarySheet.getCell(`C${preparedRow}`);
+    preparedValueCell.value = 'Meena S';
+    preparedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+    preparedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    preparedValueCell.border = {
+        top: { style: 'medium' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'medium' }
+    };
+
+    // Verified By
+    const verifiedRow = signatureStartRow + 1;
+    summarySheet.mergeCells(`A${verifiedRow}:B${verifiedRow}`);
+    summarySheet.mergeCells(`C${verifiedRow}:D${verifiedRow}`);
+
+    const verifiedKeyCell = summarySheet.getCell(`A${verifiedRow}`);
+    verifiedKeyCell.value = 'Verified By:';
+    verifiedKeyCell.font = { bold: true, size: 11 };
+    verifiedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
+    verifiedKeyCell.border = {
+        top: { style: 'thin' },
+        left: { style: 'medium' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+    };
+
+    const verifiedValueCell = summarySheet.getCell(`C${verifiedRow}`);
+    verifiedValueCell.value = 'Syed Ibrahim';
+    verifiedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+    verifiedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    verifiedValueCell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'medium' }
+    };
+
+    // Approved By
+    const approvedRow = signatureStartRow + 2;
+    summarySheet.mergeCells(`A${approvedRow}:B${approvedRow}`);
+    summarySheet.mergeCells(`C${approvedRow}:D${approvedRow}`);
+
+    const approvedKeyCell = summarySheet.getCell(`A${approvedRow}`);
+    approvedKeyCell.value = 'Approved By:';
+    approvedKeyCell.font = { bold: true, size: 11 };
+    approvedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
+    approvedKeyCell.border = {
+        top: { style: 'thin' },
+        left: { style: 'medium' },
+        bottom: { style: 'medium' },
+        right: { style: 'thin' }
+    };
+
+    const approvedValueCell = summarySheet.getCell(`C${approvedRow}`);
+    approvedValueCell.value = 'Layla Juma Ibrahim Obaid Alsuwaidi';
+    approvedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+    approvedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    approvedValueCell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'medium' },
+        right: { style: 'medium' }
+    };
+
+    // Set row heights
+    summarySheet.getRow(preparedRow).height = 25;
+    summarySheet.getRow(verifiedRow).height = 25;
+    summarySheet.getRow(approvedRow).height = 25;
+
+    // Add empty row
+    summarySheet.addRow([]);
+
+    // Add footer
+    const footerRow = summarySheet.addRow({});
+    summarySheet.mergeCells(`A${footerRow.number}:E${footerRow.number}`);
+    const footerCell = summarySheet.getCell(`A${footerRow.number}`);
+    footerCell.value = 'This report is generated using AGATS software';
+    footerCell.font = { italic: true, size: 10, color: { argb: 'FF808080' } };
+    footerCell.alignment = { vertical: 'middle', horizontal: 'center' };
+    footerRow.height = 20;
+
     // ============ SHEET 2: PROJECT DETAILS WITH VAT ============
     const detailsSheet = workbook.addWorksheet('Project Details');
 
-    // Title
-    detailsSheet.mergeCells('A1:X1');
+    // Title with blue background
+    detailsSheet.mergeCells('A1:Z1');
     const detailsTitle = detailsSheet.getCell('A1');
-    detailsTitle.value = `Project Details - ${data.year} (With VAT Separation)`;
-    detailsTitle.font = { size: 18, bold: true, color: { argb: 'FF1F4E78' } };
+    detailsTitle.value = `PROJECT DETAILS - ${data.year} (WITH VAT SEPARATION)`;
+    detailsTitle.font = { size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
     detailsTitle.alignment = { horizontal: 'center', vertical: 'middle' };
     detailsTitle.fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FFE7E6E6' }
+        fgColor: { argb: 'FF2c5aa0' } // Same blue as payroll Excel
     };
-    detailsSheet.getRow(1).height = 35;
+    detailsSheet.getRow(1).height = 30;
 
     detailsSheet.addRow([]);
 
-    // Headers with VAT separation (Status field removed)
+    // Headers with blue background
     const headers = [
+        'S/NO',
         'Project Start Month',
         'Client Name',
         'Quotation Date',
@@ -918,8 +1325,8 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
         'Estimation Number',
         'Location',
         'Project Name',
-        'Quotation Net Amount',      // With VAT
-        'Quotation Without VAT',     // Without VAT
+        'Quotation Net Amount',
+        'Quotation Without VAT',
         'VAT Amount',
         'Estimation Amount',
         'Commission',
@@ -927,8 +1334,8 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
         'Material Costs',
         'Miscellaneous Costs',
         'Total Expenses',
-        'Profit/Loss With VAT',      // Profit with VAT
-        'Profit/Loss Without VAT',   // Profit without VAT (for calculations)
+        'Profit/Loss With VAT',
+        'Profit/Loss Without VAT',
         'Work Start Date',
         'Work End Date',
         'Attention Person'
@@ -936,16 +1343,15 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
 
     const headerRowDetails = detailsSheet.addRow(headers);
     headerRowDetails.height = 25;
-    headerRowDetails.font = { bold: true, size: 11 };
+    headerRowDetails.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
     headerRowDetails.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
     headerRowDetails.fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FF4472C4' }
+        fgColor: { argb: 'FF2c5aa0' } // Same blue as title
     };
 
     headerRowDetails.eachCell((cell) => {
-        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
         cell.border = {
             top: { style: 'thin', color: { argb: 'FF000000' } },
             left: { style: 'thin', color: { argb: 'FF000000' } },
@@ -954,9 +1360,10 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
         };
     });
 
-    // Add data rows with alternating colors (Status field removed)
+    // Add data rows with alternating colors
     data.projects.forEach((project: ProjectYearlyData, index: number) => {
         const row = detailsSheet.addRow([
+            index + 1,
             project.projectStartMonth,
             project.clientName,
             project.quotationDate,
@@ -978,7 +1385,7 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
             project.miscellaneousCosts,
             project.totalExpenses,
             project.profitLossWithVat,
-            project.profitLossWithoutVat,  // For calculations
+            project.profitLossWithoutVat,
             project.workStartDate,
             project.workEndDate,
             project.attentionPerson
@@ -987,7 +1394,7 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
         row.height = 22;
         row.alignment = { vertical: 'middle', wrapText: true };
 
-        // Alternating row colors
+        // Alternate row colors
         const rowColor = index % 2 === 0 ? 'FFFFFFFF' : 'FFF2F2F2';
 
         row.eachCell((cell, colNum) => {
@@ -1004,14 +1411,16 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
             };
 
             // Number formatting for currency columns
-            if ([12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22].includes(colNum)) {
+            if ([13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23].includes(colNum)) {
                 cell.numFmt = '#,##0.00';
                 cell.alignment = { horizontal: 'right', vertical: 'middle' };
+            } else if (colNum === 1) {
+                cell.alignment = { horizontal: 'center', vertical: 'middle' };
             }
         });
 
         // Color code profit/loss cells
-        const profitWithVatCell = row.getCell(21);
+        const profitWithVatCell = row.getCell(22);
         if (project.profitLossWithVat > 0) {
             profitWithVatCell.fill = {
                 type: 'pattern',
@@ -1028,7 +1437,7 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
             profitWithVatCell.font = { bold: true, color: { argb: 'FFC55A11' } };
         }
 
-        const profitWithoutVatCell = row.getCell(22);
+        const profitWithoutVatCell = row.getCell(23);
         if (project.profitLossWithoutVat > 0) {
             profitWithoutVatCell.fill = {
                 type: 'pattern',
@@ -1046,10 +1455,11 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
         }
     });
 
-    // Add totals row (Status field removed)
+    // Add totals row (yellow background)
     detailsSheet.addRow([]);
     const totalsRow = detailsSheet.addRow([
-        '', '', '', '', '', '', '', '', '', '',
+        '',
+        '', '', '', '', '', '', '', '', '',
         'TOTALS',
         data.summary.totalQuotationNetAmount,
         data.summary.totalQuotationWithoutVat,
@@ -1061,7 +1471,7 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
         data.summary.totalMiscellaneousCosts,
         data.summary.totalExpenses,
         data.summary.totalProfitLossWithVat,
-        data.summary.totalProfitLossWithoutVat,  // For calculations
+        data.summary.totalProfitLossWithoutVat,
         '', '', ''
     ]);
 
@@ -1071,11 +1481,11 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
     totalsRow.fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FFD9E1F2' }
+        fgColor: { argb: 'FFFFEB3B' } // Yellow like payroll Excel
     };
 
     totalsRow.eachCell((cell, colNum) => {
-        if ([12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22].includes(colNum)) {
+        if ([13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23].includes(colNum)) {
             cell.numFmt = '#,##0.00';
         }
         cell.border = {
@@ -1087,7 +1497,7 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
     });
 
     // Color profit totals
-    const profitWithVatTotalCell = totalsRow.getCell(21);
+    const profitWithVatTotalCell = totalsRow.getCell(22);
     if (data.summary.totalProfitLossWithVat >= 0) {
         profitWithVatTotalCell.fill = {
             type: 'pattern',
@@ -1104,7 +1514,7 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
         profitWithVatTotalCell.font = { bold: true, color: { argb: 'FFC55A11' } };
     }
 
-    const profitWithoutVatTotalCell = totalsRow.getCell(22);
+    const profitWithoutVatTotalCell = totalsRow.getCell(23);
     if (data.summary.totalProfitLossWithoutVat >= 0) {
         profitWithoutVatTotalCell.fill = {
             type: 'pattern',
@@ -1121,17 +1531,136 @@ const generateYearlyReportExcel = async (data: any, res: Response) => {
         profitWithoutVatTotalCell.font = { bold: true, color: { argb: 'FFC55A11' } };
     }
 
-    // Auto-fit columns
-    detailsSheet.columns.forEach((column: any, index: number) => {
-        let maxLength = 0;
-        column.eachCell({ includeEmpty: true }, (cell: any) => {
-            const columnLength = cell.value ? cell.value.toString().length : 10;
-            if (columnLength > maxLength) {
-                maxLength = columnLength;
-            }
-        });
-        column.width = Math.min(Math.max(maxLength + 2, 12), 30);
-    });
+    // Set column widths
+    detailsSheet.columns = [
+        { width: 8 },    // S/NO
+        { width: 18 },   // Project Start Month
+        { width: 20 },   // Client Name
+        { width: 15 },   // Quotation Date
+        { width: 18 },   // Quotation Number
+        { width: 15 },   // PO Date
+        { width: 15 },   // PO Number
+        { width: 15 },   // GRN Number
+        { width: 15 },   // Invoice Number
+        { width: 18 },   // Estimation Number
+        { width: 15 },   // Location
+        { width: 25 },   // Project Name
+        { width: 18 },   // Quotation Net Amount
+        { width: 20 },   // Quotation Without VAT
+        { width: 15 },   // VAT Amount
+        { width: 18 },   // Estimation Amount
+        { width: 15 },   // Commission
+        { width: 15 },   // Labour Costs
+        { width: 15 },   // Material Costs
+        { width: 18 },   // Miscellaneous Costs
+        { width: 15 },   // Total Expenses
+        { width: 18 },   // Profit/Loss With VAT
+        { width: 20 },   // Profit/Loss Without VAT
+        { width: 15 },   // Work Start Date
+        { width: 15 },   // Work End Date
+        { width: 20 }    // Attention Person
+    ];
+
+    // Add signature section
+    const detailsSignatureStartRow = detailsSheet.lastRow!.number + 2;
+
+    // Prepared By
+    const detailsPreparedRow = detailsSignatureStartRow;
+    detailsSheet.mergeCells(`A${detailsPreparedRow}:B${detailsPreparedRow}`);
+    detailsSheet.mergeCells(`C${detailsPreparedRow}:D${detailsPreparedRow}`);
+
+    const detailsPreparedKeyCell = detailsSheet.getCell(`A${detailsPreparedRow}`);
+    detailsPreparedKeyCell.value = 'Prepared By:';
+    detailsPreparedKeyCell.font = { bold: true, size: 11 };
+    detailsPreparedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
+    detailsPreparedKeyCell.border = {
+        top: { style: 'medium' },
+        left: { style: 'medium' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+    };
+
+    const detailsPreparedValueCell = detailsSheet.getCell(`C${detailsPreparedRow}`);
+    detailsPreparedValueCell.value = 'Meena S';
+    detailsPreparedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+    detailsPreparedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    detailsPreparedValueCell.border = {
+        top: { style: 'medium' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'medium' }
+    };
+
+    // Verified By
+    const detailsVerifiedRow = detailsSignatureStartRow + 1;
+    detailsSheet.mergeCells(`A${detailsVerifiedRow}:B${detailsVerifiedRow}`);
+    detailsSheet.mergeCells(`C${detailsVerifiedRow}:D${detailsVerifiedRow}`);
+
+    const detailsVerifiedKeyCell = detailsSheet.getCell(`A${detailsVerifiedRow}`);
+    detailsVerifiedKeyCell.value = 'Verified By:';
+    detailsVerifiedKeyCell.font = { bold: true, size: 11 };
+    detailsVerifiedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
+    detailsVerifiedKeyCell.border = {
+        top: { style: 'thin' },
+        left: { style: 'medium' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+    };
+
+    const detailsVerifiedValueCell = detailsSheet.getCell(`C${detailsVerifiedRow}`);
+    detailsVerifiedValueCell.value = 'Syed Ibrahim';
+    detailsVerifiedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+    detailsVerifiedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    detailsVerifiedValueCell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'medium' }
+    };
+
+    // Approved By
+    const detailsApprovedRow = detailsSignatureStartRow + 2;
+    detailsSheet.mergeCells(`A${detailsApprovedRow}:B${detailsApprovedRow}`);
+    detailsSheet.mergeCells(`C${detailsApprovedRow}:D${detailsApprovedRow}`);
+
+    const detailsApprovedKeyCell = detailsSheet.getCell(`A${detailsApprovedRow}`);
+    detailsApprovedKeyCell.value = 'Approved By:';
+    detailsApprovedKeyCell.font = { bold: true, size: 11 };
+    detailsApprovedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
+    detailsApprovedKeyCell.border = {
+        top: { style: 'thin' },
+        left: { style: 'medium' },
+        bottom: { style: 'medium' },
+        right: { style: 'thin' }
+    };
+
+    const detailsApprovedValueCell = detailsSheet.getCell(`C${detailsApprovedRow}`);
+    detailsApprovedValueCell.value = 'Layla Juma Ibrahim Obaid Alsuwaidi';
+    detailsApprovedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+    detailsApprovedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    detailsApprovedValueCell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'medium' },
+        right: { style: 'medium' }
+    };
+
+    // Set row heights
+    detailsSheet.getRow(detailsPreparedRow).height = 25;
+    detailsSheet.getRow(detailsVerifiedRow).height = 25;
+    detailsSheet.getRow(detailsApprovedRow).height = 25;
+
+    // Add empty row
+    detailsSheet.addRow([]);
+
+    // Add footer
+    const detailsFooterRow = detailsSheet.addRow({});
+    detailsSheet.mergeCells(`A${detailsFooterRow.number}:Z${detailsFooterRow.number}`);
+    const detailsFooterCell = detailsSheet.getCell(`A${detailsFooterRow.number}`);
+    detailsFooterCell.value = 'This report is generated using AGATS software';
+    detailsFooterCell.font = { italic: true, size: 10, color: { argb: 'FF808080' } };
+    detailsFooterCell.alignment = { vertical: 'middle', horizontal: 'center' };
+    detailsFooterRow.height = 20;
 
     // Freeze header rows
     detailsSheet.views = [

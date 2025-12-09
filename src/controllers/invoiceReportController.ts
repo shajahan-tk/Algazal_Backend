@@ -121,7 +121,8 @@ export const getInvoiceReport = asyncHandler(async (req: Request, res: Response)
     const limitNumber = parseInt(limit as string);
 
     const projectQuery: any = {
-        progress: 100
+        progress: 100,
+        invoiceDate: { $exists: true, $ne: null } // Only include projects with invoice date
     };
 
     if (client && client !== 'all') {
@@ -129,13 +130,12 @@ export const getInvoiceReport = asyncHandler(async (req: Request, res: Response)
     }
 
     if (dateFrom || dateTo) {
-        projectQuery.invoiceDate = {};
-        if (dateFrom) {
-            projectQuery.invoiceDate.$gte = new Date(dateFrom as string);
-        }
-        if (dateTo) {
-            projectQuery.invoiceDate.$lte = new Date(dateTo as string);
-        }
+        projectQuery.invoiceDate.$gte = dateFrom ? new Date(dateFrom as string) : undefined;
+        projectQuery.invoiceDate.$lte = dateTo ? new Date(dateTo as string) : undefined;
+
+        // Clean up if undefined values
+        if (!dateFrom) delete projectQuery.invoiceDate.$gte;
+        if (!dateTo) delete projectQuery.invoiceDate.$lte;
     }
 
     const projects = await Project.find(projectQuery)
@@ -310,126 +310,155 @@ const generateInvoiceExcelReport = async (
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Invoice Report');
 
-        // Add title
-        worksheet.mergeCells('A1:U1');
-        worksheet.getCell('A1').value = `Invoice Report - Completed Projects (100% Progress)`;
-        worksheet.getCell('A1').font = { size: 16, bold: true };
-        worksheet.getCell('A1').alignment = { horizontal: 'center' };
+        // Define constants for column counts
+        const TOTAL_COLUMNS = 22; // From A to V (22 columns)
+        const LAST_COLUMN_LETTER = 'V';
 
-        // Add summary section
-        worksheet.mergeCells('A3:E3');
-        worksheet.getCell('A3').value = 'FINANCIAL SUMMARY';
-        worksheet.getCell('A3').font = { bold: true, size: 12 };
-        worksheet.getCell('A3').fill = {
+        // Add title with blue background (matching payroll Excel)
+        worksheet.mergeCells(`A1:${LAST_COLUMN_LETTER}1`);
+        const titleCell = worksheet.getCell('A1');
+        titleCell.value = 'INVOICE REPORT - COMPLETED PROJECTS (100% PROGRESS)';
+        titleCell.font = { size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
+        titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+        titleCell.fill = {
             type: 'pattern',
             pattern: 'solid',
-            fgColor: { argb: 'FF4F81BD' }
+            fgColor: { argb: 'FF2c5aa0' } // Same blue as payroll Excel
         };
-        worksheet.getCell('A3').font = { color: { argb: 'FFFFFFFF' }, bold: true };
+        worksheet.getRow(1).height = 30;
 
-        // Summary data with clear labels
+        // Add summary section with matching styling
+        worksheet.mergeCells(`A3:${LAST_COLUMN_LETTER}3`);
+        const summaryTitleCell = worksheet.getCell('A3');
+        summaryTitleCell.value = 'FINANCIAL SUMMARY (WITH VAT SEPARATION)';
+        summaryTitleCell.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+        summaryTitleCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF4472C4' }
+        };
+        summaryTitleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+        worksheet.getRow(3).height = 25;
+
+        // Summary data with clear labels and proper alignment
         const summaryData = [
-            ['Total Projects:', summary.totalProjects, '', '', ''],
-            ['Total NET Amount (with VAT):', summary.totalNetAmount, '', 'VAT Amount:', summary.totalVATAmount],
-            ['Total Amount (without VAT):', summary.totalAmountWithoutVAT, '', 'Due Amount:', summary.totalDueAmount],
-            ['Expired Projects:', summary.expiredProjects, '', 'Active Projects:', summary.activeProjects],
-            ['Projects with Remarks:', summary.projectsWithRemarks, '', 'VAT Rate:', '5%']
+            ['Total Projects:', summary.totalProjects, '', 'Expired Projects:', summary.expiredProjects, '', 'Active Projects:', summary.activeProjects],
+            ['NET Amount (With VAT):', summary.totalNetAmount, '', 'Amount (Without VAT):', summary.totalAmountWithoutVAT, '', 'VAT Amount:', summary.totalVATAmount],
+            ['Due Amount (Expired):', summary.totalDueAmount, '', 'Projects with Remarks:', summary.projectsWithRemarks, '', 'VAT Rate:', '5%']
         ];
 
-        summaryData.forEach(([label1, value1, spacer, label2, value2], index) => {
-            const row = 4 + index;
-            worksheet.getCell(`A${row}`).value = label1;
-            worksheet.getCell(`B${row}`).value = value1;
+        summaryData.forEach((rowData, rowIndex) => {
+            const rowNumber = 4 + rowIndex;
+            const row = worksheet.addRow(rowData);
+            row.height = 22;
 
-            if (typeof value1 === 'number') {
-                worksheet.getCell(`B${row}`).numFmt = '#,##0.00';
-            }
+            // Limit to our defined columns
+            for (let i = 1; i <= Math.min(TOTAL_COLUMNS, rowData.length); i++) {
+                const cell = row.getCell(i);
 
-            if (label2 && value2 !== undefined) {
-                worksheet.getCell(`D${row}`).value = label2;
-                worksheet.getCell(`E${row}`).value = value2;
-
-                if (typeof value2 === 'number') {
-                    worksheet.getCell(`E${row}`).numFmt = '#,##0.00';
+                if (i % 2 === 1) {
+                    // Label cells
+                    cell.font = { bold: true };
+                    cell.alignment = { horizontal: 'right', vertical: 'middle' };
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: rowIndex % 2 === 0 ? 'FFFFFFFF' : 'FFF2F2F2' }
+                    };
+                } else if (i % 2 === 0 && i !== 3 && i !== 6) {
+                    // Value cells (skip empty cells)
+                    if (typeof cell.value === 'number') {
+                        cell.numFmt = '#,##0.00';
+                        cell.alignment = { horizontal: 'right', vertical: 'middle' };
+                    }
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: rowIndex % 2 === 0 ? 'FFFFFFFF' : 'FFF2F2F2' }
+                    };
                 }
+
+                cell.border = {
+                    top: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                    left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                    bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                    right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
+                };
             }
         });
 
-        // Style summary cells
-        for (let i = 3; i <= 8; i++) {
-            const row = worksheet.getRow(i);
-            row.height = 25;
-            if (i > 3) {
-                row.getCell(1).fill = {
-                    type: 'pattern',
-                    pattern: 'solid',
-                    fgColor: { argb: 'FFF2F2F2' }
-                };
-                if (row.getCell(4).value) {
-                    row.getCell(4).fill = {
-                        type: 'pattern',
-                        pattern: 'solid',
-                        fgColor: { argb: 'FFF2F2F2' }
-                    };
-                }
-            }
-        }
-
         // Highlight due amount row
-        worksheet.getCell('E6').font = { bold: true, color: { argb: 'FFFF0000' } };
-        worksheet.getCell('E6').fill = {
+        const dueAmountCell = worksheet.getCell('B6');
+        dueAmountCell.font = { bold: true, color: { argb: 'FFC55A11' } };
+        dueAmountCell.fill = {
             type: 'pattern',
             pattern: 'solid',
-            fgColor: { argb: 'FFFFE4B5' }
+            fgColor: { argb: 'FFFCE4D6' }
         };
 
-        // Add headers with clear labels
+        // Add empty row
+        worksheet.addRow([]);
+
+        // Add headers with S/NO column and blue background
         const headers = [
-            'Project Number',
-            'Project Name',
-            'Client Name',
-            'Invoice Date',
-            'GRN Number',
-            'NET Amount (AED)',        // WITH VAT
-            'Amount (AED)',            // WITHOUT VAT (NET - VAT)
-            'VAT Amount (AED)',
-            'Due Amount (AED)',        // If expired
-            'Invoice Remarks',
-            'Payment Terms (Days)',
-            'Due Date',
-            'Payment Status',
-            'LPO Number',
-            'LPO Date',
-            'Work Start Date',
-            'Work End Date',
-            'Project Status',
-            'Remaining Days',
-            'Days Status',
+            'S/NO',
+            'PROJECT NUMBER',
+            'PROJECT NAME',
+            'CLIENT NAME',
+            'INVOICE DATE',
+            'GRN NUMBER',
+            'NET AMOUNT (AED)',        // WITH VAT
+            'AMOUNT WITHOUT VAT (AED)', // WITHOUT VAT (NET - VAT)
+            'VAT AMOUNT (AED)',
+            'DUE AMOUNT (AED)',        // If expired
+            'INVOICE REMARKS',
+            'PAYMENT TERMS (DAYS)',
+            'DUE DATE',
+            'PAYMENT STATUS',
+            'LPO NUMBER',
+            'LPO DATE',
+            'WORK START DATE',
+            'WORK END DATE',
+            'PROJECT STATUS',
+            'REMAINING DAYS',
+            'DAYS STATUS',
             'VAT %'
         ];
 
         const headerRow = worksheet.addRow(headers);
-        headerRow.font = { bold: true };
-        headerRow.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FF4F81BD' }
-        };
-        headerRow.font = { color: { argb: 'FFFFFFFF' }, bold: true };
-        headerRow.border = {
-            top: { style: 'thin' },
-            left: { style: 'thin' },
-            bottom: { style: 'thin' },
-            right: { style: 'thin' }
-        };
+        headerRow.height = 25;
+        headerRow.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+        headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
 
-        // Add data rows
+        // Apply fill only to cells A-V (not infinite)
+        for (let i = 1; i <= TOTAL_COLUMNS; i++) {
+            const cell = headerRow.getCell(i);
+            cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FF2c5aa0' }
+            };
+            cell.border = {
+                top: { style: 'thin', color: { argb: 'FF000000' } },
+                left: { style: 'thin', color: { argb: 'FF000000' } },
+                bottom: { style: 'thin', color: { argb: 'FF000000' } },
+                right: { style: 'thin', color: { argb: 'FF000000' } }
+            };
+        }
+
+        // Add data rows with S/NO
+        let totalNetAmount = 0;
+        let totalAmountWithoutVAT = 0;
+        let totalVATAmount = 0;
+        let totalDueAmount = 0;
+
         data.forEach((item, index) => {
             const dueAmount = item.isExpired ? item.netAmount : 0;
             const vatPercentage = item.netAmount > 0 ?
                 Math.round((item.vatAmount / (item.netAmount - item.vatAmount)) * 100) : 0;
 
             const row = worksheet.addRow([
+                index + 1,
                 item.projectNumber,
                 item.projectName,
                 item.clientName,
@@ -453,107 +482,301 @@ const generateInvoiceExcelReport = async (
                 `${vatPercentage}%`
             ]);
 
-            // Style the row
-            row.border = {
-                top: { style: 'thin' },
-                left: { style: 'thin' },
-                bottom: { style: 'thin' },
-                right: { style: 'thin' }
-            };
+            // Add to totals
+            totalNetAmount += item.netAmount;
+            totalAmountWithoutVAT += item.amountWithoutVAT;
+            totalVATAmount += item.vatAmount;
+            totalDueAmount += dueAmount;
 
-            // Format currency cells
-            [6, 7, 8, 9].forEach(colIndex => {
-                const cell = row.getCell(colIndex);
-                cell.numFmt = '#,##0.00';
-            });
+            row.height = 22;
+
+            // Alternate row colors
+            const rowColor = index % 2 === 0 ? 'FFFFFFFF' : 'FFF2F2F2';
+
+            for (let i = 1; i <= TOTAL_COLUMNS; i++) {
+                const cell = row.getCell(i);
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: rowColor }
+                };
+                cell.border = {
+                    top: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                    left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                    bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                    right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
+                };
+
+                // Center align serial number
+                if (i === 1) {
+                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                }
+
+                // Format currency cells and align right
+                if ([7, 8, 9, 10].includes(i)) {
+                    cell.numFmt = '#,##0.00';
+                    cell.alignment = { horizontal: 'right', vertical: 'middle' };
+                }
+
+                // Align numeric columns right
+                if ([12, 20].includes(i)) {
+                    cell.alignment = { horizontal: 'right', vertical: 'middle' };
+                }
+            }
 
             // Color code based on status
             if (item.isExpired) {
-                // Red for expired projects
-                [9, 12, 19].forEach(colIndex => {
-                    const cell = row.getCell(colIndex);
-                    cell.fill = {
-                        type: 'pattern',
-                        pattern: 'solid',
-                        fgColor: { argb: 'FFFF0000' }
-                    };
-                    cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
-                });
+                // Red/Orange for expired projects
+                const daysStatusCell = row.getCell(21);
+                daysStatusCell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFFCE4D6' }
+                };
+                daysStatusCell.font = { bold: true, color: { argb: 'FFC55A11' } };
 
                 // Highlight due amount cell
-                const dueAmountCell = row.getCell(9);
+                const dueAmountCell = row.getCell(10);
                 dueAmountCell.fill = {
                     type: 'pattern',
                     pattern: 'solid',
-                    fgColor: { argb: 'FFFF0000' }
+                    fgColor: { argb: 'FFFCE4D6' }
                 };
-                dueAmountCell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+                dueAmountCell.font = { bold: true, color: { argb: 'FFC55A11' } };
 
-            } else if (item.remainingPaymentDays <= 7) {
-                // Yellow for due within 7 days
-                const paymentStatusCell = row.getCell(13);
+                // Highlight payment status
+                const paymentStatusCell = row.getCell(14);
                 paymentStatusCell.fill = {
                     type: 'pattern',
                     pattern: 'solid',
-                    fgColor: { argb: 'FFFFFF00' }
+                    fgColor: { argb: 'FFFCE4D6' }
                 };
+                paymentStatusCell.font = { bold: true, color: { argb: 'FFC55A11' } };
+
+            } else if (item.remainingPaymentDays <= 7) {
+                // Yellow for due within 7 days
+                const daysStatusCell = row.getCell(21);
+                daysStatusCell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFFFF9E6' }
+                };
+                daysStatusCell.font = { bold: true, color: { argb: 'FF856404' } };
             }
 
             // Style remarks column
-            const remarksCell = row.getCell(10);
+            const remarksCell = row.getCell(11);
             if (item.invoiceRemarks && item.invoiceRemarks.trim().length > 0) {
                 remarksCell.fill = {
                     type: 'pattern',
                     pattern: 'solid',
-                    fgColor: { argb: 'FFFFFFE0' }
+                    fgColor: { argb: 'FFE8F4FD' }
                 };
                 remarksCell.alignment = { wrapText: true };
             }
 
-            // Format date cells
-            [4, 12, 15, 16].forEach(colIndex => {
-                const cell = row.getCell(colIndex);
-                cell.numFmt = 'dd/mm/yyyy';
-            });
-
-            // Highlight NET Amount (with VAT) - slightly different background
-            const netAmountCell = row.getCell(6);
+            // Highlight NET Amount (with VAT) - different background
+            const netAmountCell = row.getCell(7);
             netAmountCell.fill = {
                 type: 'pattern',
                 pattern: 'solid',
-                fgColor: { argb: 'FFE6F3FF' }
+                fgColor: { argb: 'FFE8F4FD' }
             };
             netAmountCell.font = { bold: true };
         });
 
-        // Set column widths
+        // Add totals row (yellow background like payroll Excel)
+        const totalsRowNumber = data.length + 9; // 1 title + 3 summary rows + 1 empty + 1 header + data.length
+        const totalsRowData = Array(TOTAL_COLUMNS).fill('');
+        totalsRowData[1] = 'TOTALS'; // Column B
+        totalsRowData[6] = totalNetAmount; // Column G
+        totalsRowData[7] = totalAmountWithoutVAT; // Column H
+        totalsRowData[8] = totalVATAmount; // Column I
+        totalsRowData[9] = totalDueAmount; // Column J
+
+        const totalsRow = worksheet.addRow(totalsRowData);
+        totalsRow.height = 25;
+        totalsRow.font = { bold: true, size: 11 };
+
+        // Apply yellow background only to relevant cells, not entire infinite row
+        const relevantTotalCells = [1, 2, 7, 8, 9, 10]; // A, B, G, H, I, J
+
+        for (let i = 1; i <= TOTAL_COLUMNS; i++) {
+            const cell = totalsRow.getCell(i);
+
+            // Apply yellow background only to relevant cells
+            if (relevantTotalCells.includes(i)) {
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFFFEB3B' }
+                };
+            } else {
+                // White background for other cells
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFFFFFFF' }
+                };
+            }
+
+            // Format currency cells
+            if ([7, 8, 9, 10].includes(i)) {
+                cell.numFmt = '#,##0.00';
+                cell.alignment = { horizontal: 'right', vertical: 'middle' };
+            } else if (i === 2) {
+                cell.alignment = { horizontal: 'right', vertical: 'middle' };
+            }
+
+            cell.border = {
+                top: { style: 'medium', color: { argb: 'FF000000' } },
+                left: { style: 'thin', color: { argb: 'FF000000' } },
+                bottom: { style: 'medium', color: { argb: 'FF000000' } },
+                right: { style: 'thin', color: { argb: 'FF000000' } }
+            };
+        }
+
+        // Color the due amount total cell (Column J)
+        const dueAmountTotalCell = totalsRow.getCell(10);
+        if (totalDueAmount > 0) {
+            dueAmountTotalCell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FFF8CBAD' }
+            };
+            dueAmountTotalCell.font = { bold: true, color: { argb: 'FFC55A11' } };
+        }
+
+        // Set column widths - Set widths for all columns explicitly
         const columnWidths = [
-            15,  // Project Number
-            25,  // Project Name
-            20,  // Client Name
-            15,  // Invoice Date
-            15,  // GRN Number
-            18,  // NET Amount (with VAT)
-            18,  // Amount (without VAT)
-            15,  // VAT Amount
-            15,  // Due Amount
-            30,  // Invoice Remarks
-            15,  // Payment Terms
-            15,  // Due Date
-            18,  // Payment Status
-            15,  // LPO Number
-            15,  // LPO Date
-            15,  // Work Start Date
-            15,  // Work End Date
-            20,  // Project Status
-            15,  // Remaining Days
-            15,  // Days Status
-            10   // VAT %
+            8,   // A: S/NO
+            15,  // B: Project Number
+            25,  // C: Project Name
+            20,  // D: Client Name
+            15,  // E: Invoice Date
+            15,  // F: GRN Number
+            18,  // G: NET Amount (with VAT)
+            20,  // H: Amount (without VAT)
+            15,  // I: VAT Amount
+            15,  // J: Due Amount
+            30,  // K: Invoice Remarks
+            18,  // L: Payment Terms
+            15,  // M: Due Date
+            18,  // N: Payment Status
+            15,  // O: LPO Number
+            15,  // P: LPO Date
+            15,  // Q: Work Start Date
+            15,  // R: Work End Date
+            20,  // S: Project Status
+            15,  // T: Remaining Days
+            15,  // U: Days Status
+            10   // V: VAT %
         ];
 
         columnWidths.forEach((width, index) => {
             worksheet.getColumn(index + 1).width = width;
         });
+
+        // Add signature section (matching payroll Excel)
+        const signatureStartRow = totalsRowNumber + 2;
+
+        // Row 1: Prepared By: Meena S
+        const preparedRow = signatureStartRow;
+        worksheet.mergeCells(`A${preparedRow}:B${preparedRow}`);
+        worksheet.mergeCells(`C${preparedRow}:D${preparedRow}`);
+
+        const preparedKeyCell = worksheet.getCell(`A${preparedRow}`);
+        preparedKeyCell.value = 'Prepared By:';
+        preparedKeyCell.font = { bold: true, size: 11 };
+        preparedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
+        preparedKeyCell.border = {
+            top: { style: 'medium' },
+            left: { style: 'medium' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
+        };
+
+        const preparedValueCell = worksheet.getCell(`C${preparedRow}`);
+        preparedValueCell.value = 'Meena S';
+        preparedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+        preparedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+        preparedValueCell.border = {
+            top: { style: 'medium' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'medium' }
+        };
+
+        // Row 2: Verified By: Syed Ibrahim
+        const verifiedRow = signatureStartRow + 1;
+        worksheet.mergeCells(`A${verifiedRow}:B${verifiedRow}`);
+        worksheet.mergeCells(`C${verifiedRow}:D${verifiedRow}`);
+
+        const verifiedKeyCell = worksheet.getCell(`A${verifiedRow}`);
+        verifiedKeyCell.value = 'Verified By:';
+        verifiedKeyCell.font = { bold: true, size: 11 };
+        verifiedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
+        verifiedKeyCell.border = {
+            top: { style: 'thin' },
+            left: { style: 'medium' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
+        };
+
+        const verifiedValueCell = worksheet.getCell(`C${verifiedRow}`);
+        verifiedValueCell.value = 'Syed Ibrahim';
+        verifiedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+        verifiedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+        verifiedValueCell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'medium' }
+        };
+
+        // Row 3: Approved By: Layla Juma Ibrahim Obaid Alsuwaidi
+        const approvedRow = signatureStartRow + 2;
+        worksheet.mergeCells(`A${approvedRow}:B${approvedRow}`);
+        worksheet.mergeCells(`C${approvedRow}:D${approvedRow}`);
+
+        const approvedKeyCell = worksheet.getCell(`A${approvedRow}`);
+        approvedKeyCell.value = 'Approved By:';
+        approvedKeyCell.font = { bold: true, size: 11 };
+        approvedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
+        approvedKeyCell.border = {
+            top: { style: 'thin' },
+            left: { style: 'medium' },
+            bottom: { style: 'medium' },
+            right: { style: 'thin' }
+        };
+
+        const approvedValueCell = worksheet.getCell(`C${approvedRow}`);
+        approvedValueCell.value = 'Layla Juma Ibrahim Obaid Alsuwaidi';
+        approvedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+        approvedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+        approvedValueCell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'medium' },
+            right: { style: 'medium' }
+        };
+
+        // Set row heights for signature section
+        worksheet.getRow(preparedRow).height = 25;
+        worksheet.getRow(verifiedRow).height = 25;
+        worksheet.getRow(approvedRow).height = 25;
+
+        // Add empty row
+        worksheet.addRow([]);
+
+        // Add footer text (matching payroll Excel)
+        const footerRow = worksheet.addRow({});
+        worksheet.mergeCells(`A${footerRow.number}:${LAST_COLUMN_LETTER}${footerRow.number}`);
+        const footerCell = worksheet.getCell(`A${footerRow.number}`);
+        footerCell.value = 'This report is generated using AGATS software';
+        footerCell.font = { italic: true, size: 10, color: { argb: 'FF808080' } };
+        footerCell.alignment = { vertical: 'middle', horizontal: 'center' };
+        footerRow.height = 20;
 
         // Set response headers
         const fileName = `invoice-report-${new Date().toISOString().split('T')[0]}.xlsx`;

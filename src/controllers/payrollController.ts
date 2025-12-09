@@ -1065,13 +1065,11 @@ export const getPayslipData = asyncHandler(async (req: Request, res: Response) =
   );
 });
 
-
 export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Response) => {
   const { month, year } = req.query;
 
   const filter: Record<string, any> = {};
 
-  // Only handle month and year filters
   if (month && year) {
     const startOfMonth = new Date(Number(year), Number(month) - 1, 1);
     const endOfMonth = new Date(Number(year), Number(month), 0, 23, 59, 59, 999);
@@ -1095,55 +1093,54 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Payroll Report');
 
-  // Add headers with separate BASIC SALARY and ALLOWANCE columns
-  worksheet.columns = [
+  // Define columns with text wrapping in headers
+  const columns = [
     { header: 'S/NO', key: 'serialNo', width: 6 },
     { header: 'NAME', key: 'name', width: 20 },
     { header: 'Designation', key: 'designation', width: 15 },
     { header: 'EMIRATES ID', key: 'emiratesId', width: 18 },
     { header: 'LABOUR CARD', key: 'labourCard', width: 18 },
-    { header: 'LABOUR CARD PERSONAL NO', key: 'labourCardPersonalNo', width: 22 },
+    { header: 'LABOUR CARD\nPERSONAL NO', key: 'labourCardPersonalNo', width: 22 },
     { header: 'PERIOD', key: 'period', width: 12 },
-    { header: 'BASIC SALARY', key: 'basicSalary', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'BASIC\nSALARY', key: 'basicSalary', width: 12, style: { numFmt: '#,##0.00' } },
     { header: 'ALLOWANCE', key: 'allowance', width: 12, style: { numFmt: '#,##0.00' } },
     { header: 'TRANSPORT', key: 'transport', width: 12, style: { numFmt: '#,##0.00' } },
     { header: 'OVERTIME', key: 'overtime', width: 12, style: { numFmt: '#,##0.00' } },
-    { header: 'SPECIAL OVERTIME', key: 'specialOT', width: 14, style: { numFmt: '#,##0.00' } },
-    { header: 'SUNDAY BONUS', key: 'sundayBonus', width: 12, style: { numFmt: '#,##0.00' } },
-    { header: 'ABSENT DEDUCTION', key: 'absentDeduction', width: 14, style: { numFmt: '#,##0.00' } },
+    { header: 'SPECIAL\nOVERTIME', key: 'specialOT', width: 14, style: { numFmt: '#,##0.00' } },
+    { header: 'SUNDAY\nBONUS', key: 'sundayBonus', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'ABSENT\nDEDUCTION', key: 'absentDeduction', width: 14, style: { numFmt: '#,##0.00' } },
     { header: 'MEDICAL', key: 'medical', width: 12, style: { numFmt: '#,##0.00' } },
     { header: 'BONUS', key: 'bonus', width: 12, style: { numFmt: '#,##0.00' } },
-    { header: 'FOOD ALLOWANCE', key: 'mess', width: 12, style: { numFmt: '#,##0.00' } },
-    { header: 'SALARY ADVANCE', key: 'salaryAdvance', width: 12, style: { numFmt: '#,##0.00' } },
-    { header: 'LOAN DEDUCTION', key: 'loanDeduction', width: 12, style: { numFmt: '#,##0.00' } },
-    { header: 'FINE AMOUNT', key: 'fineAmount', width: 12, style: { numFmt: '#,##0.00' } },
-    { header: 'VISA DEDUCTION', key: 'visaDeduction', width: 12, style: { numFmt: '#,##0.00' } },
-    { header: 'OTHER DEDUCTION 1', key: 'otherDeduction1', width: 14, style: { numFmt: '#,##0.00' } },
-    { header: 'OTHER DEDUCTION 2', key: 'otherDeduction2', width: 14, style: { numFmt: '#,##0.00' } },
-    { header: 'OTHER DEDUCTION 3', key: 'otherDeduction3', width: 14, style: { numFmt: '#,##0.00' } },
-    { header: 'TOTAL EARNINGS', key: 'totalEarnings', width: 14, style: { numFmt: '#,##0.00' } },
-    { header: 'TOTAL DEDUCTIONS', key: 'totalDeductions', width: 14, style: { numFmt: '#,##0.00' } },
+    { header: 'FOOD\nALLOWANCE', key: 'mess', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'SALARY\nADVANCE', key: 'salaryAdvance', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'LOAN\nDEDUCTION', key: 'loanDeduction', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'FINE\nAMOUNT', key: 'fineAmount', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'VISA\nDEDUCTION', key: 'visaDeduction', width: 12, style: { numFmt: '#,##0.00' } },
+    { header: 'OTHER\nDEDUCTION 1', key: 'otherDeduction1', width: 14, style: { numFmt: '#,##0.00' } },
+    { header: 'OTHER\nDEDUCTION 2', key: 'otherDeduction2', width: 14, style: { numFmt: '#,##0.00' } },
+    { header: 'OTHER\nDEDUCTION 3', key: 'otherDeduction3', width: 14, style: { numFmt: '#,##0.00' } },
+    { header: 'TOTAL\nEARNINGS', key: 'totalEarnings', width: 14, style: { numFmt: '#,##0.00' } },
+    { header: 'TOTAL\nDEDUCTIONS', key: 'totalDeductions', width: 14, style: { numFmt: '#,##0.00' } },
     { header: 'NET PAY', key: 'net', width: 14, style: { numFmt: '#,##0.00' } },
     { header: 'REMARK', key: 'remark', width: 25 }
   ];
 
-  // Insert title row at the top and push headers down
+  worksheet.columns = columns;
+
+  // Insert title row at the top
   worksheet.spliceRows(1, 0, []);
 
   let titleText = 'PAYROLL REPORT';
 
-  // Generate title based on filters - month parameter represents the PREVIOUS month
   if (month && year) {
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
       'July', 'August', 'September', 'October', 'November', 'December'];
-    // month=12 means November (month-1), month=1 means December of previous year
     const actualMonthIndex = Number(month) - 2;
     let displayYear = Number(year);
     let displayMonth;
 
     if (actualMonthIndex < 0) {
-      // If month=1, it's December of previous year
-      displayMonth = monthNames[11]; // December
+      displayMonth = monthNames[11];
       displayYear = displayYear - 1;
     } else {
       displayMonth = monthNames[actualMonthIndex];
@@ -1154,14 +1151,14 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     titleText = `PAYROLL - ${year}`;
   }
 
-  worksheet.mergeCells('A1:AB1'); // Merge across all columns
+  worksheet.mergeCells('A1:AB1');
   const titleCell = worksheet.getCell('A1');
   titleCell.value = titleText;
   titleCell.font = { bold: true, size: 16, color: { argb: 'FFFFFFFF' } };
   titleCell.fill = {
     type: 'pattern',
     pattern: 'solid',
-    fgColor: { argb: 'FF2c5aa0' } // Same blue as headers
+    fgColor: { argb: 'FF2c5aa0' }
   };
   titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
   worksheet.getRow(1).height = 30;
@@ -1188,12 +1185,33 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   let totalAllDeductions = 0;
   let totalNetPay = 0;
 
-  // Border style for data rows
+  // Border style
   const dataBorder = {
     top: { style: 'thin' as const },
     left: { style: 'thin' as const },
     bottom: { style: 'thin' as const },
     right: { style: 'thin' as const }
+  };
+
+  // Helper function to style row with fixed columns only
+  const styleRowWithBorder = (row: any, bgColor: string = 'FFFFFFFF') => {
+    row.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: bgColor }
+    };
+    row.height = 18;
+
+    // Only apply styling to the defined columns (1-28)
+    for (let colNum = 1; colNum <= columns.length; colNum++) {
+      const cell = row.getCell(colNum);
+      cell.border = dataBorder;
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+
+      if (colNum === 2) {
+        cell.font = { size: 9 };
+      }
+    }
   };
 
   // Add data rows
@@ -1203,12 +1221,10 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
       continue;
     }
 
-    // Get employee expense data
     const employeeExpense = await EmployeeExpense.findOne({ employee: payroll.employee._id }).lean();
     const basicSalary = Number(employeeExpense?.basicSalary) || 0;
     const allowance = Number(employeeExpense?.allowance) || 0;
 
-    // Get calculation details
     const calculationDetails: any = payroll.calculationDetails || await calculateSalaryBasedOnAttendance(
       payroll.employee._id,
       basicSalary,
@@ -1216,12 +1232,10 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
       payroll.period
     );
 
-    // Extract values with proper fallbacks
     const sundayBonus = Number(calculationDetails.sundayBonus) || 0;
     const absentDeduction = Number(calculationDetails.absentDeduction) || 0;
     const baseSalaryFromAttendance = Number(calculationDetails.baseSalaryFromAttendance) || (basicSalary + allowance);
 
-    // Calculate total earnings properly
     const transport = Number(payroll.transport) || 0;
     const overtime = Number(payroll.overtime) || 0;
     const specialOT = Number(payroll.specialOT) || 0;
@@ -1230,7 +1244,6 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
 
     const totalEarnings = baseSalaryFromAttendance + transport + overtime + specialOT + medical + bonus + sundayBonus - absentDeduction;
 
-    // Calculate total deductions properly
     const mess = Number(payroll.mess) || 0;
     const salaryAdvance = Number(payroll.salaryAdvance) || 0;
     const loanDeduction = Number(payroll.loanDeduction) || 0;
@@ -1242,7 +1255,6 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
 
     const totalDeductions = mess + salaryAdvance + loanDeduction + fineAmount + visaDeduction + otherDeduction1 + otherDeduction2 + otherDeduction3;
 
-    // Accumulate totals
     totalBasicSalary += basicSalary;
     totalAllowance += allowance;
     totalTransport += transport;
@@ -1295,38 +1307,19 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
       remark: payroll.remark || ''
     });
 
-    // Apply background color based on user role
     const userRole = payroll.employee.role?.toLowerCase() || '';
-    let bgColor = 'FFFFFFFF'; // Default white
+    let bgColor = 'FFFFFFFF';
 
     if (userRole.includes('engineer')) {
-      bgColor = 'FFD4E6F1'; // Light blue
+      bgColor = 'FFD4E6F1';
     } else if (userRole.includes('super admin') || userRole.includes('admin')) {
-      bgColor = 'FFFFC7CE'; // Light red
+      bgColor = 'FFFFC7CE';
     }
 
-    row.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: bgColor }
-    };
-
-    // Set row height for data rows
-    row.height = 18;
-
-    // Apply border and center alignment to all cells in the row
-    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-      cell.border = dataBorder;
-      cell.alignment = { vertical: 'middle', horizontal: 'center' };
-
-      // Reduce font size for NAME column (column 2)
-      if (colNumber === 2) {
-        cell.font = { size: 9 };
-      }
-    });
+    styleRowWithBorder(row, bgColor);
   }
 
-  // Add TOTAL ROW at the end with actual calculated numbers
+  // Add TOTAL ROW
   const totalRow = worksheet.addRow({
     serialNo: '',
     name: '',
@@ -1358,126 +1351,71 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     remark: ''
   });
 
-  // Style the total row
+  // Style total row
   totalRow.font = { bold: true };
   totalRow.fill = {
     type: 'pattern',
     pattern: 'solid',
-    fgColor: { argb: 'FFFFEB3B' } // Yellow background for totals
+    fgColor: { argb: 'FFFFEB3B' }
   };
   totalRow.height = 20;
 
-  // Apply border and center alignment to total row
-  totalRow.eachCell({ includeEmpty: true }, (cell) => {
+  // Apply styling only to defined columns
+  for (let colNum = 1; colNum <= columns.length; colNum++) {
+    const cell = totalRow.getCell(colNum);
     cell.border = dataBorder;
-    cell.alignment = { vertical: 'middle', horizontal: 'center' };
-  });
+    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+  }
 
-  // Add empty row after total
   worksheet.addRow({});
 
-  // Add signature box section
+  // Signature section
   const signatureStartRow = worksheet.lastRow!.number + 1;
 
-  // Row 1: Prepared By: Meena S
-  const preparedRow = signatureStartRow;
-  worksheet.mergeCells(`A${preparedRow}:B${preparedRow}`);
-  worksheet.mergeCells(`C${preparedRow}:D${preparedRow}`);
+  const createSignatureRow = (rowNum: number, label: string, name: string, isLast: boolean = false) => {
+    worksheet.mergeCells(`A${rowNum}:B${rowNum}`);
+    worksheet.mergeCells(`C${rowNum}:D${rowNum}`);
 
-  const preparedKeyCell = worksheet.getCell(`A${preparedRow}`);
-  preparedKeyCell.value = 'Prepared By:';
-  preparedKeyCell.font = { bold: true, size: 11 };
-  preparedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
-  preparedKeyCell.border = {
-    top: { style: 'medium' },
-    left: { style: 'medium' },
-    bottom: { style: 'thin' },
-    right: { style: 'thin' }
+    const keyCell = worksheet.getCell(`A${rowNum}`);
+    keyCell.value = label;
+    keyCell.font = { bold: true, size: 11 };
+    keyCell.alignment = { vertical: 'middle', horizontal: 'right' };
+    keyCell.border = {
+      top: { style: isLast ? 'thin' : 'medium' },
+      left: { style: 'medium' },
+      bottom: { style: 'thin' },
+      right: { style: 'thin' }
+    };
+
+    const valueCell = worksheet.getCell(`C${rowNum}`);
+    valueCell.value = name;
+    valueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+    valueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    valueCell.border = {
+      top: { style: isLast ? 'thin' : 'medium' },
+      left: { style: 'thin' },
+      bottom: { style: isLast ? 'medium' : 'thin' },
+      right: { style: 'medium' }
+    };
+
+    worksheet.getRow(rowNum).height = 25;
   };
 
-  const preparedValueCell = worksheet.getCell(`C${preparedRow}`);
-  preparedValueCell.value = 'Meena S';
-  preparedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
-  preparedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
-  preparedValueCell.border = {
-    top: { style: 'medium' },
-    left: { style: 'thin' },
-    bottom: { style: 'thin' },
-    right: { style: 'medium' }
-  };
+  createSignatureRow(signatureStartRow, 'Prepared By:', 'Meena S');
+  createSignatureRow(signatureStartRow + 1, 'Verified By:', 'Syed Ibrahim');
+  createSignatureRow(signatureStartRow + 2, 'Approved By:', 'Layla Juma Ibrahim Obaid Alsuwaidi', true);
 
-  // Row 2: Verified By: Syed Ibrahim
-  const verifiedRow = signatureStartRow + 1;
-  worksheet.mergeCells(`A${verifiedRow}:B${verifiedRow}`);
-  worksheet.mergeCells(`C${verifiedRow}:D${verifiedRow}`);
-
-  const verifiedKeyCell = worksheet.getCell(`A${verifiedRow}`);
-  verifiedKeyCell.value = 'Verified By:';
-  verifiedKeyCell.font = { bold: true, size: 11 };
-  verifiedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
-  verifiedKeyCell.border = {
-    top: { style: 'thin' },
-    left: { style: 'medium' },
-    bottom: { style: 'thin' },
-    right: { style: 'thin' }
-  };
-
-  const verifiedValueCell = worksheet.getCell(`C${verifiedRow}`);
-  verifiedValueCell.value = 'Syed Ibrahim';
-  verifiedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
-  verifiedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
-  verifiedValueCell.border = {
-    top: { style: 'thin' },
-    left: { style: 'thin' },
-    bottom: { style: 'thin' },
-    right: { style: 'medium' }
-  };
-
-  // Row 3: Approved By: Layla Juma Ibrahim Obaid Alsuwaidi
-  const approvedRow = signatureStartRow + 2;
-  worksheet.mergeCells(`A${approvedRow}:B${approvedRow}`);
-  worksheet.mergeCells(`C${approvedRow}:D${approvedRow}`);
-
-  const approvedKeyCell = worksheet.getCell(`A${approvedRow}`);
-  approvedKeyCell.value = 'Approved By:';
-  approvedKeyCell.font = { bold: true, size: 11 };
-  approvedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
-  approvedKeyCell.border = {
-    top: { style: 'thin' },
-    left: { style: 'medium' },
-    bottom: { style: 'medium' },
-    right: { style: 'thin' }
-  };
-
-  const approvedValueCell = worksheet.getCell(`C${approvedRow}`);
-  approvedValueCell.value = 'Layla Juma Ibrahim Obaid Alsuwaidi';
-  approvedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
-  approvedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
-  approvedValueCell.border = {
-    top: { style: 'thin' },
-    left: { style: 'thin' },
-    bottom: { style: 'medium' },
-    right: { style: 'medium' }
-  };
-
-  // Set row heights for signature section
-  worksheet.getRow(preparedRow).height = 25;
-  worksheet.getRow(verifiedRow).height = 25;
-  worksheet.getRow(approvedRow).height = 25;
-
-  // Add empty row
   worksheet.addRow({});
 
-  // Add footer text
   const footerRow = worksheet.addRow({});
-  worksheet.mergeCells(`A${footerRow.number}:AA${footerRow.number}`);
+  worksheet.mergeCells(`A${footerRow.number}:AB${footerRow.number}`);
   const footerCell = worksheet.getCell(`A${footerRow.number}`);
   footerCell.value = 'This payroll is generated using AGATS software';
-  footerCell.font = { italic: true, size: 10, color: { argb: 'FF808080' } }; // Gray color
+  footerCell.font = { italic: true, size: 10, color: { argb: 'FF808080' } };
   footerCell.alignment = { vertical: 'middle', horizontal: 'center' };
   footerRow.height = 20;
 
-  // Style the header row (now row 2 after title)
+  // Style header row (row 2)
   const headerRow = worksheet.getRow(2);
   headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
   headerRow.fill = {
@@ -1485,24 +1423,24 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
     pattern: 'solid',
     fgColor: { argb: 'FF2c5aa0' }
   };
-  headerRow.height = 22;
+  headerRow.height = 35;
 
-  // Apply border and center alignment to header row
-  headerRow.eachCell({ includeEmpty: true }, (cell) => {
+  // Apply styling only to defined columns in header
+  for (let colNum = 1; colNum <= columns.length; colNum++) {
+    const cell = headerRow.getCell(colNum);
     cell.border = dataBorder;
-    cell.alignment = { vertical: 'middle', horizontal: 'center' };
-  });
+    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+  }
 
   let filename = 'payroll_report';
   if (month && year) {
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    // month=12 means November (month-1)
     const actualMonthIndex = Number(month) - 2;
     let displayYear = Number(year);
     let displayMonth;
 
     if (actualMonthIndex < 0) {
-      displayMonth = monthNames[11]; // Dec
+      displayMonth = monthNames[11];
       displayYear = displayYear - 1;
     } else {
       displayMonth = monthNames[actualMonthIndex];
@@ -1514,6 +1452,27 @@ export const exportPayrollsToExcel = asyncHandler(async (req: Request, res: Resp
   } else {
     filename += `_${new Date().toISOString().split('T')[0]}`;
   }
+
+  // Set print area and page setup to limit columns to A-AB only
+  const lastDataRow = worksheet.lastRow?.number || 1;
+  worksheet.pageSetup = {
+    paperSize: worksheet.pageSetup?.paperSize || 1, // A4
+    orientation: 'landscape'
+  };
+
+  // Set print area to A1:AB{lastRow} - this limits visible columns
+  worksheet.printArea = `A1:AB${lastDataRow}`;
+
+  // Set column widths explicitly and hide any columns beyond AB
+  for (let colNum = 1; colNum <= 28; colNum++) {
+    const col = worksheet.getColumn(colNum);
+    if (col && col.width) {
+      // Column width is already set
+    }
+  }
+
+  // Ensure no columns exist beyond AB
+  worksheet.columns = worksheet.columns.slice(0, 28);
 
   res.setHeader(
     'Content-Type',

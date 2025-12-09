@@ -112,10 +112,10 @@ export const getProjectProfitReport = asyncHandler(async (req: Request, res: Res
 
     const expenses = await Expense.find({
       project: project._id,
-      "materials.date": {
-        $gte: startDate,
-        $lte: endDate
-      }
+      $or: [
+        { "materials.date": { $gte: startDate, $lte: endDate } },
+        { "miscellaneous.date": { $gte: startDate, $lte: endDate } }
+      ]
     });
 
     const monthlyMaterialExpense = expenses.reduce((total, expense) => {
@@ -126,7 +126,14 @@ export const getProjectProfitReport = asyncHandler(async (req: Request, res: Res
         })
         .reduce((sum, material) => sum + material.amount, 0);
 
-      return total + materialCostForMonth;
+      const miscCostForMonth = expense.miscellaneous
+        .filter(misc => {
+          const miscDate = new Date(misc.date);
+          return miscDate >= startDate && miscDate <= endDate;
+        })
+        .reduce((sum, misc) => sum + misc.total, 0);
+
+      return total + materialCostForMonth + miscCostForMonth;
     }, 0);
 
     const profit = monthlyBudgetAllocation.allocatedAmount - monthlyMaterialExpense;
@@ -220,26 +227,39 @@ const generateExcelReport = async (
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Project Profit Report');
 
-    // Add title
-    const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
+    // Add title with blue background (matching payroll Excel)
+    const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' }).toUpperCase();
     worksheet.mergeCells('A1:M1');
-    worksheet.getCell('A1').value = `Project Profit Report - ${monthName} ${year}`;
-    worksheet.getCell('A1').font = { size: 16, bold: true };
-    worksheet.getCell('A1').alignment = { horizontal: 'center' };
+    const titleCell = worksheet.getCell('A1');
+    titleCell.value = `PROJECT PROFIT REPORT - ${monthName} ${year}`;
+    titleCell.font = { size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    titleCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF2c5aa0' } // Same blue as payroll Excel
+    };
+    worksheet.getRow(1).height = 30;
 
     // Add summary row at the top
     worksheet.mergeCells('A2:M2');
-    worksheet.getCell('A2').value = `Total Projects: ${summary.totalProjects} | Total Budget: AED ${summary.totalBudget.toFixed(2)} | Total Expense: AED ${summary.totalExpense.toFixed(2)} | Total Profit: AED ${summary.totalProfit.toFixed(2)}`;
-    worksheet.getCell('A2').font = { bold: true };
-    worksheet.getCell('A2').fill = {
+    const summaryCell = worksheet.getCell('A2');
+    summaryCell.value = `Total Projects: ${summary.totalProjects} | Total Budget: AED ${summary.totalBudget.toFixed(2)} | Total Expense: AED ${summary.totalExpense.toFixed(2)} | Total Profit: AED ${summary.totalProfit.toFixed(2)}`;
+    summaryCell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    summaryCell.fill = {
       type: 'pattern',
       pattern: 'solid',
-      fgColor: { argb: 'FFFFE4B5' }
+      fgColor: { argb: 'FF4472C4' } // Different shade of blue
     };
-    worksheet.getCell('A2').alignment = { horizontal: 'center' };
+    summaryCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    worksheet.getRow(2).height = 25;
 
-    // Add headers (added Budget Percentage column)
+    // Add empty row
+    worksheet.addRow([]);
+
+    // Add headers with blue background (added Budget Percentage column)
     const headers = [
+      'S/NO',
       'Project Name',
       'Client Name',
       'LPO Number',
@@ -254,24 +274,31 @@ const generateExcelReport = async (
       'GRN Number'
     ];
 
-    // Add header row (starting from row 3)
+    // Add header row (starting from row 4)
     const headerRow = worksheet.addRow(headers);
-    headerRow.font = { bold: true };
+    headerRow.height = 25;
+    headerRow.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+    headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
     headerRow.fill = {
       type: 'pattern',
       pattern: 'solid',
-      fgColor: { argb: 'FFE6E6FA' }
-    };
-    headerRow.border = {
-      top: { style: 'thin' },
-      left: { style: 'thin' },
-      bottom: { style: 'thin' },
-      right: { style: 'thin' }
+      fgColor: { argb: 'FF2c5aa0' } // Same blue as title
     };
 
-    // Add data rows
-    data.forEach(item => {
+    // Apply border to header
+    headerRow.eachCell((cell) => {
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF000000' } },
+        left: { style: 'thin', color: { argb: 'FF000000' } },
+        bottom: { style: 'thin', color: { argb: 'FF000000' } },
+        right: { style: 'thin', color: { argb: 'FF000000' } }
+      };
+    });
+
+    // Add data rows with S/NO
+    data.forEach((item, index) => {
       const row = worksheet.addRow([
+        index + 1,
         item.projectName,
         item.clientName,
         item.lpoNumber,
@@ -286,83 +313,98 @@ const generateExcelReport = async (
         item.grnNumber || 'N/A'
       ]);
 
-      // Style the row
-      row.border = {
-        top: { style: 'thin' },
-        left: { style: 'thin' },
-        bottom: { style: 'thin' },
-        right: { style: 'thin' }
-      };
+      row.height = 22;
+      row.alignment = { vertical: 'middle' };
+
+      // Alternate row colors
+      const rowColor = index % 2 === 0 ? 'FFFFFFFF' : 'FFF2F2F2';
+
+      row.eachCell((cell, colNum) => {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: rowColor }
+        };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+          left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+          bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+          right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
+        };
+
+        // Format numbers for currency columns
+        if ([7, 8, 9].includes(colNum)) {
+          cell.numFmt = '#,##0.00';
+          cell.alignment = { horizontal: 'right', vertical: 'middle' };
+        } else if (colNum === 1) {
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        } else if (colNum === 10) {
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        }
+      });
 
       // Color code profit cells
-      const profitCell = row.getCell(8); // Profit column
+      const profitCell = row.getCell(9); // Profit column
       if (item.profit > 0) {
         profitCell.fill = {
           type: 'pattern',
           pattern: 'solid',
-          fgColor: { argb: 'FF90EE90' }
+          fgColor: { argb: 'FFE2EFDA' }
         };
+        profitCell.font = { bold: true, color: { argb: 'FF375623' } };
       } else if (item.profit < 0) {
         profitCell.fill = {
           type: 'pattern',
           pattern: 'solid',
-          fgColor: { argb: 'FFFFB6C1' }
+          fgColor: { argb: 'FFFCE4D6' }
         };
+        profitCell.font = { bold: true, color: { argb: 'FFC55A11' } };
       }
 
       // Color code budget percentage
-      const budgetPercentageCell = row.getCell(9);
+      const budgetPercentageCell = row.getCell(10);
       if (item.budgetPercentage > 100) {
         // Budget exceeds quotation amount
         budgetPercentageCell.fill = {
           type: 'pattern',
           pattern: 'solid',
-          fgColor: { argb: 'FFFFB6C1' }
+          fgColor: { argb: 'FFFCE4D6' }
         };
-        budgetPercentageCell.font = { color: { argb: 'FFFF0000' } };
+        budgetPercentageCell.font = { bold: true, color: { argb: 'FFC55A11' } };
       } else if (item.budgetPercentage > 80) {
         // High percentage
         budgetPercentageCell.fill = {
           type: 'pattern',
           pattern: 'solid',
-          fgColor: { argb: 'FFFFFFB5' }
+          fgColor: { argb: 'FFFFF9E6' }
         };
+        budgetPercentageCell.font = { bold: true, color: { argb: 'FF856404' } };
       }
 
       // Color code GRN status
-      const grnStatusCell = row.getCell(11); // GRN Status column
+      const grnStatusCell = row.getCell(12); // GRN Status column
       if (item.grnStatus === 'Received') {
         grnStatusCell.fill = {
           type: 'pattern',
           pattern: 'solid',
-          fgColor: { argb: 'FF90EE90' }
+          fgColor: { argb: 'FFE2EFDA' }
         };
+        grnStatusCell.font = { bold: true, color: { argb: 'FF375623' } };
       } else {
         grnStatusCell.fill = {
           type: 'pattern',
           pattern: 'solid',
-          fgColor: { argb: 'FFFFB6C1' }
+          fgColor: { argb: 'FFFCE4D6' }
         };
+        grnStatusCell.font = { bold: true, color: { argb: 'FFC55A11' } };
       }
     });
 
-    // Auto-fit columns
-    worksheet.columns.forEach((column: any) => {
-      let maxLength = 0;
-      column.eachCell({ includeEmpty: true }, (cell: any) => {
-        const columnLength = cell.value ? cell.value.toString().length : 10;
-        if (columnLength > maxLength) {
-          maxLength = columnLength;
-        }
-      });
-      column.width = Math.min(Math.max(maxLength + 2, 10), 50);
-    });
-
-    // Add grand total row at the bottom
-    const lastRow = worksheet.rowCount + 1;
-    worksheet.addRow([]); // Empty row
-    const totalRow = worksheet.addRow([
-      'GRAND TOTAL',
+    // Add totals row (yellow background like payroll Excel)
+    worksheet.addRow([]);
+    const totalsRow = worksheet.addRow([
+      '',
+      'TOTALS',
       '',
       '',
       '',
@@ -376,12 +418,166 @@ const generateExcelReport = async (
       ''
     ]);
 
-    totalRow.font = { bold: true };
-    totalRow.fill = {
+    totalsRow.height = 25;
+    totalsRow.font = { bold: true, size: 11 };
+    totalsRow.alignment = { horizontal: 'right', vertical: 'middle' };
+    totalsRow.fill = {
       type: 'pattern',
       pattern: 'solid',
-      fgColor: { argb: 'FFFFA07A' }
+      fgColor: { argb: 'FFFFEB3B' } // Yellow like payroll Excel
     };
+
+    totalsRow.eachCell((cell, colNum) => {
+      if ([7, 8, 9].includes(colNum)) {
+        cell.numFmt = '#,##0.00';
+        cell.alignment = { horizontal: 'right', vertical: 'middle' };
+      } else if (colNum === 2) {
+        cell.alignment = { horizontal: 'right', vertical: 'middle' };
+      }
+
+      cell.border = {
+        top: { style: 'medium', color: { argb: 'FF000000' } },
+        left: { style: 'thin', color: { argb: 'FF000000' } },
+        bottom: { style: 'medium', color: { argb: 'FF000000' } },
+        right: { style: 'thin', color: { argb: 'FF000000' } }
+      };
+    });
+
+    // Color profit total cell
+    const profitTotalCell = totalsRow.getCell(9);
+    if (summary.totalProfit >= 0) {
+      profitTotalCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFC6E0B4' }
+      };
+      profitTotalCell.font = { bold: true, color: { argb: 'FF375623' } };
+    } else {
+      profitTotalCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFF8CBAD' }
+      };
+      profitTotalCell.font = { bold: true, color: { argb: 'FFC55A11' } };
+    }
+
+    // Set column widths
+    worksheet.columns = [
+      { width: 8 },    // S/NO
+      { width: 30 },   // Project Name
+      { width: 25 },   // Client Name
+      { width: 15 },   // LPO Number
+      { width: 15 },   // Work Start Date
+      { width: 15 },   // Work End Date
+      { width: 18 },   // Monthly Budget (AED)
+      { width: 18 },   // Material Expense (AED)
+      { width: 15 },   // Profit (AED)
+      { width: 12 },   // Budget %
+      { width: 20 },   // Attention
+      { width: 15 },   // GRN Status
+      { width: 15 }    // GRN Number
+    ];
+
+    // Add signature section (matching payroll Excel)
+    const signatureStartRow = worksheet.lastRow!.number + 2;
+
+    // Row 1: Prepared By: Meena S
+    const preparedRow = signatureStartRow;
+    worksheet.mergeCells(`A${preparedRow}:B${preparedRow}`);
+    worksheet.mergeCells(`C${preparedRow}:D${preparedRow}`);
+
+    const preparedKeyCell = worksheet.getCell(`A${preparedRow}`);
+    preparedKeyCell.value = 'Prepared By:';
+    preparedKeyCell.font = { bold: true, size: 11 };
+    preparedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
+    preparedKeyCell.border = {
+      top: { style: 'medium' },
+      left: { style: 'medium' },
+      bottom: { style: 'thin' },
+      right: { style: 'thin' }
+    };
+
+    const preparedValueCell = worksheet.getCell(`C${preparedRow}`);
+    preparedValueCell.value = 'Meena S';
+    preparedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+    preparedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    preparedValueCell.border = {
+      top: { style: 'medium' },
+      left: { style: 'thin' },
+      bottom: { style: 'thin' },
+      right: { style: 'medium' }
+    };
+
+    // Row 2: Verified By: Syed Ibrahim
+    const verifiedRow = signatureStartRow + 1;
+    worksheet.mergeCells(`A${verifiedRow}:B${verifiedRow}`);
+    worksheet.mergeCells(`C${verifiedRow}:D${verifiedRow}`);
+
+    const verifiedKeyCell = worksheet.getCell(`A${verifiedRow}`);
+    verifiedKeyCell.value = 'Verified By:';
+    verifiedKeyCell.font = { bold: true, size: 11 };
+    verifiedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
+    verifiedKeyCell.border = {
+      top: { style: 'thin' },
+      left: { style: 'medium' },
+      bottom: { style: 'thin' },
+      right: { style: 'thin' }
+    };
+
+    const verifiedValueCell = worksheet.getCell(`C${verifiedRow}`);
+    verifiedValueCell.value = 'Syed Ibrahim';
+    verifiedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+    verifiedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    verifiedValueCell.border = {
+      top: { style: 'thin' },
+      left: { style: 'thin' },
+      bottom: { style: 'thin' },
+      right: { style: 'medium' }
+    };
+
+    // Row 3: Approved By: Layla Juma Ibrahim Obaid Alsuwaidi
+    const approvedRow = signatureStartRow + 2;
+    worksheet.mergeCells(`A${approvedRow}:B${approvedRow}`);
+    worksheet.mergeCells(`C${approvedRow}:D${approvedRow}`);
+
+    const approvedKeyCell = worksheet.getCell(`A${approvedRow}`);
+    approvedKeyCell.value = 'Approved By:';
+    approvedKeyCell.font = { bold: true, size: 11 };
+    approvedKeyCell.alignment = { vertical: 'middle', horizontal: 'right' };
+    approvedKeyCell.border = {
+      top: { style: 'thin' },
+      left: { style: 'medium' },
+      bottom: { style: 'medium' },
+      right: { style: 'thin' }
+    };
+
+    const approvedValueCell = worksheet.getCell(`C${approvedRow}`);
+    approvedValueCell.value = 'Layla Juma Ibrahim Obaid Alsuwaidi';
+    approvedValueCell.font = { size: 11, color: { argb: 'FF2c5aa0' } };
+    approvedValueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    approvedValueCell.border = {
+      top: { style: 'thin' },
+      left: { style: 'thin' },
+      bottom: { style: 'medium' },
+      right: { style: 'medium' }
+    };
+
+    // Set row heights for signature section
+    worksheet.getRow(preparedRow).height = 25;
+    worksheet.getRow(verifiedRow).height = 25;
+    worksheet.getRow(approvedRow).height = 25;
+
+    // Add empty row
+    worksheet.addRow([]);
+
+    // Add footer text (matching payroll Excel)
+    const footerRow = worksheet.addRow({});
+    worksheet.mergeCells(`A${footerRow.number}:M${footerRow.number}`);
+    const footerCell = worksheet.getCell(`A${footerRow.number}`);
+    footerCell.value = 'This report is generated using AGATS software';
+    footerCell.font = { italic: true, size: 10, color: { argb: 'FF808080' } };
+    footerCell.alignment = { vertical: 'middle', horizontal: 'center' };
+    footerRow.height = 20;
 
     // Set response headers for file download
     const fileName = `project-profit-report-${monthName}-${year}.xlsx`;
