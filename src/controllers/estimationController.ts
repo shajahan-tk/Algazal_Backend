@@ -2412,7 +2412,7 @@ export const generateEstimationPdf = asyncHandler(
         <h4>Thank You For Your Business</h4>
         <p>We appreciate the opportunity to serve you and look forward to working together.</p>
         <div class="company-details">Alghazal Alabyad Technical Services LLC | Dubai, UAE</div>
-        <div class="company-details">Tel: +971 4 123 4567 | Email: info@alghazalalabyad.com | www.alghazalalabyad.com</div>
+        <div class="company-details">Tel: +971-4-4102555 | Email: info@alghazalalabyad.com | www.alghazalalabyad.com</div>
       </div>
     </body>
     </html>
