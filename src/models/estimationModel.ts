@@ -26,11 +26,11 @@ interface ILabourItem {
 export interface IEstimation extends Document {
   project: Types.ObjectId | IProject;
   estimationNumber: string;
-  workStartDate: Date;
-  workEndDate: Date;
-  workDays: number; // ADDED: Number of working days
-  dailyStartTime: string; // ADDED: Daily start time (HH:mm)
-  dailyEndTime: string; // ADDED: Daily end time (HH:mm)
+  workStartDate?: Date; // Changed to optional
+  workEndDate?: Date; // Changed to optional
+  workDays?: number; // Changed to optional
+  dailyStartTime?: string; // Changed to optional
+  dailyEndTime?: string; // Changed to optional
   validUntil: Date;
   paymentDueBy: number;
   subject?: string;
@@ -85,30 +85,25 @@ const estimationSchema = new Schema<IEstimation>(
     },
     workStartDate: {
       type: Date,
-      required: true,
+      // Removed required: true
     },
     workEndDate: {
       type: Date,
-      required: true,
-      validate: {
-        validator: function (this: IEstimation, value: Date) {
-          return value > this.workStartDate;
-        },
-        message: "Work end date must be after start date",
-      },
+      // Removed required: true
+      // Removed validation that depends on workStartDate
     },
     workDays: {
       type: Number,
-      required: true,
-      min: 1,
-      default: 1,
+      min: 0, // Changed from min: 1 to min: 0
+      default: 0,
     },
     dailyStartTime: {
       type: String,
-      required: true,
+      // Removed required: true
       default: "09:00",
       validate: {
         validator: function (v: string) {
+          if (!v) return true; // Allow empty/null
           return /^([01]\d|2[0-3]):([0-5]\d)$/.test(v);
         },
         message: "Invalid time format. Use HH:mm format (e.g., 09:00)"
@@ -116,10 +111,11 @@ const estimationSchema = new Schema<IEstimation>(
     },
     dailyEndTime: {
       type: String,
-      required: true,
+      // Removed required: true
       default: "18:00",
       validate: {
         validator: function (v: string) {
+          if (!v) return true; // Allow empty/null
           return /^([01]\d|2[0-3]):([0-5]\d)$/.test(v);
         },
         message: "Invalid time format. Use HH:mm format (e.g., 18:00)"
@@ -185,6 +181,7 @@ const estimationSchema = new Schema<IEstimation>(
   { timestamps: true }
 );
 
+// Update pre-save hook to handle optional dates
 estimationSchema.pre<IEstimation>("save", function (next) {
   const materialsTotal = this.materials.reduce(
     (sum, item) => sum + (item.total || 0),
@@ -206,6 +203,15 @@ estimationSchema.pre<IEstimation>("save", function (next) {
       this.quotationAmount -
       this.estimatedAmount -
       (this.commissionAmount || 0);
+  }
+
+  // Calculate workDays if both dates are provided
+  if (this.workStartDate && this.workEndDate) {
+    const start = new Date(this.workStartDate);
+    const end = new Date(this.workEndDate);
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    this.workDays = Math.max(0, diffDays) || 0;
   }
 
   next();

@@ -31,13 +31,14 @@ export const createEstimation = asyncHandler(
       commissionAmount,
       quotationAmount,
       subject,
+      workDays, // Added
+      dailyStartTime, // Added
+      dailyEndTime, // Added
     } = req.body;
 
-    // Validate required fields
+    // Validate required fields - removed workStartDate and workEndDate from required
     if (
       !project ||
-      !workStartDate ||
-      !workEndDate ||
       !validUntil ||
       !paymentDueBy
     ) {
@@ -113,11 +114,23 @@ export const createEstimation = asyncHandler(
       );
     }
 
+    // Calculate workDays if dates are provided
+    let calculatedWorkDays = workDays || 0;
+    if (workStartDate && workEndDate) {
+      const start = new Date(workStartDate);
+      const end = new Date(workEndDate);
+      const diffTime = Math.abs(end.getTime() - start.getTime());
+      calculatedWorkDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 0;
+    }
+
     const estimation = await Estimation.create({
       project,
       estimationNumber: await generateRelatedDocumentNumber(project, "ESTAGA"),
-      workStartDate: new Date(workStartDate),
-      workEndDate: new Date(workEndDate),
+      workStartDate: workStartDate ? new Date(workStartDate) : undefined,
+      workEndDate: workEndDate ? new Date(workEndDate) : undefined,
+      workDays: calculatedWorkDays,
+      dailyStartTime: dailyStartTime || "09:00",
+      dailyEndTime: dailyEndTime || "18:00",
       validUntil: new Date(validUntil),
       paymentDueBy,
       materials: materials || [],
@@ -499,7 +512,6 @@ export const getEstimationDetails = asyncHandler(
   }
 );
 
-
 export const updateEstimation = asyncHandler(
   async (req: Request, res: Response) => {
     const { id } = req.params;
@@ -509,17 +521,6 @@ export const updateEstimation = asyncHandler(
     if (!estimation) {
       throw new ApiError(404, "Estimation not found");
     }
-
-    // if (estimation.isApproved) {
-    //   throw new ApiError(400, "Cannot update approved estimation");
-    // }
-
-    // // Reset checked status if updating
-    // if (estimation.isChecked) {
-    //   estimation.isChecked = false;
-    //   estimation.checkedBy = undefined;
-    //   estimation.approvalComment = undefined;
-    // }
 
     // Don't allow changing these fields directly
     delete updateData.isApproved;
@@ -545,6 +546,17 @@ export const updateEstimation = asyncHandler(
         if (item.days && item.price) {
           item.total = item.days * item.price;
         }
+      }
+    }
+
+    // Calculate workDays if dates are provided in update
+    if (updateData.workStartDate || updateData.workEndDate) {
+      const start = updateData.workStartDate ? new Date(updateData.workStartDate) : estimation.workStartDate;
+      const end = updateData.workEndDate ? new Date(updateData.workEndDate) : estimation.workEndDate;
+
+      if (start && end) {
+        const diffTime = Math.abs(end.getTime() - start.getTime());
+        updateData.workDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 0;
       }
     }
 
@@ -645,7 +657,7 @@ interface PopulatedEstimation extends Document {
   updatedAt: Date;
 }
 
-// export const generateEstimationPdf = asyncHandler(
+
 //   async (req: Request, res: Response) => {
 //     const { id } = req.params;
 
@@ -1454,6 +1466,17 @@ export const generateEstimationPdf = asyncHandler(
       year: 'numeric'
     });
 
+    // Helper function to format optional dates
+    const formatOptionalDate = (date?: Date): string => {
+      if (!date) return 'To be decided';
+      const d = new Date(date);
+      return isNaN(d.getTime()) ? 'To be decided' : d.toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+      });
+    };
+
     // Prepare HTML content
     const htmlContent = `
     <!DOCTYPE html>
@@ -1622,7 +1645,7 @@ export const generateEstimationPdf = asyncHandler(
           flex: 1;
         }
 
-        /* Work Schedule */
+        /* Work Schedule - Conditional Styling */
         .work-schedule {
           background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
           border-radius: 10px;
@@ -1671,6 +1694,12 @@ export const generateEstimationPdf = asyncHandler(
           font-size: 13px;
           font-weight: 700;
           color: #111827;
+        }
+
+        .schedule-value.to-be-decided {
+          color: #6b7280;
+          font-style: italic;
+          font-weight: normal;
         }
 
         /* Tables */
@@ -2121,7 +2150,7 @@ export const generateEstimationPdf = asyncHandler(
             <div class="info-item">
               <span class="info-label">Valid Until:</span>
               <span class="info-value">
-                ${formatDateForPDF(estimation.validUntil)}
+                ${formatOptionalDate(estimation.validUntil)}
                 <span class="status-badge ${new Date(estimation.validUntil) > new Date() ? 'status-valid' : 'status-expired'}">
                   ${new Date(estimation.validUntil) > new Date() ? 'VALID' : 'EXPIRED'}
                 </span>
@@ -2148,49 +2177,61 @@ export const generateEstimationPdf = asyncHandler(
         </div>
       </div>
 
-      <!-- Work Schedule -->
+      <!-- Work Schedule - Only show if dates are provided -->
+      ${estimation.workStartDate || estimation.workEndDate || estimation.workDays ? `
       <div class="work-schedule">
         <h3>Work Schedule & Timeline</h3>
         <div class="schedule-grid">
           <div class="schedule-item">
             <div class="schedule-label">Work Start Date</div>
-            <div class="schedule-value">${formatDateForPDF(estimation.workStartDate)}</div>
+            <div class="schedule-value ${!estimation.workStartDate ? 'to-be-decided' : ''}">
+              ${formatOptionalDate(estimation.workStartDate)}
+            </div>
           </div>
           <div class="schedule-item">
             <div class="schedule-label">Work End Date</div>
-            <div class="schedule-value">${formatDateForPDF(estimation.workEndDate)}</div>
+            <div class="schedule-value ${!estimation.workEndDate ? 'to-be-decided' : ''}">
+              ${formatOptionalDate(estimation.workEndDate)}
+            </div>
           </div>
           <div class="schedule-item">
             <div class="schedule-label">Work Duration</div>
-            <div class="schedule-value">${safeGet(estimation.workDays)} Days</div>
+            <div class="schedule-value ${!estimation.workDays || estimation.workDays === 0 ? 'to-be-decided' : ''}">
+              ${estimation.workDays && estimation.workDays > 0 ? estimation.workDays + ' Days' : 'To be decided'}
+            </div>
           </div>
           <div class="schedule-item">
             <div class="schedule-label">Daily Start Time</div>
-            <div class="schedule-value">${formatTimeForPDF(safeGet(estimation.dailyStartTime, "09:00"))}</div>
+            <div class="schedule-value">
+              ${formatTimeForPDF(safeGet(estimation.dailyStartTime, "09:00"))}
+            </div>
           </div>
           <div class="schedule-item">
             <div class="schedule-label">Daily End Time</div>
-            <div class="schedule-value">${formatTimeForPDF(safeGet(estimation.dailyEndTime, "18:00"))}</div>
+            <div class="schedule-value">
+              ${formatTimeForPDF(safeGet(estimation.dailyEndTime, "18:00"))}
+            </div>
           </div>
           <div class="schedule-item">
             <div class="schedule-label">Daily Working Hours</div>
             <div class="schedule-value">
               ${(() => {
-        try {
-          if (!estimation.dailyStartTime || !estimation.dailyEndTime) return "N/A";
-          const start = new Date(`2000-01-01T${estimation.dailyStartTime}`);
-          const end = new Date(`2000-01-01T${estimation.dailyEndTime}`);
-          const diffMs = end.getTime() - start.getTime();
-          const diffHours = diffMs / (1000 * 60 * 60);
-          return diffHours.toFixed(1) + " Hours";
-        } catch {
-          return "N/A";
-        }
-      })()}
+          try {
+            if (!estimation.dailyStartTime || !estimation.dailyEndTime) return "N/A";
+            const start = new Date(`2000-01-01T${estimation.dailyStartTime}`);
+            const end = new Date(`2000-01-01T${estimation.dailyEndTime}`);
+            const diffMs = end.getTime() - start.getTime();
+            const diffHours = diffMs / (1000 * 60 * 60);
+            return diffHours.toFixed(1) + " Hours";
+          } catch {
+            return "N/A";
+          }
+        })()}
             </div>
           </div>
         </div>
       </div>
+      ` : ''}
 
       <!-- Materials Section -->
       <div class="section-header">
@@ -2366,8 +2407,6 @@ export const generateEstimationPdf = asyncHandler(
         </div>
       </div>
 
-    
-
       <!-- Footer -->
       <div class="footer">
         <h4>Thank You For Your Business</h4>
@@ -2447,828 +2486,3 @@ export const generateEstimationPdf = asyncHandler(
     }
   }
 );
-
-
-
-// interface PopulatedEstimationItem {
-//   description: string;
-//   uom: string;
-//   quantity: number;
-//   unitPrice: number;
-//   total: number;
-// }
-
-// interface PopulatedLabourItem {
-//   designation: string;
-//   days: number;
-//   price: number;
-//   total: number;
-// }
-
-// interface PopulatedTermsItem {
-//   description: string;
-//   quantity: number;
-//   unitPrice: number;
-//   total: number;
-// }
-
-// interface PopulatedClient {
-//   _id: string;
-//   clientName: string;
-//   clientAddress: string;
-//   email: string;
-//   mobileNumber: string;
-//   telephoneNumber: string;
-// }
-
-// interface PopulatedProject {
-//   _id: string;
-//   projectName: string;
-//   client: PopulatedClient;
-//   location: string;
-//   building: string;
-//   apartmentNumber: string;
-// }
-
-// interface PopulatedEstimation extends Document {
-//   project: PopulatedProject;
-//   estimationNumber: string;
-//   workStartDate: Date;
-//   workEndDate: Date;
-//   workDays: number;
-//   dailyStartTime: string;
-//   dailyEndTime: string;
-//   validUntil: Date;
-//   paymentDueBy: number;
-//   subject?: string;
-//   materials: PopulatedEstimationItem[];
-//   labour: PopulatedLabourItem[];
-//   termsAndConditions: PopulatedTermsItem[];
-//   estimatedAmount: number;
-//   commissionAmount?: number;
-//   profit?: number;
-//   quotationAmount?: number;
-//   preparedBy: Pick<IUser, "firstName" | "signatureImage"> | Types.ObjectId;
-//   checkedBy?: Pick<IUser, "firstName" | "signatureImage"> | Types.ObjectId;
-//   approvedBy?: Pick<IUser, "firstName" | "signatureImage"> | Types.ObjectId;
-//   isChecked: boolean;
-//   isApproved: boolean;
-//   approvalComment?: string;
-//   createdAt: Date;
-//   updatedAt: Date;
-// }
-
-// const formatTimeForPDF = (timeString: string): string => {
-//   if (!timeString) return "N/A";
-//   try {
-//     const [hours, minutes] = timeString.split(':');
-//     const hour = parseInt(hours);
-//     const ampm = hour >= 12 ? 'PM' : 'AM';
-//     const formattedHour = hour % 12 || 12;
-//     return `${formattedHour}:${minutes} ${ampm}`;
-//   } catch (error) {
-//     return timeString;
-//   }
-// };
-
-// const formatDateForPDF = (date?: Date): string => {
-//   if (!date) return 'N/A';
-//   const d = new Date(date);
-//   return isNaN(d.getTime()) ? 'N/A' : d.toLocaleDateString('en-GB', {
-//     day: '2-digit',
-//     month: 'short',
-//     year: 'numeric'
-//   });
-// };
-
-// export const generateEstimationPdf = asyncHandler(
-//   async (req: Request, res: Response) => {
-//     const { id } = req.params;
-
-//     const estimation: any = await Estimation.findById(id)
-//       .populate({
-//         path: "project",
-//         select: "projectName client location building apartmentNumber",
-//         populate: {
-//           path: "client",
-//           select: "clientName clientAddress email mobileNumber telephoneNumber",
-//         },
-//       })
-//       .populate("preparedBy", "firstName signatureImage")
-//       .populate("checkedBy", "firstName signatureImage")
-//       .populate("approvedBy", "firstName signatureImage");
-
-//     if (!estimation) {
-//       throw new ApiError(404, "Estimation not found");
-//     }
-
-//     const safeGet = (value: any, defaultValue = "N/A") => {
-//       return value !== null && value !== undefined && value !== "" ? value : defaultValue;
-//     };
-
-//     const safeGetNumber = (value: any, defaultValue = 0) => {
-//       return value !== null && value !== undefined ? Number(value) : defaultValue;
-//     };
-
-//     const isPopulatedUser = (
-//       user: any
-//     ): user is Pick<IUser, "firstName" | "signatureImage"> => {
-//       return user && typeof user === "object" && "firstName" in user;
-//     };
-
-//     const preparedBy = isPopulatedUser(estimation.preparedBy) ? estimation.preparedBy : null;
-//     const checkedBy = isPopulatedUser(estimation.checkedBy) ? estimation.checkedBy : null;
-//     const approvedBy = isPopulatedUser(estimation.approvedBy) ? estimation.approvedBy : null;
-
-//     const materialsTotal = estimation.materials?.reduce(
-//       (sum, item) => sum + safeGetNumber(item.total), 0
-//     ) || 0;
-
-//     const labourTotal = estimation.labour?.reduce(
-//       (sum, item) => sum + safeGetNumber(item.total), 0
-//     ) || 0;
-
-//     const termsTotal = estimation.termsAndConditions?.reduce(
-//       (sum, item) => sum + safeGetNumber(item.total), 0
-//     ) || 0;
-
-//     const estimatedAmount = materialsTotal + labourTotal + termsTotal;
-//     const netAmount = safeGetNumber(estimation?.quotationAmount);
-//     const commissionAmount = safeGetNumber(estimation?.commissionAmount);
-//     const actualProfit = estimation.profit || 0;
-
-//     const calculateProfitPercentage = () => {
-//       if (netAmount === 0) return 0;
-//       const percentage = (actualProfit / netAmount) * 100;
-//       return parseFloat(percentage.toFixed(2));
-//     };
-
-//     const profitPercentage = calculateProfitPercentage();
-
-//     const clientName = estimation.project?.client?.clientName || "N/A";
-//     const clientAddress = estimation.project?.client?.clientAddress || "N/A";
-//     const projectLocation = estimation.project?.location || "N/A";
-//     const projectBuilding = estimation.project?.building || "N/A";
-//     const apartmentNumber = estimation.project?.apartmentNumber || "N/A";
-//     const clientEmail = estimation.project?.client?.email || "N/A";
-//     const clientMobile = estimation.project?.client?.mobileNumber || "";
-//     const clientTelephone = estimation.project?.client?.telephoneNumber || "";
-//     const clientPhone = clientMobile || clientTelephone
-//       ? `${clientMobile}${clientMobile && clientTelephone ? ' / ' : ''}${clientTelephone}`
-//       : "N/A";
-
-//     const htmlContent = `
-// <!DOCTYPE html>
-// <html lang="en">
-// <head>
-//   <meta charset="UTF-8">
-//   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-//   <title>Project Estimation</title>
-//   <style>
-//     @page {
-//       margin: 0;
-//       size: A4;
-//     }
-    
-//     * {
-//       margin: 0;
-//       padding: 0;
-//       box-sizing: border-box;
-//     }
-    
-//     body {
-//       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-//       color: #2c3e50;
-//       line-height: 1.6;
-//       background: #ffffff;
-//     }
-    
-//     .page {
-//       width: 210mm;
-//       min-height: 297mm;
-//       padding: 20mm;
-//       margin: 0 auto;
-//       background: white;
-//       position: relative;
-//     }
-    
-//     .header {
-//       display: flex;
-//       justify-content: space-between;
-//       align-items: flex-start;
-//       margin-bottom: 30px;
-//       padding-bottom: 20px;
-//       border-bottom: 3px solid #1e3a8a;
-//     }
-    
-//     .company-info {
-//       flex: 1;
-//     }
-    
-//     .company-name {
-//       font-size: 24px;
-//       font-weight: 700;
-//       color: #1e3a8a;
-//       margin-bottom: 5px;
-//     }
-    
-//     .company-tagline {
-//       font-size: 12px;
-//       color: #64748b;
-//       margin-bottom: 10px;
-//     }
-    
-//     .company-contact {
-//       font-size: 10px;
-//       color: #475569;
-//       line-height: 1.8;
-//     }
-    
-//     .document-title {
-//       text-align: right;
-//       flex: 1;
-//     }
-    
-//     .document-title h1 {
-//       font-size: 32px;
-//       color: #1e3a8a;
-//       font-weight: 700;
-//       margin-bottom: 5px;
-//     }
-    
-//     .estimation-number {
-//       font-size: 12px;
-//       color: #64748b;
-//       font-weight: 600;
-//     }
-    
-//     .info-grid {
-//       display: grid;
-//       grid-template-columns: 1fr 1fr;
-//       gap: 20px;
-//       margin-bottom: 30px;
-//     }
-    
-//     .info-card {
-//       background: #f8fafc;
-//       border-radius: 8px;
-//       padding: 15px;
-//       border-left: 4px solid #1e3a8a;
-//     }
-    
-//     .info-card-title {
-//       font-size: 11px;
-//       font-weight: 700;
-//       color: #1e3a8a;
-//       text-transform: uppercase;
-//       letter-spacing: 0.5px;
-//       margin-bottom: 12px;
-//     }
-    
-//     .info-row {
-//       display: flex;
-//       margin-bottom: 8px;
-//       font-size: 10px;
-//     }
-    
-//     .info-label {
-//       font-weight: 600;
-//       color: #475569;
-//       min-width: 120px;
-//     }
-    
-//     .info-value {
-//       color: #1e293b;
-//       flex: 1;
-//     }
-    
-//     .work-schedule {
-//       background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
-//       color: white;
-//       border-radius: 8px;
-//       padding: 15px;
-//       margin-bottom: 25px;
-//     }
-    
-//     .work-schedule-title {
-//       font-size: 12px;
-//       font-weight: 700;
-//       text-transform: uppercase;
-//       letter-spacing: 0.5px;
-//       margin-bottom: 15px;
-//     }
-    
-//     .schedule-grid {
-//       display: grid;
-//       grid-template-columns: repeat(3, 1fr);
-//       gap: 15px;
-//     }
-    
-//     .schedule-item {
-//       text-align: center;
-//     }
-    
-//     .schedule-label {
-//       font-size: 9px;
-//       opacity: 0.9;
-//       margin-bottom: 5px;
-//     }
-    
-//     .schedule-value {
-//       font-size: 13px;
-//       font-weight: 700;
-//     }
-    
-//     .section-title {
-//       font-size: 14px;
-//       font-weight: 700;
-//       color: #1e3a8a;
-//       text-transform: uppercase;
-//       letter-spacing: 0.5px;
-//       margin: 25px 0 15px 0;
-//       padding-bottom: 8px;
-//       border-bottom: 2px solid #e2e8f0;
-//     }
-    
-//     table {
-//       width: 100%;
-//       border-collapse: collapse;
-//       margin-bottom: 20px;
-//       font-size: 10px;
-//     }
-    
-//     thead {
-//       background: #1e3a8a;
-//       color: white;
-//     }
-    
-//     th {
-//       padding: 12px 8px;
-//       text-align: left;
-//       font-weight: 600;
-//       font-size: 10px;
-//       text-transform: uppercase;
-//       letter-spacing: 0.3px;
-//     }
-    
-//     td {
-//       padding: 10px 8px;
-//       border-bottom: 1px solid #e2e8f0;
-//     }
-    
-//     tbody tr:hover {
-//       background: #f8fafc;
-//     }
-    
-//     .text-right {
-//       text-align: right;
-//     }
-    
-//     .text-center {
-//       text-align: center;
-//     }
-    
-//     .total-row {
-//       background: #f1f5f9;
-//       font-weight: 700;
-//       color: #1e3a8a;
-//     }
-    
-//     .financial-summary {
-//       background: #f8fafc;
-//       border-radius: 8px;
-//       padding: 20px;
-//       margin: 25px 0;
-//     }
-    
-//     .financial-grid {
-//       display: grid;
-//       grid-template-columns: repeat(2, 1fr);
-//       gap: 15px;
-//     }
-    
-//     .financial-item {
-//       display: flex;
-//       justify-content: space-between;
-//       padding: 10px;
-//       background: white;
-//       border-radius: 6px;
-//       font-size: 11px;
-//     }
-    
-//     .financial-label {
-//       font-weight: 600;
-//       color: #475569;
-//     }
-    
-//     .financial-value {
-//       font-weight: 700;
-//       color: #1e293b;
-//     }
-    
-//     .grand-total {
-//       grid-column: 1 / -1;
-//       background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
-//       color: white;
-//       padding: 15px;
-//       font-size: 14px;
-//       font-weight: 700;
-//       display: flex;
-//       justify-content: space-between;
-//       align-items: center;
-//     }
-    
-//     .profit-indicator {
-//       display: inline-block;
-//       padding: 4px 10px;
-//       border-radius: 20px;
-//       font-size: 9px;
-//       font-weight: 700;
-//       margin-left: 10px;
-//     }
-    
-//     .profit {
-//       background: #10b981;
-//       color: white;
-//     }
-    
-//     .loss {
-//       background: #ef4444;
-//       color: white;
-//     }
-    
-//     .signatures {
-//       display: grid;
-//       grid-template-columns: repeat(3, 1fr);
-//       gap: 20px;
-//       margin-top: 40px;
-//       padding-top: 20px;
-//       border-top: 2px solid #e2e8f0;
-//     }
-    
-//     .signature-box {
-//       text-align: center;
-//     }
-    
-//     .signature-line {
-//       border-top: 2px solid #cbd5e1;
-//       margin: 40px 0 10px 0;
-//       padding-top: 8px;
-//     }
-    
-//     .signature-name {
-//       font-weight: 700;
-//       color: #1e293b;
-//       font-size: 11px;
-//       margin-bottom: 3px;
-//     }
-    
-//     .signature-role {
-//       font-size: 9px;
-//       color: #64748b;
-//     }
-    
-//     .footer-notes {
-//       margin-top: 30px;
-//       padding: 15px;
-//       background: #fef3c7;
-//       border-left: 4px solid #f59e0b;
-//       border-radius: 6px;
-//     }
-    
-//     .footer-notes-title {
-//       font-size: 11px;
-//       font-weight: 700;
-//       color: #92400e;
-//       margin-bottom: 8px;
-//     }
-    
-//     .footer-notes p {
-//       font-size: 9px;
-//       color: #78350f;
-//       margin-bottom: 5px;
-//       line-height: 1.6;
-//     }
-    
-//     .footer {
-//       text-align: center;
-//       margin-top: 30px;
-//       padding-top: 20px;
-//       border-top: 2px solid #e2e8f0;
-//       font-size: 9px;
-//       color: #64748b;
-//     }
-    
-//     .no-data {
-//       text-align: center;
-//       padding: 20px;
-//       color: #94a3b8;
-//       font-style: italic;
-//       font-size: 10px;
-//     }
-//   </style>
-// </head>
-// <body>
-//   <div class="page">
-//     <!-- Header -->
-//     <div class="header">
-//       <div class="company-info">
-//         <div class="company-name">ALGHAZAL ALABYAD</div>
-//         <div class="company-tagline">Technical Services</div>
-//         <div class="company-contact">
-//           Email: info@alghazalalabyadtech.com<br>
-//           Phone: +971 XX XXX XXXX<br>
-//           Dubai, United Arab Emirates
-//         </div>
-//       </div>
-//       <div class="document-title">
-//         <h1>ESTIMATION</h1>
-//         <div class="estimation-number">REF: ${safeGet(estimation.estimationNumber)}</div>
-//       </div>
-//     </div>
-
-//     <!-- Client & Estimation Info -->
-//     <div class="info-grid">
-//       <div class="info-card">
-//         <div class="info-card-title">Client Information</div>
-//         <div class="info-row">
-//           <div class="info-label">Name:</div>
-//           <div class="info-value">${clientName}</div>
-//         </div>
-//         <div class="info-row">
-//           <div class="info-label">Email:</div>
-//           <div class="info-value">${clientEmail}</div>
-//         </div>
-//         <div class="info-row">
-//           <div class="info-label">Phone:</div>
-//           <div class="info-value">${clientPhone}</div>
-//         </div>
-//         <div class="info-row">
-//           <div class="info-label">Address:</div>
-//           <div class="info-value">${clientAddress}</div>
-//         </div>
-//       </div>
-      
-//       <div class="info-card">
-//         <div class="info-card-title">Project Details</div>
-//         <div class="info-row">
-//           <div class="info-label">Location:</div>
-//           <div class="info-value">${projectLocation}</div>
-//         </div>
-//         <div class="info-row">
-//           <div class="info-label">Building:</div>
-//           <div class="info-value">${projectBuilding}</div>
-//         </div>
-//         <div class="info-row">
-//           <div class="info-label">Apartment:</div>
-//           <div class="info-value">${apartmentNumber}</div>
-//         </div>
-//         <div class="info-row">
-//           <div class="info-label">Subject:</div>
-//           <div class="info-value">${safeGet(estimation.subject)}</div>
-//         </div>
-//       </div>
-//     </div>
-
-//     <!-- Work Schedule -->
-//     <div class="work-schedule">
-//       <div class="work-schedule-title">Work Schedule</div>
-//       <div class="schedule-grid">
-//         <div class="schedule-item">
-//           <div class="schedule-label">Start Date</div>
-//           <div class="schedule-value">${formatDateForPDF(estimation.workStartDate)}</div>
-//         </div>
-//         <div class="schedule-item">
-//           <div class="schedule-label">End Date</div>
-//           <div class="schedule-value">${formatDateForPDF(estimation.workEndDate)}</div>
-//         </div>
-//         <div class="schedule-item">
-//           <div class="schedule-label">Duration</div>
-//           <div class="schedule-value">${safeGet(estimation.workDays)} Days</div>
-//         </div>
-//         <div class="schedule-item">
-//           <div class="schedule-label">Daily Start</div>
-//           <div class="schedule-value">${formatTimeForPDF(safeGet(estimation.dailyStartTime, "09:00"))}</div>
-//         </div>
-//         <div class="schedule-item">
-//           <div class="schedule-label">Daily End</div>
-//           <div class="schedule-value">${formatTimeForPDF(safeGet(estimation.dailyEndTime, "18:00"))}</div>
-//         </div>
-//         <div class="schedule-item">
-//           <div class="schedule-label">Valid Until</div>
-//           <div class="schedule-value">${formatDateForPDF(estimation.validUntil)}</div>
-//         </div>
-//       </div>
-//     </div>
-
-//     <!-- Materials -->
-//     <div class="section-title">Materials & Supplies</div>
-//     <table>
-//       <thead>
-//         <tr>
-//           <th style="width: 5%;">#</th>
-//           <th style="width: 45%;">Description</th>
-//           <th style="width: 10%;" class="text-center">UOM</th>
-//           <th style="width: 10%;" class="text-right">Quantity</th>
-//           <th style="width: 15%;" class="text-right">Unit Price</th>
-//           <th style="width: 15%;" class="text-right">Total</th>
-//         </tr>
-//       </thead>
-//       <tbody>
-//         ${(estimation.materials || []).length > 0
-//         ? estimation.materials.map((material, index) => `
-//         <tr>
-//           <td class="text-center">${index + 1}</td>
-//           <td>${safeGet(material.description)}</td>
-//           <td class="text-center">${safeGet(material.uom)}</td>
-//           <td class="text-right">${safeGetNumber(material.quantity).toFixed(2)}</td>
-//           <td class="text-right">${safeGetNumber(material.unitPrice).toFixed(2)}</td>
-//           <td class="text-right">${safeGetNumber(material.total).toFixed(2)}</td>
-//         </tr>
-//         `).join("")
-//         : `<tr><td colspan="6" class="no-data">No materials listed</td></tr>`}
-//         <tr class="total-row">
-//           <td colspan="5" class="text-right">SUBTOTAL</td>
-//           <td class="text-right">${materialsTotal.toFixed(2)}</td>
-//         </tr>
-//       </tbody>
-//     </table>
-
-//     <!-- Labour -->
-//     <div class="section-title">Labour Charges</div>
-//     <table>
-//       <thead>
-//         <tr>
-//           <th style="width: 5%;">#</th>
-//           <th style="width: 55%;">Designation</th>
-//           <th style="width: 15%;" class="text-right">Days</th>
-//           <th style="width: 15%;" class="text-right">Rate/Day</th>
-//           <th style="width: 15%;" class="text-right">Total</th>
-//         </tr>
-//       </thead>
-//       <tbody>
-//         ${(estimation.labour || []).length > 0
-//         ? estimation.labour.map((labour, index) => `
-//         <tr>
-//           <td class="text-center">${index + 1}</td>
-//           <td>${safeGet(labour.designation)}</td>
-//           <td class="text-right">${safeGetNumber(labour.days).toFixed(2)}</td>
-//           <td class="text-right">${safeGetNumber(labour.price).toFixed(2)}</td>
-//           <td class="text-right">${safeGetNumber(labour.total).toFixed(2)}</td>
-//         </tr>
-//         `).join("")
-//         : `<tr><td colspan="5" class="no-data">No labour charges listed</td></tr>`}
-//         <tr class="total-row">
-//           <td colspan="4" class="text-right">SUBTOTAL</td>
-//           <td class="text-right">${labourTotal.toFixed(2)}</td>
-//         </tr>
-//       </tbody>
-//     </table>
-
-//     <!-- Miscellaneous -->
-//     ${(estimation.termsAndConditions || []).length > 0 ? `
-//     <div class="section-title">Miscellaneous Charges</div>
-//     <table>
-//       <thead>
-//         <tr>
-//           <th style="width: 5%;">#</th>
-//           <th style="width: 55%;">Description</th>
-//           <th style="width: 10%;" class="text-right">Quantity</th>
-//           <th style="width: 15%;" class="text-right">Unit Price</th>
-//           <th style="width: 15%;" class="text-right">Total</th>
-//         </tr>
-//       </thead>
-//       <tbody>
-//         ${estimation.termsAndConditions.map((term, index) => `
-//         <tr>
-//           <td class="text-center">${index + 1}</td>
-//           <td>${safeGet(term.description)}</td>
-//           <td class="text-right">${safeGetNumber(term.quantity).toFixed(2)}</td>
-//           <td class="text-right">${safeGetNumber(term.unitPrice).toFixed(2)}</td>
-//           <td class="text-right">${safeGetNumber(term.total).toFixed(2)}</td>
-//         </tr>
-//         `).join("")}
-//         <tr class="total-row">
-//           <td colspan="4" class="text-right">SUBTOTAL</td>
-//           <td class="text-right">${termsTotal.toFixed(2)}</td>
-//         </tr>
-//       </tbody>
-//     </table>
-//     ` : ''}
-
-//     <!-- Financial Summary -->
-//     <div class="financial-summary">
-//       <div class="section-title" style="margin-top: 0;">Financial Summary</div>
-//       <div class="financial-grid">
-//         <div class="financial-item">
-//           <div class="financial-label">Estimated Amount:</div>
-//           <div class="financial-value">${estimatedAmount.toFixed(2)} AED</div>
-//         </div>
-//         <div class="financial-item">
-//           <div class="financial-label">Quotation Amount:</div>
-//           <div class="financial-value">${netAmount.toFixed(2)} AED</div>
-//         </div>
-//         <div class="financial-item">
-//           <div class="financial-label">Commission:</div>
-//           <div class="financial-value">${commissionAmount.toFixed(2)} AED</div>
-//         </div>
-//         <div class="financial-item">
-//           <div class="financial-label">${actualProfit >= 0 ? 'Profit' : 'Loss'}:</div>
-//           <div class="financial-value">
-//             ${Math.abs(actualProfit).toFixed(2)} AED
-//             <span class="profit-indicator ${actualProfit >= 0 ? 'profit' : 'loss'}">
-//               ${profitPercentage}%
-//             </span>
-//           </div>
-//         </div>
-//         <div class="grand-total">
-//           <span>PAYMENT TERMS</span>
-//           <span>${safeGet(estimation.paymentDueBy)} Days Net</span>
-//         </div>
-//       </div>
-//     </div>
-
-//     <!-- Signatures -->
-//     <div class="signatures">
-//       <div class="signature-box">
-//         <div class="signature-line">
-//           <div class="signature-name">${preparedBy?.firstName || "N/A"}</div>
-//           <div class="signature-role">Prepared By</div>
-//         </div>
-//       </div>
-//       <div class="signature-box">
-//         <div class="signature-line">
-//           <div class="signature-name">${checkedBy?.firstName || "N/A"}</div>
-//           <div class="signature-role">Checked By</div>
-//         </div>
-//       </div>
-//       <div class="signature-box">
-//         <div class="signature-line">
-//           <div class="signature-name">${approvedBy?.firstName || "N/A"}</div>
-//           <div class="signature-role">Approved By</div>
-//         </div>
-//       </div>
-//     </div>
-
-//     <!-- Footer Notes -->
-//     <div class="footer-notes">
-//       <div class="footer-notes-title">⚠ Important Notes</div>
-//       <p>• This estimation is valid until ${formatDateForPDF(estimation.validUntil)}. Prices are subject to change without prior notice.</p>
-//       <p>• Work will be conducted from ${formatTimeForPDF(safeGet(estimation.dailyStartTime, "09:00"))} to ${formatTimeForPDF(safeGet(estimation.dailyEndTime, "18:00"))} daily for ${safeGet(estimation.workDays)} working days.</p>
-//       <p>• Payment terms: Net ${safeGet(estimation.paymentDueBy)} days from invoice date.</p>
-//       <p>• All prices are in AED (United Arab Emirates Dirham).</p>
-//     </div>
-
-//     <!-- Footer -->
-//     <div class="footer">
-//       <p>Thank you for considering Alghazal Alabyad Technical Services</p>
-//       <p>Generated on ${formatDateForPDF(new Date())} | Document Reference: ${safeGet(estimation.estimationNumber)}</p>
-//     </div>
-//   </div>
-// </body>
-// </html>
-//     `;
-
-//     const browser = await puppeteer.launch({
-//       headless: "shell",
-//       args: ["--no-sandbox", "--disable-setuid-sandbox", "--font-render-hinting=none"],
-//     });
-
-//     try {
-//       const page = await browser.newPage();
-//       await page.setViewport({
-//         width: 1200,
-//         height: 1800,
-//         deviceScaleFactor: 2,
-//       });
-
-//       await page.setContent(htmlContent, {
-//         waitUntil: ["load", "networkidle0", "domcontentloaded"],
-//         timeout: 30000,
-//       });
-
-//       await page.waitForSelector("body", { timeout: 5000 });
-
-//       const pdfBuffer = await page.pdf({
-//         format: "A4",
-//         printBackground: true,
-//         preferCSSPageSize: true,
-//         margin: {
-//           top: 0,
-//           right: 0,
-//           bottom: 0,
-//           left: 0,
-//         },
-//       });
-
-//       res.setHeader("Content-Type", "application/pdf");
-//       res.setHeader(
-//         "Content-Disposition",
-//         `attachment; filename=estimation-${safeGet(estimation.estimationNumber, "unknown")}.pdf`
-//       );
-//       res.send(pdfBuffer);
-//     } finally {
-//       await browser.close();
-//     }
-//   }
-// );
